@@ -17,8 +17,10 @@ Use this Skill as the only user-facing entry for the standard two-package workfl
 6. Route by scenario:
    - For `personnel_incentive`, read [audit-personnel-incentive](../audit-personnel-incentive/SKILL.md) completely and apply its SKU-by-SKU quantity and transfer-evidence workflow.
    - For `promotional_display`, read [audit-promotional-display](../audit-promotional-display/SKILL.md) completely and apply its store-by-store contract, photo, date, location, display, duplicate, and sales-support workflow.
-7. Keep model work limited to evidence extraction. Require deterministic code to reread Excel, calculate quantities and amounts, validate both result schemas, generate the combined workbook, inventory formulas, and checkpoint the complete `output/` tree.
-8. Export the checkpointed output to `<output-dir>/<run-id>` with `export-receipt.json`. Never treat the external copy as more authoritative than the worktree checkpoint.
+7. Read [analysis-dimensions.md](references/analysis-dimensions.md) and evaluate all seven 1.4.1 controls separately for each scenario. A missing control must be reported as `证据不足` or `本案未触发`; it must never disappear from the result or be silently treated as passed.
+8. Keep model work limited to evidence extraction. Require deterministic code to reread Excel, calculate quantities and amounts, validate both result schemas, generate the combined workbook, inventory formulas, and checkpoint the complete `output/` tree.
+9. Summarize `通过`, `异常`, and `待补件` conclusions before presenting amounts. If a model extraction attempt fails, retry up to three total attempts, count every successful/failed invocation and its returned Token usage, and keep only this structured usage summary.
+10. Export exactly one combined Excel workbook to `<output-dir>/<run-id>`. Keep structured evidence and state only inside the checkpointed worktree; do not persist stdout/stderr, model event streams, or other run logs.
 
 ## Commands
 
@@ -44,4 +46,5 @@ Use `--input-dir`, `--output-dir`, or `--model` only when the default location o
 - Do not route one archive to both child Skills or allow two archives to use the same child Skill.
 - Do not bypass a child Skill's evidence schema, rules, or deterministic runner.
 - Do not accept aggregate amount agreement as a substitute for SKU-level or store-level controls.
-- Preserve failed-run inputs and logs in the run worktree checkpoint; do not silently rerun under the same run ID.
+- Do not call a file authentic merely because its SHA-256 is stable or no duplicate was found. State whether EXIF/GPS, device information, watermark corroboration, digital signatures, and cross-activity history were actually available.
+- Preserve failed-run inputs, structured evidence, and run state in the worktree checkpoint; do not persist logs or silently rerun under the same run ID.

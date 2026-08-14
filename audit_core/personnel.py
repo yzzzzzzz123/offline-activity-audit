@@ -16,9 +16,10 @@ from .common import (
     normalize_text,
     now_utc,
     resolve_case_file,
+    resolve_case_files,
     unique_by,
 )
-from .excel_sources import read_personnel_sales
+from .excel_sources import image_file_inventory, read_personnel_sales
 
 
 def _period_matches(period_values: list[str], start_text: str, end_text: str) -> bool:
@@ -317,6 +318,12 @@ def audit_personnel_case(
     if sales_path is None:
         raise AuditError("Personnel case requires a sales Excel file")
     sales = read_personnel_sales(sales_path)
+    source_images: list[Path] = []
+    settlement_image = resolve_case_file(case_path, case, "settlement_image", required=False)
+    if settlement_image is not None:
+        source_images.append(settlement_image)
+    source_images.extend(resolve_case_files(case_path, case, "transfer_images"))
+    image_files = image_file_inventory(source_images) if source_images else None
     settlement = evidence["settlement"]
     lines = sorted(settlement["lines"], key=lambda item: int(item["line_no"]))
     unique_by(lines, "line_no", "settlement line number")
@@ -478,6 +485,7 @@ def audit_personnel_case(
         "sales_trace": trace,
         "store_transfer_reconciliation": store_rows,
         "transfer_evidence": evidence.get("transfers") or [],
+        "image_inventory": image_files,
         "unmatched_sales_skus": unmatched_sales_skus,
         "exceptions": exceptions,
     }

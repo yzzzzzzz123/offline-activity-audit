@@ -21,7 +21,7 @@ py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id 20260814-001
 py -3 main.py input --run-id 20260814-001
 ```
 
-默认从 `<project>/input` 读取，默认导出到项目同级的 `audit-output/<run-id>`。主 Skill 自动调用 Codex 提取证据并路由两个子 Skill。
+默认从 `<project>/input` 读取，默认导出到项目同级的 `audit-output/<run-id>`。主 Skill 自动调用 Codex 提取证据并路由两个子 Skill；外部目录最终只有一份合并 Excel。
 
 只检查、解压和生成路由配置，不启动 Codex 或 worktree：
 
@@ -67,7 +67,7 @@ py -3 main.py batch `
 - 分支：`run/offline-audit/<run-id>`；
 - 代码快照：由隔离 Git index 生成，不修改、不 stash、不覆盖主工作区；
 - 正式产物：先写入 worktree 的 `output/`，成功或失败后均形成 Git checkpoint；
-- 外部交付：checkpoint 成功后复制到 `<output-dir>/<run-id>`。
+- 外部交付：checkpoint 成功后只复制合并 Excel 到 `<output-dir>/<run-id>`。
 
 主入口会拒绝重复 run-id、残留分支、残留 worktree、危险未跟踪文件以及运行过程中发生的主工作区漂移。
 
@@ -100,12 +100,11 @@ output/
 ├── delivery.json
 ├── <核销报告>.xlsx
 ├── workbook-verification.json        # 批量运行
-├── runs/                              # 冻结输入、日志和结构化结果
-└── supervisor/
-    ├── stdout.log
-    └── stderr.log
+└── runs/                              # 冻结输入、结构化证据、结果、重试与模型用量统计
 ```
 
-外部导出目录另含 `export-receipt.json`，记录 checkpoint commit、文件清单和 SHA-256。
+项目不保存 stdout/stderr、模型事件流或其他运行日志。模型提取失败时最多自动尝试 3 次，只在结构化状态和 Excel 中记录调用次数、失败次数、重试次数和 Token 用量。
+
+合并 Excel 的首页汇总通过、异常、待补件和金额结论，并包含核销步骤、原始文件读取清单、方案 1.4.1 七维分析、模型用量以及两个场景的逐项证据明细。报价表中的“工作量（人天）/报价”与实际模型调用量分开显示，不能混用。
 
 证据 JSON 的字段合同位于两个 Skill 的 `references/evidence.schema.json`；最终结果统一通过 `contracts/audit-result.schema.json` 校验。

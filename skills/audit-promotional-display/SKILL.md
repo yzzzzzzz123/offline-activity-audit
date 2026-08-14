@@ -19,10 +19,11 @@ Build a store-by-store evidence chain from the contract to submitted photos and 
    - contract-store match (`exact`, `compatible`, `mismatch`, or `filename_only`);
    - display-standard match (`pass`, `fail`, or `uncertain`);
    - exact/possible duplicate status.
-6. Hash all files and compare visual fingerprints. Record exact duplicates separately from visually similar photos.
+6. Hash all files with SHA-256 and calculate pHash (with dHash as an auxiliary fingerprint). Record exact duplicates separately from pHash near-duplicate candidates. Compare against a historical fingerprint library only when one is actually supplied; otherwise report cross-activity reuse as unverified.
 7. Read the sales workbook directly and verify customer, period, SKU count, quantity, and amount. State whether sales data is store-level or only distributor-level.
 8. Award the per-store supported amount only when every mandatory store control passes. Otherwise set that store to supplement/review and state the exact missing evidence.
 9. Return evidence JSON that conforms to [evidence.schema.json](references/evidence.schema.json). Then run `scripts/run_audit.py` through the project orchestrator; validate the result against `contracts/audit-result.schema.json`.
+10. Return to the parent Skill for the complete 1.4.1 analysis. Report EXIF/GPS, visible watermark, image fingerprints, file readability, budget/contract comparison, invoice presence, and contract terms as separate controls with explicit capability limits.
 
 ## Fail-closed rules
 
@@ -32,6 +33,7 @@ Build a store-by-store evidence chain from the contract to submitted photos and 
 - Do not use distributor-level sales totals as proof that each individual store executed the display.
 - Do not pass a missing contracted store merely because the overall photo count equals the store count.
 - Keep `unverifiable` distinct from `mismatch` and explain the supplement needed for either result.
+- Treat SHA-256/dHash as duplicate-screening evidence only. If the run has no trusted EXIF/GPS, device information, digital signature, pixel-level forgery analysis, or historical fingerprint library, state those gaps and do not claim full authenticity verification.
 
 ## Output requirements
 

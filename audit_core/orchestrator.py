@@ -91,7 +91,6 @@ def _run_skill_process(
     case_path: Path,
     evidence_path: Path,
     result_path: Path,
-    log_dir: Path,
 ) -> None:
     runner = SKILL_RUNNERS.get(scenario)
     if runner is None:
@@ -116,9 +115,6 @@ def _run_skill_process(
         stderr=subprocess.PIPE,
         check=False,
     )
-    log_dir.mkdir(parents=True, exist_ok=True)
-    (log_dir / "skill-stdout.log").write_text(completed.stdout, encoding="utf-8")
-    (log_dir / "skill-stderr.log").write_text(completed.stderr, encoding="utf-8")
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip()[-3000:]
         raise AuditError(f"Skill runner failed with exit {completed.returncode}: {detail}")
@@ -145,8 +141,7 @@ def run_case(
     input_dir = root / "input"
     context_dir = root / "context"
     result_dir = root / "result"
-    log_dir = root / "logs"
-    for directory in (input_dir, context_dir, result_dir, log_dir):
+    for directory in (input_dir, context_dir, result_dir):
         directory.mkdir(parents=True, exist_ok=True)
     state_path = root / "run-state.json"
     state: dict[str, Any] = {
@@ -160,20 +155,34 @@ def run_case(
     frozen_case = input_dir / "case.json"
     frozen_evidence = input_dir / "evidence.json"
     result_path = result_dir / "audit-result.json"
+    model_usage: dict[str, Any] | None = None
     try:
         write_json(frozen_case, _resolved_case(case_file, case))
         sources = _source_paths(case_file, case)
         manifest = evidence_manifest(sources, resolve_root(case_file, case))
         write_json(input_dir / "source-manifest.json", {"files": manifest})
         if agent:
-            extract_with_codex(frozen_case, frozen_evidence, root, model=model)
+            _, model_usage = extract_with_codex(
+                frozen_case,
+                frozen_evidence,
+                root,
+                model=model,
+            )
         else:
             if evidence_path is None:
                 raise AuditError("Provide --evidence or enable --agent extraction")
             supplied = load_json(Path(evidence_path).resolve())
             write_json(frozen_evidence, supplied)
-        _run_skill_process(scenario, frozen_case, frozen_evidence, result_path, log_dir)
+        _run_skill_process(scenario, frozen_case, frozen_evidence, result_path)
         result = load_json(result_path)
+        if model_usage is not None:
+            model_usage = {
+                **model_usage,
+                "case_id": state["case_id"],
+                "scenario": scenario,
+            }
+            result["model_usage"] = model_usage
+            write_json(result_path, result)
         post_manifest = evidence_manifest(sources, resolve_root(case_file, case))
         if manifest != post_manifest:
             raise AuditError("Source evidence changed while the audit was running")
@@ -183,16 +192,19 @@ def run_case(
                 "completed_at": now_utc(),
                 "result_path": str(result_path),
                 "source_file_count": len(manifest),
+                "model_usage": model_usage,
             }
         )
         write_json(state_path, state)
         return result
     except Exception as exc:
+        failure_usage = getattr(exc, "model_usage", model_usage)
         state.update(
             {
                 "status": "failed",
                 "failed_at": now_utc(),
                 "error": str(exc),
+                "model_usage": failure_usage,
             }
         )
         write_json(state_path, state)
@@ -275,7 +287,13 @@ def run_batch_command(args: argparse.Namespace) -> dict[str, Any]:
             }
         )
     excel_name = str(batch.get("excel_name") or f"{batch_id}-核销结果.xlsx")
-    excel_path = create_combined_report(results, output_dir / excel_name)
+    manifest_path = output_dir / "input-archive-manifest.json"
+    input_manifest = load_json(manifest_path) if manifest_path.is_file() else None
+    excel_path = create_combined_report(
+        results,
+        output_dir / excel_name,
+        input_manifest=input_manifest,
+    )
     verification = workbook_formula_inventory(excel_path)
     write_json(batch_run / "workbook-verification.json", verification)
     delivery = {
@@ -304,11 +322,6 @@ def _assert_export_target(output_dir: Path, run_id: str) -> None:
     target = output_dir / run_id
     if target.exists() or target.is_symlink():
         raise AuditError(f"Export target already exists: {target}")
-
-
-def _write_supervisor_log(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(value, encoding="utf-8")
 
 
 def _internal_command(
@@ -414,9 +427,6 @@ def _launch_in_worktree(args: argparse.Namespace, mode: str) -> dict[str, Any]:
         stderr=subprocess.PIPE,
         check=False,
     )
-    _write_supervisor_log(output_root / "supervisor" / "stdout.log", completed.stdout)
-    _write_supervisor_log(output_root / "supervisor" / "stderr.log", completed.stderr)
-
     if completed.returncode != 0:
         state.update(
             {
@@ -433,7 +443,7 @@ def _launch_in_worktree(args: argparse.Namespace, mode: str) -> dict[str, Any]:
             f"checkpoint failed offline audit {run_id}",
         )
         raise AuditError(
-            "Audit worker failed; the evidence and logs were checkpointed at "
+            "Audit worker failed; structured evidence, retry usage, and state were checkpointed at "
             f"{failed_checkpoint['checkpoint_commit']} in {worktree}"
         )
 
