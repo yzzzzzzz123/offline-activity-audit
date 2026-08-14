@@ -287,7 +287,11 @@ def run_batch_command(args: argparse.Namespace) -> dict[str, Any]:
             }
         )
     excel_name = str(batch.get("excel_name") or f"{batch_id}-核销结果.xlsx")
-    manifest_path = output_dir / "input-archive-manifest.json"
+    manifest_path = (
+        _resolve_reference(batch_path, batch["input_manifest"])
+        if batch.get("input_manifest")
+        else output_dir / "input-archive-manifest.json"
+    )
     input_manifest = load_json(manifest_path) if manifest_path.is_file() else None
     excel_path = create_combined_report(
         results,
