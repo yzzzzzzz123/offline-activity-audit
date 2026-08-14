@@ -115,10 +115,10 @@ Return exactly one JSON object conforming to `{schema}`. Preserve source filenam
         command.extend(["--model", model])
     for attachment in _case_attachments(case_file, case):
         command.extend(["--image", str(attachment)])
-    command.append(prompt)
     completed = subprocess.run(
         command,
         cwd=PROJECT_ROOT,
+        input=prompt,
         text=True,
         encoding="utf-8",
         errors="replace",
