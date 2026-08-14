@@ -20,7 +20,7 @@ Use this Skill as the only user-facing entry for the standard two-package workfl
 7. Read [analysis-dimensions.md](references/analysis-dimensions.md) and evaluate all seven 1.4.1 controls separately for each scenario. A missing control must be reported as `证据不足` or `本案未触发`; it must never disappear from the result or be silently treated as passed.
 8. Keep model work limited to evidence extraction. Require deterministic code to reread Excel, calculate quantities and amounts, validate both result schemas, generate the combined workbook, inventory formulas, and checkpoint the complete `output/` tree.
 9. Summarize `通过`, `异常`, and `待补件` conclusions before presenting amounts. If a model extraction attempt fails, retry up to three total attempts, count every successful/failed invocation and its returned Token usage, and keep only this structured usage summary.
-10. Export exactly one combined Excel workbook to `<output-dir>/<run-id>`. Keep structured evidence and state only inside the checkpointed worktree; do not persist stdout/stderr, model event streams, or other run logs.
+10. Export exactly one combined Excel workbook to `<output-dir>/<run-id>`. The workbook must use exactly one worksheet per included audit method: `人员激励核销` and `堆头核销` for the standard two-package run, with no auxiliary worksheets. Each scenario worksheet must contain its own amount summary, workflow, source-file reading inventory, core comparisons, bottom-level evidence, 1.4.1 controls, exceptions/supplements, and model-call/retry usage. Keep structured evidence and state only inside the checkpointed worktree; do not persist stdout/stderr, model event streams, or other run logs.
 
 ## Commands
 

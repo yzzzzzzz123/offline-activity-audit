@@ -123,7 +123,7 @@ def _personnel_rows(
             "证据不足",
             f"本包{len(records) or 4}个源文件已固定哈希；{len(image_files)}张图片中EXIF时间{image_exif_count}张、GPS {image_gps_count}张；但未提供数字签名、可信时间戳或像素级篡改检测结果。",
             "SHA-256只证明收到后的字节身份，不能证明提交前从未被修改；需原始文件、数字签名或专业取证结果。",
-            "人员激励-图片文件检查",
+            "人员激励核销",
         ),
         (
             "本场景没有现场陈列照片；结算单和转账截图",
@@ -131,7 +131,7 @@ def _personnel_rows(
             "本案未触发",
             f"{len(transfers)}笔去重转账中，身份可见{identity_visible}笔、日期可见{date_visible}笔；材料不是门店现场实拍照片。",
             "若人员激励制度要求现场执行照片，应另行提交带可信时间、地点和设备信息的原始照片。",
-            "人员激励-转账凭证",
+            "人员激励核销",
         ),
         (
             file_scope,
@@ -139,7 +139,7 @@ def _personnel_rows(
             "部分验证",
             f"源文件哈希重复数为{duplicate_hashes}，图片完全重复组{image_exact_groups}、pHash近似候选{image_phash_candidates}组；转账画面按业务事件去重后为{len(transfers)}笔。pHash候选需结合transfer_id判断，同一聊天内容的多张截图可能合理近似；没有跨活动历史库。",
             "pHash候选只提示画面近似，不能直接判为重复造假；本次不能排除历史活动复用。",
-            "人员激励-图片文件检查",
+            "人员激励核销",
         ),
         (
             file_scope,
@@ -147,7 +147,7 @@ def _personnel_rows(
             "部分验证",
             f"收到{len(records) or 4}个文件，销售Excel有效明细{summary['excel_detail_row_count']}行；但业务未提供允许的图片分辨率和文件大小阈值。",
             "可读取不等于完全符合格式制度；需补充允许类型、最低分辨率和大小范围。",
-            "文件读取清单",
+            "人员激励核销",
         ),
         (
             f"{_file_name(settlement.get('source_file'))}；{_file_name(sales.get('source_file'))}；转账截图",
@@ -155,7 +155,7 @@ def _personnel_rows(
             "部分验证",
             f"10条SKU计算及结算行总额均为{line_total:.2f}元，去重转账总额为{float(summary['transfer_total']):.2f}元；申报{claimed:.2f}元，差额{amount_difference:.2f}元（{rate_text}）。未提供独立活动预算。",
             "30%预算规则不能在没有预算表时判定；现有结果只证明结算、销售和转账之间的勾稽关系。",
-            "人员激励-SKU逐项",
+            "人员激励核销",
         ),
         (
             "本包未提交发票",
@@ -163,7 +163,7 @@ def _personnel_rows(
             "本案未触发",
             "人员激励包包含销售Excel、结算单和转账截图，没有发票代码、号码、购销方等可核字段。",
             "如公司制度规定人员激励必须附发票，应改判为证据不足并要求补交发票。",
-            "文件读取清单",
+            "人员激励核销",
         ),
         (
             "本包未提交合同；使用最终结算单及转账证明",
@@ -171,7 +171,7 @@ def _personnel_rows(
             "本案未触发",
             f"可验证{settlement.get('activity_start')}至{settlement.get('activity_end')}的结算口径，但无合同金额、付款周期或开票日期可比。",
             "如人员激励需要合同约束，应补充合同、付款周期及相应票据后再判断合同条款。",
-            "人员激励-SKU逐项",
+            "人员激励核销",
         ),
     ]
     return _apply_specs("人员激励", values)
@@ -223,7 +223,7 @@ def _display_rows(
             "部分验证",
             f"{len(photo_files)}张照片中EXIF时间{exif_count}张、GPS {gps_count}张；完全重复组{exact_groups}、pHash近似候选{similar_groups}组。未提供数字签名或像素级篡改鉴定。",
             "画面水印是可见线索，不是独立可信定位；哈希不能证明提交前未修改。需原始照片、可信时间/GPS或专业取证。",
-            "堆头-照片文件检查",
+            "堆头核销",
         ),
         (
             f"合同{total_stores}家门店与{len(photo_files)}张现场照片",
@@ -231,7 +231,7 @@ def _display_rows(
             "部分通过",
             f"活动期匹配{period_pass}/{total_stores}家，门店地点匹配或兼容{store_pass}/{total_stores}家，陈列可确认{display_pass}/{total_stores}家；综合{passed}/{total_stores}家通过、{total_stores-passed}家补证。GPS与设备信息均不可用。",
             "6家存在日期、地点或陈列证据缺口；需原始照片、可信定位/时间或正式门店地址映射。",
-            "堆头-逐店核验",
+            "堆头核销",
         ),
         (
             f"现场照片{len(photo_files)}张",
@@ -239,7 +239,7 @@ def _display_rows(
             "部分验证",
             f"本包完全重复组{exact_groups}、pHash近似候选{similar_groups}组；没有跨活动历史指纹库。",
             "“本包未发现重复”不等于“历史活动从未使用”；跨活动复用必须接入历史SHA/pHash库。",
-            "堆头-照片文件检查",
+            "堆头核销",
         ),
         (
             file_scope,
@@ -247,7 +247,7 @@ def _display_rows(
             "部分验证",
             f"收到{len(records) or len(photo_files) + 2}个文件：合同PDF 1份、销售Excel 1份、JPG {len(photo_files)}张；照片{dimension_text}。业务未提供允许阈值。",
             "已证明可读性和实际尺寸，不能在没有最低分辨率/大小标准时宣称完全合规。",
-            "文件读取清单",
+            "堆头核销",
         ),
         (
             f"{_file_name(contract.get('source_file'))}；申报金额",
@@ -255,7 +255,7 @@ def _display_rows(
             "部分验证",
             f"合同口径{expected:.2f}元，申报{claimed:.2f}元，差额{contract_difference:.2f}元（{rate_text}，未超过30%）；但独立活动预算表未提交。逐店证据仅支持{float(summary['supported_amount']):.2f}元。",
             "合同金额是现有口径，不等同于独立预算验证；若制度要求30%预算规则，需补充批准预算。",
-            "核销总览",
+            "堆头核销",
         ),
         (
             "本包未提交发票",
@@ -263,7 +263,7 @@ def _display_rows(
             "本案未触发",
             "没有发票代码、号码、金额、日期和购销方字段可检查。",
             "如堆头付款制度要求发票，应改判为证据不足并补交发票。",
-            "文件读取清单",
+            "堆头核销",
         ),
         (
             f"{_file_name(contract.get('source_file'))}；销售Excel；逐店照片",
@@ -271,7 +271,7 @@ def _display_rows(
             "部分通过",
             f"合同{total_stores}家×{float(summary['fee_per_store']):.2f}元={expected:.2f}元与申报一致；逐店证据{passed}家通过、{total_stores-passed}家补证。未提交发票，合同付款周期与开票日期无法比较。",
             f"合同执行条款只完成部分验证；{total_stores-passed}家补证，付款周期/开票一致性需在有发票后再检查。",
-            "堆头-逐店核验",
+            "堆头核销",
         ),
     ]
     return _apply_specs("堆头", values)

@@ -1122,7 +1122,841 @@ def _add_display_sheets(wb: Workbook, result: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def create_combined_report(
+COMPACT_LAST_COL = 13
+
+
+def _section_title(
+    ws: Any,
+    row: int,
+    title: str,
+    note: str | None = None,
+    *,
+    last_col: int = COMPACT_LAST_COL,
+) -> int:
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=last_col)
+    cell = ws.cell(row, 1, title)
+    cell.font = _font(bold=True, color=WHITE, size=12)
+    cell.fill = PatternFill("solid", fgColor=NAVY)
+    cell.alignment = Alignment(vertical="center")
+    ws.row_dimensions[row].height = 24
+    row += 1
+    if note:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=last_col)
+        cell = ws.cell(row, 1, note)
+        cell.font = _font(color="555555", size=9)
+        cell.fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+        ws.row_dimensions[row].height = 42
+        row += 1
+    return row
+
+
+def _write_row(
+    ws: Any,
+    row: int,
+    values: list[Any],
+    *,
+    status_columns: set[int] | None = None,
+    height: float | None = None,
+    number_formats: dict[int, str] | None = None,
+) -> None:
+    status_columns = status_columns or set()
+    number_formats = number_formats or {}
+    for col, value in enumerate(values, 1):
+        cell = ws.cell(row, col, value)
+        formula = isinstance(value, str) and value.startswith("=")
+        _body_cell(cell, formula=formula)
+        if col in status_columns:
+            _status_fill(cell, str(value))
+        if col in number_formats:
+            cell.number_format = number_formats[col]
+    if height is not None:
+        ws.row_dimensions[row].height = height
+
+
+def _write_merged_row(
+    ws: Any,
+    row: int,
+    blocks: list[tuple[int, int]],
+    values: list[Any],
+    *,
+    header: bool = False,
+    status_indexes: set[int] | None = None,
+    height: float | None = None,
+    number_formats: dict[int, str] | None = None,
+) -> None:
+    status_indexes = status_indexes or set()
+    number_formats = number_formats or {}
+    for index, ((start_col, end_col), value) in enumerate(zip(blocks, values, strict=True), 1):
+        if end_col > start_col:
+            ws.merge_cells(start_row=row, start_column=start_col, end_row=row, end_column=end_col)
+        cell = ws.cell(row, start_col, value)
+        if header:
+            cell.font = _font(bold=True, color=WHITE)
+            cell.fill = PatternFill("solid", fgColor=NAVY)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = Border(top=THIN, bottom=THIN, left=THIN, right=THIN)
+        else:
+            _body_cell(cell, formula=isinstance(value, str) and value.startswith("="))
+            if index in status_indexes:
+                _status_fill(cell, str(value))
+        if index in number_formats:
+            cell.number_format = number_formats[index]
+    if height is not None:
+        ws.row_dimensions[row].height = height
+
+
+def _write_summary_cards(ws: Any, cards: list[dict[str, Any]], *, start_row: int = 3) -> None:
+    blocks = [(1, 3), (4, 6), (7, 9), (10, COMPACT_LAST_COL)]
+    for index, card in enumerate(cards):
+        band = index // 4
+        block = index % 4
+        label_row = start_row + band * 3
+        value_row = label_row + 1
+        start_col, end_col = blocks[block]
+        ws.merge_cells(start_row=label_row, start_column=start_col, end_row=label_row, end_column=end_col)
+        ws.merge_cells(start_row=value_row, start_column=start_col, end_row=value_row, end_column=end_col)
+        label_cell = ws.cell(label_row, start_col, card["label"])
+        label_cell.font = _font(bold=True, color=NAVY, size=9)
+        label_cell.fill = PatternFill("solid", fgColor=BLUE)
+        label_cell.alignment = Alignment(horizontal="center", vertical="center")
+        value_cell = ws.cell(value_row, start_col, card["value"])
+        value_cell.font = _font(bold=True, color=FORMULA_BLACK, size=14)
+        value_cell.fill = PatternFill("solid", fgColor=card.get("fill", WHITE))
+        value_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        if card.get("number_format"):
+            value_cell.number_format = str(card["number_format"])
+        if card.get("status"):
+            _status_fill(value_cell, str(card["status"]))
+        ws.row_dimensions[label_row].height = 20
+        ws.row_dimensions[value_row].height = 30
+
+
+def _comparison_target(scenario: str, role: str) -> str:
+    if scenario == "personnel_incentive":
+        return {
+            "输入压缩包": "固定收到的材料范围并路由到人员激励Skill。",
+            "销售Excel": "与最终结算单逐SKU比较数量；按门店汇总应付奖励。",
+            "最终结算单": "与销售Excel逐SKU比较数量和奖励；与转账总额比较。",
+            "转账截图": "去重后与7家门店应付金额集合比较，并单独检查身份和日期。",
+        }.get(role, "纳入人员激励证据链。")
+    return {
+        "输入压缩包": "固定收到的材料范围并路由到堆头Skill。",
+        "促销合同": "与销售Excel比较客户/期间；与照片逐店比较日期、地点和陈列；与申报比较金额。",
+        "销售Excel": "与合同比较客户和期间；仅支持总体销售，不能替代逐店照片。",
+        "现场陈列照片": "绑定合同原始门店序号，逐店比较期间、地点、陈列和重复情况。",
+    }.get(role, "纳入堆头证据链。")
+
+
+def _scenario_file_rows(
+    result: dict[str, Any],
+    input_manifest: dict[str, Any] | None,
+) -> list[list[Any]]:
+    scenario = str(result["scenario"])
+    extraction = _manifest_scenario(input_manifest, scenario)
+    archive_name = _manifest_archive_name(extraction)
+    archive_sha = extraction.get("archive_sha256")
+    rows: list[list[Any]] = []
+    if extraction:
+        rows.append(
+            [
+                archive_name,
+                "（ZIP输入包本身）",
+                "输入压缩包",
+                "检查路径穿越、符号链接、加密、重名、文件数、大小和压缩比。",
+                f"安全解压{extraction.get('file_count')}个文件，共{extraction.get('expanded_bytes')}字节。",
+                _comparison_target(scenario, "输入压缩包"),
+                extraction.get("archive_bytes"),
+                archive_sha,
+            ]
+        )
+    files = extraction.get("files") if isinstance(extraction.get("files"), list) else []
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        file_path = str(item.get("path") or "")
+        role, reading, read_result = _file_reading_description(scenario, file_path, result)
+        rows.append(
+            [
+                archive_name,
+                file_path,
+                role,
+                reading,
+                read_result,
+                _comparison_target(scenario, role),
+                item.get("bytes"),
+                item.get("sha256"),
+            ]
+        )
+    return rows
+
+
+def _write_file_section(
+    ws: Any,
+    row: int,
+    result: dict[str, Any],
+    input_manifest: dict[str, Any] | None,
+) -> int:
+    row = _section_title(
+        ws,
+        row,
+        "一、读取了哪些文件、读到了什么",
+        "每个原始文件单独列示来源、读取字段、读取结果和后续比对对象；SHA-256只固定收到后的文件身份。",
+    )
+    headers = [
+        "序号", "来源ZIP", "压缩包内文件", "文件角色", "具体读取位置/字段",
+        "读取结果/数据量", "后续比对工作", "大小与文件SHA-256",
+    ]
+    blocks = [(1, 1), (2, 3), (4, 6), (7, 7), (8, 9), (10, 11), (12, 12), (13, 13)]
+    _write_merged_row(ws, row, blocks, headers, header=True, height=30)
+    header_row = row
+    row += 1
+    for index, values in enumerate(_scenario_file_rows(result, input_manifest), 1):
+        source_zip, file_path, role, reading, read_result, comparison, size, sha256 = values
+        size_hash = f"{int(size or 0):,}字节\n{sha256 or ''}"
+        _write_merged_row(
+            ws,
+            row,
+            blocks,
+            [index, source_zip, file_path, role, reading, read_result, comparison, size_hash],
+            height=78,
+        )
+        row += 1
+    ws.row_dimensions.group(header_row + 1, row - 1, outline_level=1, hidden=False)
+    return row + 1
+
+
+def _write_analysis_section(
+    ws: Any,
+    row: int,
+    result: dict[str, Any],
+    input_manifest: dict[str, Any] | None,
+) -> int:
+    row = _section_title(
+        ws,
+        row,
+        "1.4.1 七项分析维度",
+        "七个维度分别说明读取证据、实际检查、判定依据和能力边界；没有发票、预算或历史照片库时不会默认判为通过。",
+    )
+    headers = [
+        "序号", "分析维度", "检测内容", "1.4.1判定标准", "本次读取文件/证据",
+        "实际执行检查", "状态", "判定依据及能力边界/补证",
+    ]
+    blocks = [(1, 1), (2, 2), (3, 4), (5, 6), (7, 8), (9, 10), (11, 11), (12, 13)]
+    _write_merged_row(ws, row, blocks, headers, header=True, height=30)
+    row += 1
+    for item in build_analysis_dimension_rows([result], input_manifest):
+        values = [
+            item["dimension_no"], item["analysis_dimension"], item["check_content"],
+            item["proposal_standard"], item["files"], item["executed_check"],
+            item["status"], f"判定依据：{item['basis']}\n能力边界/补证：{item['limitation']}",
+        ]
+        _write_merged_row(ws, row, blocks, values, status_indexes={7}, height=108)
+        row += 1
+    return row + 1
+
+
+def _write_exception_section(ws: Any, row: int, result: dict[str, Any]) -> int:
+    row = _section_title(
+        ws,
+        row,
+        "异常、影响与补证清单",
+        "高风险影响数量、金额或核心证据；中风险表示映射、身份、日期或真实性证据仍需说明。",
+    )
+    headers = ["序号", "等级", "异常代码", "发现及来源", "金额/结论影响", "补证或处理建议"]
+    blocks = [(1, 1), (2, 2), (3, 4), (5, 8), (9, 10), (11, 13)]
+    _write_merged_row(ws, row, blocks, headers, header=True, height=30)
+    row += 1
+    for index, item in enumerate(result.get("exceptions") or [], 1):
+        finding = item["message"] + (f"\n来源：{item['source']}" if item.get("source") else "")
+        severity_label = {"high": "高", "medium": "中", "low": "低"}.get(item["severity"], item["severity"])
+        _write_merged_row(
+            ws,
+            row,
+            blocks,
+            [index, severity_label, item["code"], finding, item["impact"], item["suggestion"]],
+            height=108,
+        )
+        fill = RED if item["severity"] == "high" else YELLOW
+        for start_col, _ in blocks:
+            ws.cell(row, start_col).fill = PatternFill("solid", fgColor=fill)
+        row += 1
+    return row + 1
+
+
+def _usage_or_default(result: dict[str, Any]) -> dict[str, Any]:
+    usage = result.get("model_usage")
+    if isinstance(usage, dict):
+        return usage
+    return {
+        "model": "未调用（使用预提取证据）",
+        "model_invocation_count": 0,
+        "successful_invocation_count": 0,
+        "failed_invocation_count": 0,
+        "retry_count": 0,
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 0,
+        "attempts": [],
+    }
+
+
+def _write_model_usage_section(ws: Any, row: int, result: dict[str, Any]) -> int:
+    row = _section_title(
+        ws,
+        row,
+        "模型调用量与失败重试",
+        "这里只保存结构化调用次数、重试和Token统计，不保存stdout/stderr、模型事件流或其他运行日志。",
+    )
+    headers = [
+        "模型", "调用次数", "成功次数", "失败次数", "重试次数", "输入Token",
+        "缓存输入Token", "输出Token", "推理输出Token", "总Token",
+    ]
+    _header(ws, row, headers)
+    usage = _usage_or_default(result)
+    row += 1
+    values = [
+        usage.get("model"), usage.get("model_invocation_count", 0),
+        usage.get("successful_invocation_count", 0), usage.get("failed_invocation_count", 0),
+        usage.get("retry_count", 0), usage.get("input_tokens", 0),
+        usage.get("cached_input_tokens", 0), usage.get("output_tokens", 0),
+        usage.get("reasoning_output_tokens", 0), usage.get("total_tokens", 0),
+    ]
+    _write_row(ws, row, values, number_formats={col: "#,##0" for col in range(2, 11)}, height=36)
+    if int(usage.get("failed_invocation_count", 0) or 0) or int(usage.get("retry_count", 0) or 0):
+        for col in (4, 5):
+            ws.cell(row, col).fill = PatternFill("solid", fgColor=YELLOW)
+    row += 2
+    _header(
+        ws,
+        row,
+        ["尝试序号", "状态", "退出码", "失败原因摘要", "输入Token", "缓存输入Token", "输出Token", "推理Token", "总Token"],
+    )
+    row += 1
+    attempts = usage.get("attempts") or []
+    if not attempts:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
+        ws.cell(row, 1, "本次使用预提取证据，未发生模型调用。")
+        _body_cell(ws.cell(row, 1))
+        row += 1
+    else:
+        for attempt in attempts:
+            attempt_usage = attempt.get("usage") or {}
+            status = "成功" if attempt.get("status") == "success" else "失败后重试"
+            values = [
+                attempt.get("attempt_no"), status, attempt.get("exit_code"), attempt.get("failure_reason"),
+                attempt_usage.get("input_tokens", 0), attempt_usage.get("cached_input_tokens", 0),
+                attempt_usage.get("output_tokens", 0), attempt_usage.get("reasoning_output_tokens", 0),
+                attempt_usage.get("total_tokens", 0),
+            ]
+            _write_row(ws, row, values, status_columns={2}, height=36)
+            row += 1
+    return row + 1
+
+
+def _add_personnel_audit_sheet(
+    wb: Workbook,
+    result: dict[str, Any],
+    input_manifest: dict[str, Any] | None,
+) -> Any:
+    ws = wb.create_sheet("人员激励核销")
+    _style_title(
+        ws,
+        "人员激励核销：文件读取、逐SKU、逐门店转账与最终结论",
+        COMPACT_LAST_COL,
+        "阅读顺序：销售Excel底层行 → 最终结算单10行 → 逐SKU 1:1数量/金额 → 门店应付与转账截图 → 1.4.1与补证。",
+    )
+    summary = result["summary"]
+    sales = result["sales"]
+    settlement = result["settlement"]
+    run_id = input_manifest.get("run_id") if isinstance(input_manifest, dict) else None
+    ws.merge_cells(start_row=8, start_column=1, end_row=8, end_column=COMPACT_LAST_COL)
+    ws.cell(
+        8,
+        1,
+        f"运行ID：{run_id or '未提供'}　案件：{result['case_name']}　活动期：{settlement.get('activity_start')} 至 {settlement.get('activity_end')}　"
+        f"核心原则：结算单没有条码时保留商品映射依据和置信度，不能只看总金额。",
+    )
+    ws.cell(8, 1).font = _font(color="555555", size=9)
+    ws.cell(8, 1).fill = PatternFill("solid", fgColor=GRAY)
+    ws.cell(8, 1).alignment = Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[8].height = 30
+
+    row = 9
+    row = _section_title(ws, row, "核销步骤总览", "每一步都列明读什么、怎样计算、与什么比较以及本步限制。")
+    step_blocks = [(1, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13)]
+    _write_merged_row(
+        ws,
+        row,
+        step_blocks,
+        ["步骤", "读取文件", "读取内容", "处理/计算", "对比对象", "本步结果", "结论/限制"],
+        header=True,
+        height=30,
+    )
+    row += 1
+    screenshot_files = sorted(
+        {
+            Path(str(file_name)).name
+            for item in result.get("transfer_evidence") or []
+            for file_name in item.get("source_files") or []
+        }
+    )
+    steps = [
+        [1, Path(str(sales["source_file"])).name, "Sheet1有效销售行；期间、门店、条码、商品、数量、单价、金额", "跳过空白/小计/合计并保留原Excel行号；按条码、门店汇总", "销售Excel自身明细与合计", f"{sales['detail_row_count']}行、{sales['store_count']}家、{sales['sku_count']}个SKU、数量{sales['total_quantity']}", "销售数量是结算核验的底层来源"],
+        [2, Path(str(settlement["source_file"])).name, "客户、活动期、10个奖励商品、数量、奖励单价、行金额、总额、实际申报", "把结算单每一行作为独立核销对象", "结算单10行", f"数量{summary['settlement_line_quantity']}、行奖励{summary['settlement_line_reward']}元、申报{summary['claimed_amount']}元", "结算单无条码，名称映射须保留依据"],
+        [3, "销售Excel + 最终结算单", "结算每行与Excel唯一条码及全部来源行", "7家门店同条码数量求和；计算数量×奖励单价", "10个结算SKU ↔ 10个Excel条码", f"{summary['quantity_match_count']}/{summary['settlement_line_count']}个数量匹配，计算奖励{summary['calculated_line_reward']}元", "中置信度映射仍需条码/主数据补证"],
+        [4, "、".join(screenshot_files), "金额气泡、方向、身份、日期和镜像画面", "发送/接收镜像合并为transfer_id；比较金额集合", "7家门店应付 ↔ 7笔去重转账", f"转账合计{summary['transfer_total']}元", "金额相同不证明收款门店身份或日期"],
+        [5, "上述全部材料", "逐SKU、逐门店、逐转账、真实性与合规性证据", "先计算证据支持金额，再与申报金额比较", "申报金额 ↔ 证据支持金额", f"建议通过{summary['suggested_approved_amount']}元、暂挂{summary['temporarily_held_amount']}元", "异常和补证要求在本页末尾列示"],
+    ]
+    for values in steps:
+        _write_merged_row(ws, row, step_blocks, values, height=66)
+        row += 1
+    row += 1
+    row = _write_file_section(ws, row, result, input_manifest)
+
+    row = _section_title(
+        ws,
+        row,
+        "二、销售Excel与最终结算单逐SKU 1:1比对",
+        f"结算来源：{Path(str(settlement['source_file'])).name}；销售来源：{Path(str(sales['source_file'])).name}。",
+    )
+    sku_headers = [
+        "结算行", "结算单读取商品", "结算数量", "销售Excel读取（条码/商品）", "Excel来源行",
+        "Excel汇总数量", "数量差异", "奖励单价", "Excel计算奖励", "结算行奖励",
+        "金额差异", "证据支持金额", "结论/映射依据",
+    ]
+    _header(ws, row, sku_headers)
+    sku_start = row + 1
+    row = sku_start
+    quantity_labels = {"match": "匹配", "mismatch": "异常", "unmatched": "未匹配"}
+    amount_labels = {"match": "匹配", "mismatch": "异常", "unmatched": "未匹配"}
+    for item in result["sku_reconciliation"]:
+        confidence = str(item["mapping_confidence"])
+        confidence_label = {"high": "高", "medium": "中", "low": "低"}.get(confidence, confidence)
+        settlement_name = str(item["settlement_product_name"])
+        if confidence == "high":
+            mapping_note = "结算单无条码；按商品核心名称在销售Excel中唯一映射。"
+        elif settlement_name.startswith("SP-4"):
+            mapping_note = "结算单使用SP-4别名，销售Excel未显示该别名；按一对一未映射SKU及汇总数量佐证，需补条码主数据。"
+        else:
+            mapping_note = "结算单与销售Excel名称存在简称、前缀或规格差异；按唯一候选及汇总数量佐证，需补条码主数据。"
+        conclusion = (
+            f"数量{quantity_labels.get(item['quantity_status'], item['quantity_status'])}；"
+            f"金额{amount_labels.get(item['amount_status'], item['amount_status'])}；"
+            f"映射置信度{confidence_label}\n{mapping_note}"
+        )
+        values = [
+            item["line_no"], item["settlement_product_name"], item["settlement_quantity"],
+            f"{item['mapped_barcode']}\n{item['excel_product_name']}",
+            ",".join(str(value) for value in item["excel_rows"]), item["excel_quantity"],
+            f"=F{row}-C{row}", item["unit_reward"], f"=F{row}*H{row}",
+            item["settlement_reward_amount"], f"=J{row}-I{row}",
+            f"=MAX(0,MIN(C{row},F{row}))*H{row}", conclusion,
+        ]
+        _write_row(
+            ws,
+            row,
+            values,
+            height=78,
+            number_formats={3: "#,##0", 6: "#,##0", 7: "#,##0", 8: "#,##0.00", 9: "#,##0.00", 10: "#,##0.00", 11: "#,##0.00", 12: "#,##0.00"},
+        )
+        ws.cell(row, 13).fill = PatternFill("solid", fgColor=GREEN if confidence == "high" else YELLOW)
+        row += 1
+    sku_total = row
+    ws.cell(row, 1, "合计")
+    for col in (3, 6, 7, 9, 10, 11, 12):
+        letter = get_column_letter(col)
+        ws.cell(row, col, f"=SUM({letter}{sku_start}:{letter}{row - 1})")
+    for col in range(1, COMPACT_LAST_COL + 1):
+        _body_cell(ws.cell(row, col), formula=col in {3, 6, 7, 9, 10, 11, 12})
+        ws.cell(row, col).fill = PatternFill("solid", fgColor=BLUE)
+        ws.cell(row, col).font = _font(bold=True, color=FORMULA_BLACK)
+    row += 2
+
+    row = _section_title(
+        ws,
+        row,
+        "三、销售Excel 70条底层来源明细",
+        f"来源：{Path(str(sales['source_file'])).name} / {sales['sheet']}。每一行保留原Excel行号并回指结算行。",
+    )
+    trace_headers = ["Excel行", "期间", "门店", "条码", "Excel商品", "销售数量", "销售单价", "结算行", "结算商品", "奖励单价", "本行应付奖励"]
+    _header(ws, row, trace_headers)
+    trace_start = row + 1
+    row = trace_start
+    for item in result["sales_trace"]:
+        values = [
+            item["excel_row"], item["period_text"], item["store_name"], item["barcode"], item["product_name"],
+            item["quantity"], item["unit_price"], item["settlement_line_no"], item["settlement_product_name"],
+            item["unit_reward"], f"=F{row}*J{row}",
+        ]
+        _write_row(ws, row, values, height=30, number_formats={6: "#,##0", 7: "#,##0.00", 10: "#,##0.00", 11: "#,##0.00"})
+        row += 1
+    trace_total = row
+    ws.cell(row, 1, "合计")
+    ws.cell(row, 6, f"=SUM(F{trace_start}:F{row - 1})")
+    ws.cell(row, 11, f"=SUM(K{trace_start}:K{row - 1})")
+    for col in range(1, 12):
+        _body_cell(ws.cell(row, col), formula=col in {6, 11})
+        ws.cell(row, col).fill = PatternFill("solid", fgColor=BLUE)
+    ws.row_dimensions.group(trace_start, trace_total - 1, outline_level=1, hidden=False)
+    row += 2
+
+    row = _section_title(
+        ws,
+        row,
+        "四、7家门店应付奖励与转账截图比对",
+        "Excel按门店汇总10个SKU奖励；截图按发送/接收镜像去重。金额集合匹配不等于收款身份匹配。",
+    )
+    transfer_headers = [
+        "门店", "Excel销售数量", "奖励单价", "Excel应付奖励", "转账ID", "去重转账金额",
+        "金额差异", "截图来源", "可见身份", "可见日期", "匹配依据", "结论", "限制",
+    ]
+    _header(ws, row, transfer_headers)
+    transfer_start = row + 1
+    row = transfer_start
+    evidence_by_id = {item["transfer_id"]: item for item in result.get("transfer_evidence") or []}
+    for item in result["store_transfer_reconciliation"]:
+        evidence = evidence_by_id.get(item["transfer_id"], {})
+        unit_reward = (
+            float(item["expected_reward_amount"]) / float(item["excel_quantity"])
+            if item.get("excel_quantity")
+            else 0
+        )
+        visible_identity = evidence.get("store_name") or evidence.get("recipient_name") or "不可见"
+        limitation = "金额仅按集合配对；未取得门店与收款人的身份映射。"
+        if not evidence.get("event_date_visible"):
+            limitation += "未见完整日历日期。"
+        values = [
+            item["store_name"], item["excel_quantity"], unit_reward, f"=B{row}*C{row}",
+            item["transfer_id"], item["transfer_amount"], f"=F{row}-D{row}",
+            "、".join(Path(str(value)).name for value in evidence.get("source_files") or []),
+            visible_identity, "是" if evidence.get("event_date_visible") else "否",
+            "金额集合匹配" if item["match_basis"] == "amount_multiset" else item["match_basis"],
+            "金额匹配，身份未验证" if item["status"] == "amount_match_identity_unverified" else item["status"],
+            limitation,
+        ]
+        _write_row(
+            ws,
+            row,
+            values,
+            status_columns={12},
+            height=60,
+            number_formats={2: "#,##0", 3: "#,##0.00", 4: "#,##0.00", 6: "#,##0.00", 7: "#,##0.00"},
+        )
+        row += 1
+    transfer_total = row
+    ws.cell(row, 1, "合计")
+    for col in (2, 4, 6, 7):
+        letter = get_column_letter(col)
+        ws.cell(row, col, f"=SUM({letter}{transfer_start}:{letter}{row - 1})")
+    for col in range(1, COMPACT_LAST_COL + 1):
+        _body_cell(ws.cell(row, col), formula=col in {2, 4, 6, 7})
+        ws.cell(row, col).fill = PatternFill("solid", fgColor=BLUE)
+        ws.cell(row, col).font = _font(bold=True, color=FORMULA_BLACK)
+    row += 2
+
+    row = _section_title(
+        ws,
+        row,
+        "五、转账截图去重明细",
+        "同一笔转账的发送方与接收方气泡合并为一个transfer_id，同时保留出现次数和去重依据。",
+    )
+    voucher_headers = ["转账ID", "金额", "画面次数", "身份可见", "日期可见", "门店/收款人", "来源文件", "去重依据", "备注"]
+    _header(ws, row, voucher_headers)
+    voucher_start = row + 1
+    row = voucher_start
+    for item in result.get("transfer_evidence") or []:
+        values = [
+            item["transfer_id"], item["amount"], item["occurrence_count"],
+            "是" if item["identity_visible"] else "否", "是" if item["event_date_visible"] else "否",
+            item.get("store_name") or item.get("recipient_name"),
+            "、".join(Path(str(value)).name for value in item.get("source_files") or []),
+            item["dedup_basis"], "；".join(item.get("notes") or []),
+        ]
+        _write_row(ws, row, values, height=72, number_formats={2: "#,##0.00", 3: "#,##0"})
+        row += 1
+    ws.row_dimensions.group(voucher_start, row - 1, outline_level=1, hidden=False)
+    row += 1
+
+    row = _section_title(
+        ws,
+        row,
+        "六、结算单与转账截图真实性风险辅助检查",
+        "SHA-256检查完全重复，pHash/dHash筛查近似画面；EXIF/GPS缺失不能自动判假，也不能自动判真。",
+    )
+    image_headers = ["文件名", "角色", "尺寸", "大小(字节)", "SHA-256", "pHash", "dHash", "EXIF时间", "GPS", "pHash候选"]
+    _header(ws, row, image_headers)
+    row += 1
+    image_inventory = result.get("image_inventory") or {}
+    candidate_by_file: dict[str, list[str]] = {}
+    for pair in image_inventory.get("phash_candidate_pairs") or []:
+        names = [str(value) for value in pair.get("files") or []]
+        for name in names:
+            others = [value for value in names if value != name]
+            candidate_by_file.setdefault(name, []).append(f"{'、'.join(others)}（距离{pair.get('distance')}）")
+    for item in image_inventory.get("files") or []:
+        file_name = str(item["file_name"])
+        values = [
+            file_name, "最终结算单" if "结算单" in file_name else "转账截图",
+            f"{item['width']}×{item['height']}", item["size"], item["sha256"], item.get("phash"),
+            item["dhash"], item["exif_datetime"], "有" if item["gps_present"] else "无",
+            "；".join(candidate_by_file.get(file_name, [])) or "无",
+        ]
+        _write_row(ws, row, values, height=78, number_formats={4: "#,##0"})
+        row += 1
+    row += 1
+
+    row = _write_analysis_section(ws, row, result, input_manifest)
+    row = _write_exception_section(ws, row, result)
+    row = _write_model_usage_section(ws, row, result)
+
+    exception_count = int(summary["high_exception_count"]) + int(summary["medium_exception_count"])
+    cards = [
+        {"label": "结算/申请金额（元）", "value": summary["claimed_amount"], "number_format": "#,##0.00"},
+        {"label": "证据支持金额（元）", "value": f"=MIN(L{sku_total},F{transfer_total})", "number_format": "#,##0.00", "fill": GREEN},
+        {"label": "建议通过金额（元）", "value": "=MIN(A4,D4)", "number_format": "#,##0.00", "fill": GREEN},
+        {"label": "暂挂金额（元）", "value": "=A4-G4", "number_format": "#,##0.00", "fill": YELLOW},
+        {"label": "结算SKU", "value": f"{summary['settlement_line_count']}个"},
+        {"label": "逐SKU数量通过", "value": f"{summary['quantity_match_count']}/{summary['settlement_line_count']}", "fill": GREEN},
+        {"label": "异常/待说明", "value": f"{exception_count}项", "fill": YELLOW if exception_count else GREEN},
+        {"label": "最终结论", "value": "待补件（金额可通过）" if exception_count else "通过", "status": "待补件" if exception_count else "通过"},
+    ]
+    _write_summary_cards(ws, cards)
+    ws.freeze_panes = "A9"
+    ws.sheet_view.showGridLines = False
+    ws.sheet_view.zoomScale = 70
+    ws.sheet_properties.tabColor = "70AD47"
+    ws.sheet_properties.outlinePr.summaryBelow = True
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.print_title_rows = "1:8"
+    _set_widths(
+        ws,
+        {1: 10, 2: 28, 3: 16, 4: 38, 5: 20, 6: 15, 7: 13, 8: 13, 9: 17, 10: 17, 11: 15, 12: 18, 13: 52},
+    )
+    return ws
+
+
+def _add_display_audit_sheet(
+    wb: Workbook,
+    result: dict[str, Any],
+    input_manifest: dict[str, Any] | None,
+) -> Any:
+    ws = wb.create_sheet("堆头核销")
+    _style_title(
+        ws,
+        "堆头核销：合同、销售、逐店照片、真实性风险与最终结论",
+        COMPACT_LAST_COL,
+        "阅读顺序：合同20家及陈列规则 → 销售客户/期间 → 21张照片逐店绑定 → 日期/地点/陈列/重复五项控制 → 支持金额。",
+    )
+    summary = result["summary"]
+    contract = result["contract"]
+    sales = result["sales"]
+    run_id = input_manifest.get("run_id") if isinstance(input_manifest, dict) else None
+    ws.merge_cells(start_row=8, start_column=1, end_row=8, end_column=COMPACT_LAST_COL)
+    ws.cell(
+        8,
+        1,
+        f"运行ID：{run_id or '未提供'}　案件：{result['case_name']}　活动期：{contract.get('activity_start')} 至 {contract.get('activity_end')}　"
+        f"合同规则：{contract.get('display_standard')}　核心原则：照片文件名只用于归组，不作为地点证明。",
+    )
+    ws.cell(8, 1).font = _font(color="555555", size=9)
+    ws.cell(8, 1).fill = PatternFill("solid", fgColor=GRAY)
+    ws.cell(8, 1).alignment = Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[8].height = 30
+
+    row = 9
+    row = _section_title(ws, row, "核销步骤总览", "每家1000元只有在照片、期间、门店、陈列和重复检查全部通过时才计入支持金额。")
+    step_blocks = [(1, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13)]
+    _write_merged_row(
+        ws,
+        row,
+        step_blocks,
+        ["步骤", "读取文件", "读取内容", "处理/计算", "对比对象", "本步结果", "结论/限制"],
+        header=True,
+        height=30,
+    )
+    row += 1
+    steps = [
+        [1, Path(str(contract["source_file"])).name, "客户、活动期、20家门店、陈列标准、单店费用、申报金额、印章", "建立合同原始门店1—20行基准", "合同条款 ↔ 申报/照片", f"{summary['contract_store_count']}家×{summary['fee_per_store']}元={summary['expected_contract_amount']}元", "合同门店是逐店判定基准"],
+        [2, Path(str(sales["source_file"])).name, "客户、期间、商品编码、条码、商品、数量、零售价、金额", "汇总36个SKU并判断是否有门店字段", "销售客户/期间 ↔ 合同", f"数量{summary['sales_quantity']}、零售金额{summary['sales_retail_amount']}元", "仅经销商汇总，不能证明20家逐店执行"],
+        [3, f"现场陈列照片{summary['photo_count']}张", "画面日期、地点水印、陈列范围、清晰度；SHA/pHash/dHash、尺寸、EXIF、GPS", "按合同序号绑定照片并逐张查重", "21张照片 ↔ 合同20家门店", f"已绑定{summary['photo_count']}张照片", "第10家有2张，其余每家1张"],
+        [4, "合同 + 逐店照片", "照片存在、期间、门店地点、陈列标准、重复情况", "五项控制逐店判断，全部通过才支持1000元", "合同每家 ↔ 对应现场照片", f"{summary['passed_store_count']}家通过、{summary['supplement_store_count']}家补证", "无EXIF/GPS时保留真实性边界"],
+        [5, "上述全部材料", "逐店结果、销售支持、1.4.1和异常补证", "先计算逐店支持金额，再与申报比较", "申报金额 ↔ 逐店证据支持金额", f"建议通过{summary['suggested_approved_amount']}元、暂挂{summary['temporarily_held_amount']}元", "6家补证要求在本页列示"],
+    ]
+    for values in steps:
+        _write_merged_row(ws, row, step_blocks, values, height=66)
+        row += 1
+    row += 1
+    row = _write_file_section(ws, row, result, input_manifest)
+
+    row = _section_title(
+        ws,
+        row,
+        "二、合同、销售Excel与申报基础对比",
+        "销售Excel只验证客户、活动期间和总体销售；因为没有门店字段，不能直接支持任何单店1000元。",
+    )
+    baseline_headers = ["检查项", "合同PDF读取值", "销售Excel/申报读取值", "对比规则", "差异/覆盖", "结果", "限制"]
+    baseline_blocks = [(1, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 10), (11, 13)]
+    _write_merged_row(ws, row, baseline_blocks, baseline_headers, header=True, height=30)
+    baseline_start = row + 1
+    row = baseline_start
+    contract_period = f"{contract.get('activity_start')} 至 {contract.get('activity_end')}"
+    sales_period = "、".join(str(value) for value in sales.get("period_values") or [])
+    baseline_rows: list[list[Any]] = [
+        ["客户", contract.get("customer_name"), "、".join(sales.get("customers") or []), "名称一致性", "一致", "匹配", "仅证明经销商层级销售"],
+        ["活动期间", contract_period, sales_period, "销售期间应在合同活动期内", "完整覆盖4月", "匹配", "不代表逐店均在期间内完成陈列"],
+        ["数据粒度", f"合同门店{summary['contract_store_count']}家", "销售Excel无门店字段", "门店级执行需要门店级证据", "0家可由销售Excel单独证明", "证据不足", "逐店必须回到照片核验"],
+        ["陈列规则", contract.get("display_standard"), f"现场照片{summary['photo_count']}张", "逐店判断1平方米堆头或至少4纵陈列", f"{summary['passed_store_count']}家综合通过", "部分通过", "照片未提供尺量数据"],
+        ["费用金额", summary["expected_contract_amount"], summary["claimed_amount"], "合同门店数×单店费用 ↔ 申报", f"=D{row + 4}-B{row + 4}", f"=IF(H{row + 4}=0,\"匹配\",\"异常\")", "独立活动预算表未提交"],
+        ["总体销售", "合同无SKU销售目标", summary["sales_quantity"], "作为活动期总体销售背景", summary["sales_retail_amount"], "总体支持", "不能分摊给20家门店"],
+    ]
+    for values in baseline_rows:
+        _write_merged_row(
+            ws,
+            row,
+            baseline_blocks,
+            values,
+            status_indexes={6},
+            height=54,
+            number_formats={2: "#,##0.00", 3: "#,##0.00", 5: "#,##0.00"},
+        )
+        row += 1
+    row += 1
+
+    row = _section_title(
+        ws,
+        row,
+        "三、合同20家门店与21张照片逐店比对",
+        "五项控制：有照片、日期在活动期、可见地点与合同门店一致、达到陈列标准、未发现重复；全部通过才支持单店费用。",
+    )
+    store_headers = [
+        "合同序号", "合同门店", "照片文件", "可见日期", "可见地点/水印", "期间",
+        "门店匹配", "陈列标准", "重复检查", "结论", "支持金额", "风险/判断依据", "补证建议",
+    ]
+    _header(ws, row, store_headers)
+    store_start = row + 1
+    row = store_start
+    status_labels = {"pass": "通过", "supplement": "补证"}
+    period_labels = {"match": "是", "mismatch": "否", "unverifiable": "无法判断"}
+    store_labels = {"exact": "是", "compatible": "基本匹配", "mismatch": "不一致", "filename_only": "弱（仅文件名）"}
+    display_labels = {"pass": "是", "fail": "否", "uncertain": "无法判断"}
+    duplicate_labels = {"none": "未发现", "exact": "完全重复", "possible": "疑似重复", "unverifiable": "无法判断"}
+    for item in result["store_reconciliation"]:
+        status = status_labels[item["status"]]
+        values = [
+            item["store_line_no"], item["contract_store_name"], "、".join(item["photo_files"]),
+            item["visible_date"], item["visible_location"], period_labels[item["period_match"]],
+            store_labels[item["store_match"]], display_labels[item["display_match"]],
+            duplicate_labels[item["duplicate_check"]], status,
+            f"=IF(J{row}=\"通过\",{summary['fee_per_store']},0)",
+            "；".join(item["risk_notes"]), "；".join(item["supplement_advice"]),
+        ]
+        _write_row(ws, row, values, status_columns={10}, height=108, number_formats={11: "#,##0.00"})
+        row += 1
+    store_total = row
+    ws.cell(row, 1, "合计")
+    ws.cell(row, 3, f"照片{summary['photo_count']}张")
+    ws.cell(row, 10, f'=COUNTIF(J{store_start}:J{row - 1},"通过")&"家通过"')
+    ws.cell(row, 11, f"=SUM(K{store_start}:K{row - 1})")
+    for col in range(1, COMPACT_LAST_COL + 1):
+        _body_cell(ws.cell(row, col), formula=col in {10, 11})
+        ws.cell(row, col).fill = PatternFill("solid", fgColor=BLUE)
+        ws.cell(row, col).font = _font(bold=True, color=FORMULA_BLACK)
+    row += 2
+
+    row = _section_title(
+        ws,
+        row,
+        "四、销售Excel 36条SKU明细",
+        f"来源：{Path(str(sales['source_file'])).name} / {sales['sheet']}。客户和期间与合同一致，但没有门店字段。",
+    )
+    sales_headers = ["Excel行", "客户", "期间", "商品编码", "条码", "商品名称", "数量", "零售金额", "在本案中的作用"]
+    _header(ws, row, sales_headers)
+    sales_start = row + 1
+    row = sales_start
+    for item in sales.get("records") or []:
+        values = [
+            item["excel_row"], item["customer_name"], item["period_text"], item["product_code"],
+            item["barcode"], item["product_name"], item["quantity"], item["total_amount"],
+            "支持合同客户和活动期内的总体销售；不能证明单店陈列。",
+        ]
+        _write_row(ws, row, values, height=36, number_formats={7: "#,##0", 8: "#,##0.00"})
+        row += 1
+    sales_total = row
+    ws.cell(row, 1, "合计")
+    ws.cell(row, 7, f"=SUM(G{sales_start}:G{row - 1})")
+    ws.cell(row, 8, f"=SUM(H{sales_start}:H{row - 1})")
+    for col in range(1, 10):
+        _body_cell(ws.cell(row, col), formula=col in {7, 8})
+        ws.cell(row, col).fill = PatternFill("solid", fgColor=BLUE)
+    ws.row_dimensions.group(sales_start, sales_total - 1, outline_level=1, hidden=False)
+    row += 2
+
+    row = _section_title(
+        ws,
+        row,
+        "五、21张照片文件哈希与原始元数据",
+        "技术检查用于发现完全重复、近似重复和元数据缺口；本包内未重复不等于历史活动从未复用。",
+    )
+    photo_headers = ["文件名", "尺寸", "文件大小", "SHA-256", "pHash", "dHash", "EXIF时间", "GPS", "绑定合同门店", "状态"]
+    _header(ws, row, photo_headers)
+    photo_start = row + 1
+    row = photo_start
+    bound_store: dict[str, str] = {}
+    for item in result["store_reconciliation"]:
+        for file_name in item["photo_files"]:
+            bound_store[Path(str(file_name)).name] = item["contract_store_name"]
+    for item in result["photo_inventory"].get("files") or []:
+        file_name = str(item["file_name"])
+        values = [
+            file_name, f"{item['width']}×{item['height']}", item["size"], item["sha256"],
+            item.get("phash"), item["dhash"], item["exif_datetime"],
+            "有" if item["gps_present"] else "无", bound_store.get(file_name),
+            "已绑定" if file_name in bound_store else "未绑定",
+        ]
+        _write_row(ws, row, values, status_columns={10}, height=66, number_formats={3: "#,##0"})
+        row += 1
+    ws.row_dimensions.group(photo_start, row - 1, outline_level=1, hidden=False)
+    row += 1
+
+    row = _write_analysis_section(ws, row, result, input_manifest)
+    row = _write_exception_section(ws, row, result)
+    row = _write_model_usage_section(ws, row, result)
+
+    cards = [
+        {"label": "合同/申请金额（元）", "value": summary["claimed_amount"], "number_format": "#,##0.00"},
+        {"label": "逐店证据支持金额（元）", "value": f"=K{store_total}", "number_format": "#,##0.00", "fill": GREEN},
+        {"label": "建议通过金额（元）", "value": "=MIN(A4,D4)", "number_format": "#,##0.00", "fill": GREEN},
+        {"label": "暂挂金额（元）", "value": "=A4-G4", "number_format": "#,##0.00", "fill": YELLOW},
+        {"label": "合同门店", "value": f"{summary['contract_store_count']}家"},
+        {"label": "逐店通过", "value": f'=COUNTIF(J{store_start}:J{store_total - 1},"通过")&"/{summary["contract_store_count"]}"', "fill": GREEN},
+        {"label": "待补件门店", "value": f'=COUNTIF(J{store_start}:J{store_total - 1},"补证")&"家"', "fill": YELLOW},
+        {"label": "最终结论", "value": "待补件" if summary["supplement_store_count"] else "通过", "status": "待补件" if summary["supplement_store_count"] else "通过"},
+    ]
+    _write_summary_cards(ws, cards)
+    ws.freeze_panes = "A9"
+    ws.sheet_view.showGridLines = False
+    ws.sheet_view.zoomScale = 70
+    ws.sheet_properties.tabColor = "ED7D31"
+    ws.sheet_properties.outlinePr.summaryBelow = True
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.print_title_rows = "1:8"
+    _set_widths(
+        ws,
+        {1: 10, 2: 30, 3: 34, 4: 17, 5: 36, 6: 14, 7: 15, 8: 15, 9: 18, 10: 14, 11: 15, 12: 52, 13: 52},
+    )
+    return ws
+
+
+def _create_legacy_combined_report(
     results: list[dict[str, Any]],
     output_path: str | Path,
     *,
@@ -1249,6 +2083,48 @@ def create_combined_report(
     lead_sheets = [summary_ws, model_usage_ws, workflow_ws, analysis_ws, inventory_ws]
     remaining_sheets = [sheet for sheet in workbook._sheets if sheet not in lead_sheets]
     workbook._sheets = lead_sheets + remaining_sheets
+    workbook.calculation.calcMode = "auto"
+    workbook.calculation.fullCalcOnLoad = True
+    workbook.calculation.forceFullCalc = True
+    target = Path(output_path).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(target)
+    workbook.close()
+    return target
+
+
+def create_combined_report(
+    results: list[dict[str, Any]],
+    output_path: str | Path,
+    *,
+    input_manifest: dict[str, Any] | None = None,
+) -> Path:
+    """Create one complete worksheet per supported audit method."""
+    if not results:
+        raise AuditError("Cannot create a report without audit results")
+    by_scenario: dict[str, dict[str, Any]] = {}
+    for result in results:
+        scenario = str(result.get("scenario"))
+        if scenario not in {"personnel_incentive", "promotional_display"}:
+            raise AuditError(f"Unsupported report scenario: {scenario}")
+        if scenario in by_scenario:
+            raise AuditError(f"Combined report supports only one case per scenario: {scenario}")
+        by_scenario[scenario] = result
+
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    expected_sheets: list[str] = []
+    if "personnel_incentive" in by_scenario:
+        _add_personnel_audit_sheet(workbook, by_scenario["personnel_incentive"], input_manifest)
+        expected_sheets.append("人员激励核销")
+    if "promotional_display" in by_scenario:
+        _add_display_audit_sheet(workbook, by_scenario["promotional_display"], input_manifest)
+        expected_sheets.append("堆头核销")
+    if workbook.sheetnames != expected_sheets:
+        raise AuditError(
+            f"Compact workbook sheet contract failed: expected {expected_sheets}, got {workbook.sheetnames}"
+        )
+
     workbook.calculation.calcMode = "auto"
     workbook.calculation.fullCalcOnLoad = True
     workbook.calculation.forceFullCalc = True
