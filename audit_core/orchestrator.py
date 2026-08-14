@@ -278,6 +278,26 @@ def run_batch_command(args: argparse.Namespace) -> dict[str, Any]:
             agent=args.agent and evidence_path is None,
             model=args.model,
         )
+        if item.get("model_usage_from_result"):
+            usage_source_path = _resolve_reference(batch_path, item["model_usage_from_result"])
+            usage_source = load_json(usage_source_path)
+            source_usage = usage_source.get("model_usage")
+            if not isinstance(source_usage, dict):
+                raise AuditError(
+                    f"model_usage_from_result has no model_usage object: {usage_source_path}"
+                )
+            carried_usage = {
+                **source_usage,
+                "source": "reused_frozen_evidence",
+                "source_result": str(usage_source_path),
+            }
+            result["model_usage"] = carried_usage
+            write_json(case_run / "result" / "audit-result.json", result)
+            case_state_path = case_run / "run-state.json"
+            case_state = load_json(case_state_path)
+            case_state["model_usage"] = carried_usage
+            case_state["model_usage_source"] = str(usage_source_path)
+            write_json(case_state_path, case_state)
         results.append(result)
         case_deliveries.append(
             {
