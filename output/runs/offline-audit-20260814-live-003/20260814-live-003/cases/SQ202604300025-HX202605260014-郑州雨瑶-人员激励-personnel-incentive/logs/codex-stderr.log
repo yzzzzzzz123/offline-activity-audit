@@ -1,0 +1,19 @@
+Reading prompt from stdin...
+2026-08-14T08:45:55.808979Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.4 seconds
+Output:
+
+2026-08-14T08:46:19.400236Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `base_instructions` at line 94 column 5
+2026-08-14T08:47:27.539545Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.3 seconds
+Output:
+
+2026-08-14T08:53:29.832868Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 1.5 seconds
+Output:
+VALIDATION_ERRORS 0
+Traceback (most recent call last):
+  File "<stdin>", line 70, in <module>
+UnicodeEncodeError: 'gbk' codec can't encode character '\xa5' in position 24529: illegal multibyte sequence
+
+2026-08-14T08:54:14.716411Z ERROR codex_core::tools::router: error=`"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Remove-Item -LiteralPath 'C:\\Users\\EDY\\AppData\\Local\\Temp\\codex_personnel_settlement_rotated.png' -Force; Test-Path -LiteralPath 'C:\\Users\\EDY\\AppData\\Local\\Temp\\codex_personnel_settlement_rotated.png'"` rejected: blocked by policy
