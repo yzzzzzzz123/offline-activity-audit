@@ -91,6 +91,8 @@ def extract_with_codex(
 Read `{skill_dir / 'SKILL.md'}` completely before taking any task action. Read the directly linked audit rules and evidence schema. Inspect every source file listed by the case config. This turn is extraction only: do not calculate the final supported amount and do not edit source evidence.
 
 Return exactly one JSON object conforming to `{schema}`. Preserve source filenames, settlement/contract line numbers, visible values, mapping basis, uncertainty, transfer duplicate occurrence counts, and photo limitations. For personnel incentive cases, map each settlement product to exactly one Excel barcode and retain ambiguous mappings as null/ambiguous rather than guessing. For promotional display cases, inspect each contracted store independently and never use the filename as independent date/location proof.
+
+For promotional display `photo_files`, use only the image basename or a path relative to the configured `photo_dir`. Do not prepend the original ZIP root or repeat the configured photo directory.
 """
     prompt_path.write_text(prompt, encoding="utf-8")
     command = [

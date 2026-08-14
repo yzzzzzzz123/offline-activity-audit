@@ -23,9 +23,21 @@ PASS_STORE_MATCHES = {"exact", "compatible"}
 
 def _photo_path(photo_dir: Path, value: str) -> Path:
     candidate = Path(value)
-    if not candidate.is_absolute():
-        candidate = photo_dir / candidate
-    return candidate.resolve()
+    if candidate.is_absolute():
+        return candidate.resolve()
+
+    direct = (photo_dir / candidate).resolve()
+    if direct.is_file():
+        return direct
+
+    # Codex can preserve a ZIP-relative prefix even though photo_dir already
+    # points at that archive folder.  The inventory is flat, so fall back to
+    # the unique file name instead of duplicating the prefix and reporting a
+    # present photo as missing.
+    by_name = (photo_dir / candidate.name).resolve()
+    if by_name.is_file():
+        return by_name
+    return direct
 
 
 def audit_display_case(
