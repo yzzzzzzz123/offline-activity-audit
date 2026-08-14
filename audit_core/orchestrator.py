@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .archive_input import DEFAULT_INPUT_DIR, prepare_archive_batch
 from .codex_runner import extract_with_codex
 from .common import (
     AuditError,
@@ -370,6 +371,18 @@ def _launch_in_worktree(args: argparse.Namespace, mode: str) -> dict[str, Any]:
     output_root.mkdir(parents=True, exist_ok=True)
     write_json(output_root / "worktree-preflight.json", preflight_receipt)
     write_json(output_root / "worktree-allocation.json", allocation)
+    input_manifest_path = getattr(args, "input_manifest", None)
+    if input_manifest_path:
+        archive_manifest = load_json(Path(input_manifest_path).resolve())
+        write_json(output_root / "input-archive-manifest.json", archive_manifest)
+        write_json(
+            output_root / "skill-routing.json",
+            {
+                "schema_version": "1.0",
+                "entry_skill": "orchestrate-offline-audit",
+                "routes": archive_manifest.get("routing", {}),
+            },
+        )
     state_path = output_root / "worktree-run-state.json"
     state: dict[str, Any] = {
         "schema_version": "1.0",
@@ -469,6 +482,31 @@ def launch_batch_worktree(args: argparse.Namespace) -> dict[str, Any]:
     return _launch_in_worktree(args, "batch")
 
 
+def launch_input_worktree(args: argparse.Namespace) -> dict[str, Any]:
+    run_id = normalize_run_id(args.run_id or _timestamp_id())
+    prepared = prepare_archive_batch(
+        input_dir=Path(args.input_dir).resolve(),
+        run_id=run_id,
+    )
+    if args.prepare_only:
+        return {
+            "schema_version": "1.0",
+            "status": "prepared",
+            **prepared,
+        }
+    launch_args = argparse.Namespace(
+        batch=prepared["batch_path"],
+        output_dir=args.output_dir,
+        run_id=run_id,
+        agent=True,
+        model=args.model,
+        input_manifest=prepared["manifest_path"],
+    )
+    delivery = _launch_in_worktree(launch_args, "batch")
+    delivery["input"] = prepared
+    return delivery
+
+
 def _assert_internal_identity(worktree: Path, run_id: str) -> None:
     expected = worktree.resolve()
     if PROJECT_ROOT.resolve() != expected:
@@ -553,6 +591,29 @@ def build_parser(*, include_internal: bool = False) -> argparse.ArgumentParser:
     batch.add_argument("--agent", action="store_true", help="Extract missing evidence with Codex")
     batch.add_argument("--model")
     batch.set_defaults(handler=launch_batch_worktree)
+
+    archive_input = subparsers.add_parser(
+        "input",
+        help="Process exactly two ZIP files and route them to the child skills",
+    )
+    archive_input.add_argument(
+        "--input-dir",
+        default=str(DEFAULT_INPUT_DIR),
+        help="Directory containing one personnel ZIP and one display ZIP",
+    )
+    archive_input.add_argument(
+        "--output-dir",
+        default=str(PROJECT_ROOT.parent / "audit-output"),
+        help="External export root; defaults to the project sibling audit-output directory",
+    )
+    archive_input.add_argument("--run-id")
+    archive_input.add_argument("--model")
+    archive_input.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="Validate, classify, and extract the ZIPs without starting Codex or a worktree",
+    )
+    archive_input.set_defaults(handler=launch_input_worktree)
 
     worktree = subparsers.add_parser(
         "worktree",

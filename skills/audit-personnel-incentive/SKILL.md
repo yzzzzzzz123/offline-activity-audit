@@ -48,6 +48,8 @@ Read [audit-rules.md](references/audit-rules.md) when deciding mappings, severit
 
 ## Formal execution
 
+In the standard two-ZIP workflow, accept routing from the parent [orchestrate-offline-audit](../orchestrate-offline-audit/SKILL.md) Skill only after it has classified the package as `personnel_incentive` and frozen the case config.
+
 Start formal work only through the project main entry so the trusted supervisor binds the run to a Git snapshot, dedicated branch, and linked worktree:
 
 ```powershell

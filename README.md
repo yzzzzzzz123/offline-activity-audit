@@ -1,12 +1,35 @@
 # 线下活动核销
 
-项目只提供两个业务 Skill、一个主入口和统一的输出机制：
+项目提供一个主编排 Skill、两个业务子 Skill、一个主程序入口和统一输出机制：
 
+- `orchestrate-offline-audit`：读取 `input/` 中的两个 ZIP，安全解压并按场景调用子 Skill；
 - `audit-personnel-incentive`：人员激励，强制按结算单 SKU 与销售 Excel 数量逐项核对；
 - `audit-promotional-display`：堆头活动，按合同门店逐店检查照片、日期、地点、陈列和销售支撑；
 - `main.py`：可信主入口，负责分配 Git linked worktree、调用 Skill、校验结果并导出交付物。
 
 ## 正式运行
+
+标准入口只需要把一个人员激励 ZIP 和一个堆头 ZIP 放进 [input](input/README.md)，然后运行：
+
+```powershell
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id 20260814-001
+```
+
+等价的主程序命令：
+
+```powershell
+py -3 main.py input --run-id 20260814-001
+```
+
+默认从 `<project>/input` 读取，默认导出到项目同级的 `audit-output/<run-id>`。主 Skill 自动调用 Codex 提取证据并路由两个子 Skill。
+
+只检查、解压和生成路由配置，不启动 Codex 或 worktree：
+
+```powershell
+py -3 main.py input --run-id 20260814-check --prepare-only
+```
+
+以下接口保留给已经准备好 case/evidence JSON 的高级调用。
 
 人员激励或单个堆头案件：
 
@@ -72,6 +95,8 @@ output/
 ├── worktree-preflight.json
 ├── worktree-allocation.json
 ├── worktree-run-state.json
+├── input-archive-manifest.json       # 主 Skill 的 ZIP 哈希、解压清单与路由
+├── skill-routing.json                # 主 Skill → 两个子 Skill 的调用关系
 ├── delivery.json
 ├── <核销报告>.xlsx
 ├── workbook-verification.json        # 批量运行

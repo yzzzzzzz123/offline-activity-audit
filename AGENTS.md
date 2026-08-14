@@ -2,7 +2,11 @@
 
 Keep extraction and judgment separate. Model or vision steps may only extract source facts into schema-validated JSON. Deterministic Python must read Excel files, aggregate rows, calculate differences and supported amounts, validate final results, hash evidence, and generate reports.
 
-The supported scenarios are fixed:
+The public orchestration entry is fixed:
+
+- `orchestrate-offline-audit` accepts exactly two ZIP files from `input/`, routes one case to each child Skill, and owns worktree allocation plus combined delivery.
+
+The supported child scenarios are fixed:
 
 - `personnel_incentive` routes to `skills/audit-personnel-incentive`.
 - `promotional_display` routes to `skills/audit-promotional-display`.
