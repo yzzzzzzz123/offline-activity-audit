@@ -4,10 +4,10 @@
   "title": "Personnel incentive extracted evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "scenario", "settlement", "transfers"],
+  "required": ["schema_version", "scenario", "settlement", "transfers", "extraction_notes"],
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "scenario": {"const": "personnel_incentive"},
+    "schema_version": {"type": "string", "const": "1.0"},
+    "scenario": {"type": "string", "const": "personnel_incentive"},
     "settlement": {
       "type": "object",
       "additionalProperties": false,
@@ -19,6 +19,9 @@
         "claimed_amount",
         "declared_total_quantity",
         "declared_total_reward",
+        "seal_visible",
+        "signed_date",
+        "notes",
         "lines"
       ],
       "properties": {
@@ -44,7 +47,8 @@
               "quantity",
               "unit_reward",
               "reward_amount",
-              "sales_match"
+              "sales_match",
+              "notes"
             ],
             "properties": {
               "line_no": {"type": "integer", "minimum": 1},
@@ -55,12 +59,12 @@
               "sales_match": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["barcode", "basis", "confidence"],
+                "required": ["barcode", "excel_product_name", "basis", "confidence"],
                 "properties": {
                   "barcode": {"type": ["string", "null"]},
                   "excel_product_name": {"type": ["string", "null"]},
                   "basis": {"type": "string", "minLength": 1},
-                  "confidence": {"enum": ["high", "medium", "low", "ambiguous"]}
+                  "confidence": {"type": "string", "enum": ["high", "medium", "low", "ambiguous"]}
                 }
               },
               "notes": {"type": "array", "items": {"type": "string"}}
@@ -80,8 +84,12 @@
           "occurrence_count",
           "identity_visible",
           "event_date_visible",
+          "store_name",
+          "recipient_name",
+          "transfer_date",
           "source_files",
-          "dedup_basis"
+          "dedup_basis",
+          "notes"
         ],
         "properties": {
           "transfer_id": {"type": "string", "minLength": 1},

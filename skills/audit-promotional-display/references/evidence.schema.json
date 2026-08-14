@@ -4,10 +4,10 @@
   "title": "Promotional display extracted evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "scenario", "contract", "photo_reviews"],
+  "required": ["schema_version", "scenario", "contract", "photo_reviews", "extraction_notes"],
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "scenario": {"const": "promotional_display"},
+    "schema_version": {"type": "string", "const": "1.0"},
+    "scenario": {"type": "string", "const": "promotional_display"},
     "contract": {
       "type": "object",
       "additionalProperties": false,
@@ -19,7 +19,9 @@
         "display_standard",
         "fee_per_store",
         "claimed_amount",
-        "stores"
+        "seal_visible",
+        "stores",
+        "notes"
       ],
       "properties": {
         "source_file": {"type": "string", "minLength": 1},
@@ -36,7 +38,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["line_no", "store_name"],
+            "required": ["line_no", "store_name", "address"],
             "properties": {
               "line_no": {"type": "integer", "minimum": 1},
               "store_name": {"type": "string", "minLength": 1},
@@ -62,6 +64,7 @@
           "store_match",
           "display_match",
           "duplicate_check",
+          "mapping_basis",
           "risk_notes",
           "supplement_advice"
         ],
@@ -74,10 +77,10 @@
           },
           "visible_date": {"type": ["string", "null"], "format": "date"},
           "visible_location": {"type": ["string", "null"]},
-          "period_match": {"enum": ["match", "mismatch", "unverifiable"]},
-          "store_match": {"enum": ["exact", "compatible", "mismatch", "filename_only"]},
-          "display_match": {"enum": ["pass", "fail", "uncertain"]},
-          "duplicate_check": {"enum": ["none", "exact", "possible", "unverifiable"]},
+          "period_match": {"type": "string", "enum": ["match", "mismatch", "unverifiable"]},
+          "store_match": {"type": "string", "enum": ["exact", "compatible", "mismatch", "filename_only"]},
+          "display_match": {"type": "string", "enum": ["pass", "fail", "uncertain"]},
+          "duplicate_check": {"type": "string", "enum": ["none", "exact", "possible", "unverifiable"]},
           "mapping_basis": {"type": ["string", "null"]},
           "risk_notes": {"type": "array", "items": {"type": "string"}},
           "supplement_advice": {"type": "array", "items": {"type": "string"}}
