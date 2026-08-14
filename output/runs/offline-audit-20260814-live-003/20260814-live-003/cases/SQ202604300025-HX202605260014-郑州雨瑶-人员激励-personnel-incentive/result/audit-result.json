@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-08-14T08:57:31+00:00",
+  "generated_at": "2026-08-14T10:12:52+00:00",
   "scenario": "personnel_incentive",
   "case_id": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
   "case_name": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励",
@@ -3313,6 +3313,63 @@
       ]
     }
   ],
+  "image_inventory": {
+    "directory": null,
+    "file_count": 3,
+    "files": [
+      {
+        "file_name": "郑州雨瑶5.1-5.20人员激励活动结算单.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\personnel_incentive\\郑州雨瑶5.1-5.20人员激励活动结算单.jpg",
+        "size": 645182,
+        "width": 1920,
+        "height": 1080,
+        "sha256": "898a8061a91af8d681ccdb650b43a07a42b96272407ba249dd64dc53b4bbc4e6",
+        "dhash": "84a9a99f93a6aeba",
+        "phash": "d5f1828fc49e9332",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "雨瑶人员激励红包图片.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\personnel_incentive\\雨瑶人员激励红包图片.jpg",
+        "size": 194094,
+        "width": 1280,
+        "height": 2774,
+        "sha256": "8aeda7f356dcf9123086cb55e6e60b4fc2049bfeaf784513dffcffa6f15b2529",
+        "dhash": "c884e470f9f1e969",
+        "phash": "872ef460ead5ea41",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "雨瑶人员激励红包图片2.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\personnel_incentive\\雨瑶人员激励红包图片2.jpg",
+        "size": 192057,
+        "width": 1280,
+        "height": 2774,
+        "sha256": "de4aa8f6d75027e207571fcf365ed5d805a350ff7622b45f29bc7d803db8c8ca",
+        "dhash": "c4c4e470f9f9e949",
+        "phash": "870ef568ea55aa51",
+        "exif_datetime": null,
+        "gps_present": false
+      }
+    ],
+    "exact_duplicate_groups": [],
+    "same_dhash_groups": [],
+    "same_phash_groups": [],
+    "phash_candidate_pairs": [
+      {
+        "files": [
+          "雨瑶人员激励红包图片.jpg",
+          "雨瑶人员激励红包图片2.jpg"
+        ],
+        "distance": 6
+      }
+    ],
+    "cross_activity_reuse_checked": false,
+    "files_with_exif_datetime": 0,
+    "files_with_gps": 0
+  },
   "unmatched_sales_skus": [],
   "exceptions": [
     {
@@ -3368,5 +3425,38 @@
       "impact": "无法独立确认付款发生在活动结算周期内。",
       "suggestion": "补充带交易日期和交易单号的明细。"
     }
-  ]
+  ],
+  "model_usage": {
+    "schema_version": "1.0",
+    "provider": "codex_cli",
+    "model": "default",
+    "model_invocation_count": 1,
+    "successful_invocation_count": 1,
+    "failed_invocation_count": 0,
+    "retry_count": 0,
+    "input_tokens": 1070616,
+    "cached_input_tokens": 973312,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 31944,
+    "reasoning_output_tokens": 16814,
+    "total_tokens": 1102560,
+    "attempts": [
+      {
+        "attempt_no": 1,
+        "status": "success",
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1070616,
+          "cached_input_tokens": 973312,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 31944,
+          "reasoning_output_tokens": 16814,
+          "total_tokens": 1102560
+        }
+      }
+    ],
+    "case_id": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
+    "scenario": "personnel_incentive",
+    "source": "captured_from_completed_run_usage"
+  }
 }

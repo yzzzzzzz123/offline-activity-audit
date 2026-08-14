@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-08-14T09:26:45+00:00",
+  "generated_at": "2026-08-14T10:12:51+00:00",
   "scenario": "promotional_display",
   "case_id": "SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display",
   "case_name": "SQ202603300076-HX202606040013-核销资料-诚成26年4月【堆头20家】",
@@ -609,6 +609,7 @@
         "height": 1706,
         "sha256": "2bc5b681403c0d0e05ba6394449fd73b18e211370dbdfc3b1e3166678fb33aad",
         "dhash": "d00713d3935a4615",
+        "phash": "bc40623f5dbacec0",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -620,6 +621,7 @@
         "height": 1706,
         "sha256": "f12dd735b31b0e3be209767b443a5dde76af047139821839e1c380befa2f17ba",
         "dhash": "6f67e7f77db14996",
+        "phash": "db04a4716159b5bd",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -631,6 +633,7 @@
         "height": 1706,
         "sha256": "1d4f8b92c71131ea2dbe09e06cff7496a82afca0ba4d7fced7ab272948670884",
         "dhash": "2b295955d4c6f43d",
+        "phash": "8ad1fd2beb28f404",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -642,6 +645,7 @@
         "height": 4496,
         "sha256": "7cf34a44ba05a348179771b0c36be20c19f6a0a76fb0c72fc6742c1070011f87",
         "dhash": "93939994d070786d",
+        "phash": "df42b870745ec23c",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -653,6 +657,7 @@
         "height": 4032,
         "sha256": "817e1b01120475a5f72ab39bce2334a3f0c5d2d7c66d02b0d02e648e70bca0e9",
         "dhash": "92b254949870783c",
+        "phash": "854b6c27e570735c",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -664,6 +669,7 @@
         "height": 3003,
         "sha256": "bea6157436ef7f0a45babca793b9fc67e06ac2beacd1b9eae36c44097b0e3888",
         "dhash": "f031717971facaca",
+        "phash": "8ef4e07ec22cd664",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -675,6 +681,7 @@
         "height": 1706,
         "sha256": "0589b66788746499b68c9813b97ef042c2d1a239cd70be63056d57f4a9587fe5",
         "dhash": "5959455c59571389",
+        "phash": "aecc9d1341633373",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -686,6 +693,7 @@
         "height": 1706,
         "sha256": "9845f5c8c808e139ae93bf4a163372cf5e54e7aeb39a8dfbfa1d0aa47e5dfca8",
         "dhash": "8186e2f0f070e4ee",
+        "phash": "d142a7f456b03e2b",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -697,6 +705,7 @@
         "height": 1706,
         "sha256": "f00f97dc46a52568db5b292f7edb26bedfbc0d6f786e746acea6a56940a7c500",
         "dhash": "cf892d6f5927b134",
+        "phash": "eb89b563d205b296",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -708,6 +717,7 @@
         "height": 1920,
         "sha256": "c6a9ac8b3b620adf996334ec432e725c45b4e302c481354caa4959a97c6f1ef1",
         "dhash": "0c32f4f0389eecaa",
+        "phash": "c0357e5c8cec3574",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -719,6 +729,7 @@
         "height": 1706,
         "sha256": "61f0c8113bfbfafd9cc02a2ae69881cb8cc456e911c32c78ba618ab3467153fe",
         "dhash": "a3eb23bb1f3b61e7",
+        "phash": "ff181159c160e0ff",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -730,6 +741,7 @@
         "height": 1706,
         "sha256": "a83b7852588f47ff9fc8c43791eab025aa930eb7efa97d4da13cd54024be754c",
         "dhash": "c38712d6c6f8b683",
+        "phash": "944b3b3cb4a64e65",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -741,6 +753,7 @@
         "height": 3759,
         "sha256": "12b86e89b2996c4ee22ce55cfa65249237f10c2651963f0a74d6748f6fbdf29f",
         "dhash": "e6fcd3fadbd3d3f6",
+        "phash": "d45ed0c3d0cf9847",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -752,6 +765,7 @@
         "height": 1600,
         "sha256": "a2bc6e9f7833a6b2dace149843649c6c2a6b5988e04def5a9bc64d4b2b8740fc",
         "dhash": "dcebad3db48cd0b3",
+        "phash": "d58198ddeb4063e3",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -763,6 +777,7 @@
         "height": 1706,
         "sha256": "334f7fe95b8f70a59cf89c0e2b65a47ba1a19c70d8b1695a51ecd59bdce07463",
         "dhash": "d66f8ba5303236b6",
+        "phash": "d909f0b55d483c73",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -774,6 +789,7 @@
         "height": 800,
         "sha256": "df7c36d02303fc3b8df13e63888d0dcfed56860ca91d2a86501f67168d32c3ff",
         "dhash": "98fe676761d2e2c1",
+        "phash": "d21e05732f4ee5c4",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -785,6 +801,7 @@
         "height": 1440,
         "sha256": "61e7f18669fe68e0686638d9bf53e6e488e8ce9ccb78192cdb6647915337dad0",
         "dhash": "222b277549a9aded",
+        "phash": "bb17807f857c84c9",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -796,6 +813,7 @@
         "height": 1920,
         "sha256": "5443f87d47fe6646e5da357f0e53a41c8934f58255619fe749eae9b7ad9596a0",
         "dhash": "13636953d3f07070",
+        "phash": "dfc1434a3552174f",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -807,6 +825,7 @@
         "height": 1440,
         "sha256": "80ff9c92a5eb1b780e9b0002a5d99c5239d71f592406992133c1e49e77e5834f",
         "dhash": "c6866ee6fef8e8e9",
+        "phash": "d04ea67a36654e71",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -818,6 +837,7 @@
         "height": 800,
         "sha256": "a397af48c29cc108f54a66ac21d7aec414e79f20838ee3bb2e4851619d1f9e0a",
         "dhash": "1a232703a29cf0b4",
+        "phash": "8d45457f6421a5bd",
         "exif_datetime": null,
         "gps_present": false
       },
@@ -829,12 +849,16 @@
         "height": 1706,
         "sha256": "37a3bb4647855bff6147f370f02897142fb739c3b1f015546c9701327ca79c87",
         "dhash": "163bb9fb5aecf8d4",
+        "phash": "c413a95f3c3c3173",
         "exif_datetime": null,
         "gps_present": false
       }
     ],
     "exact_duplicate_groups": [],
     "same_dhash_groups": [],
+    "same_phash_groups": [],
+    "phash_candidate_pairs": [],
+    "cross_activity_reuse_checked": false,
     "files_with_exif_datetime": 0,
     "files_with_gps": 0
   },
@@ -1430,5 +1454,38 @@
       "suggestion": "补交被引用主数据或将外链转为可追溯静态值。",
       "source": "H10,H11,H16,H17,H21,H22,H27,H30,H31,H33,H34,H9,L11,L13,L14,L15,L16,L17,L2,L20"
     }
-  ]
+  ],
+  "model_usage": {
+    "schema_version": "1.0",
+    "provider": "codex_cli",
+    "model": "default",
+    "model_invocation_count": 1,
+    "successful_invocation_count": 1,
+    "failed_invocation_count": 0,
+    "retry_count": 0,
+    "input_tokens": 3102566,
+    "cached_input_tokens": 2838400,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 37643,
+    "reasoning_output_tokens": 15886,
+    "total_tokens": 3140209,
+    "attempts": [
+      {
+        "attempt_no": 1,
+        "status": "success",
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 3102566,
+          "cached_input_tokens": 2838400,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 37643,
+          "reasoning_output_tokens": 15886,
+          "total_tokens": 3140209
+        }
+      }
+    ],
+    "case_id": "SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display",
+    "scenario": "promotional_display",
+    "source": "captured_from_completed_run_usage"
+  }
 }
