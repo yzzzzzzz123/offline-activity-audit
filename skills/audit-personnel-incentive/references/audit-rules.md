@@ -3,7 +3,7 @@
 ## Identity and mapping
 
 - Prefer barcode equality. If the settlement has no barcode, require a unique full-product mapping and record the selected barcode.
-- Product-family words alone are insufficient when multiple sales SKUs share that family.
+- Product-family words alone are insufficient when multiple sales SKUs share that family. A missing barcode may be completed at medium confidence only when the normalized settlement product core is contained in the Excel product name, the settlement quantity exactly equals the deterministic Excel SKU aggregate, and that barcode is unique across all remaining unmapped settlement lines and Excel SKUs. Record that the source settlement did not print the barcode.
 - One settlement line maps to one barcode, and one barcode maps to at most one settlement line.
 - Preserve the settlement line order even when the Excel SKU order differs.
 

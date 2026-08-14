@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import re
 from collections import defaultdict
 from datetime import date
@@ -36,6 +37,88 @@ def _period_matches(period_values: list[str], start_text: str, end_text: str) ->
             if candidate == [start.month, start.day, end.month, end.day]:
                 return True
     return False
+
+
+def _complete_residual_sales_matches(
+    lines: list[dict[str, Any]],
+    sales_skus: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Complete cautious model mappings with an auditable one-to-one rule.
+
+    Settlement images sometimes use an internal alias such as ``SP-4`` while the
+    sales workbook only carries the consumer-facing product name and barcode.
+    A missing barcode is filled only when all three controls agree:
+
+    * the remaining settlement product core is contained in the Excel name;
+    * the settlement quantity equals the deterministic Excel SKU aggregate; and
+    * the candidate barcode is unique across all unresolved settlement lines.
+
+    The completed mapping remains medium-confidence because the source settlement
+    still does not print the barcode.  This lets the report perform the requested
+    line-by-line quantity comparison without hiding the identity limitation.
+    """
+
+    completed = deepcopy(lines)
+    sku_by_barcode = {str(item["barcode"]): item for item in sales_skus}
+    already_used = {
+        str((line.get("sales_match") or {}).get("barcode"))
+        for line in completed
+        if (line.get("sales_match") or {}).get("barcode")
+        and str((line.get("sales_match") or {}).get("barcode")) in sku_by_barcode
+    }
+    proposals: list[tuple[dict[str, Any], dict[str, Any], str]] = []
+    candidate_frequency: dict[str, int] = defaultdict(int)
+
+    for line in completed:
+        match = line.setdefault("sales_match", {})
+        if str(match.get("barcode") or "").strip():
+            continue
+        normalized_name = normalize_text(line.get("product_name"))
+        product_core = re.sub(r"^sp\d+", "", normalized_name)
+        if len(product_core) < 4 or product_core in {"牙膏", "商品", "产品"}:
+            continue
+        settlement_quantity = decimal_value(
+            line.get("quantity"), label=f"settlement line {line.get('line_no')} quantity"
+        )
+        candidates = [
+            sku
+            for barcode, sku in sku_by_barcode.items()
+            if barcode not in already_used
+            and product_core in normalize_text(sku.get("product_name"))
+            and decimal_value(sku.get("quantity"), label=f"Excel SKU {barcode} quantity")
+            == settlement_quantity
+        ]
+        if len(candidates) != 1:
+            continue
+        candidate = candidates[0]
+        barcode = str(candidate["barcode"])
+        candidate_frequency[barcode] += 1
+        proposals.append((line, candidate, product_core))
+
+    for line, candidate, product_core in proposals:
+        barcode = str(candidate["barcode"])
+        if candidate_frequency[barcode] != 1:
+            continue
+        match = line["sales_match"]
+        quantity = candidate["quantity"]
+        match.update(
+            {
+                "barcode": barcode,
+                "excel_product_name": candidate["product_name"],
+                "confidence": "medium",
+                "basis": (
+                    f"确定性补全：去除结算别名后商品核心词“{product_core}”包含于销售Excel商品名；"
+                    f"结算数量与该条码Excel逐行汇总数量均为{quantity}；且在剩余结算行与剩余销售SKU中"
+                    "满足一行一条码唯一约束。结算单未印条码，因此身份置信度保留为中等。"
+                ),
+            }
+        )
+        line.setdefault("notes", []).append(
+            f"系统按商品核心词、数量相等和剩余一对一唯一性补全条码{barcode}；原始结算单未印条码。"
+        )
+        already_used.add(barcode)
+
+    return completed
 
 
 def _line_result(
@@ -327,6 +410,7 @@ def audit_personnel_case(
     settlement = evidence["settlement"]
     lines = sorted(settlement["lines"], key=lambda item: int(item["line_no"]))
     unique_by(lines, "line_no", "settlement line number")
+    lines = _complete_residual_sales_matches(lines, sales["skus"])
     sku_map = {item["barcode"]: item for item in sales["skus"]}
     exceptions: list[dict[str, Any]] = []
     used_barcodes: set[str] = set()
