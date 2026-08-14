@@ -594,18 +594,21 @@ def export_output(
     if destination.exists() or destination.is_symlink():
         raise WorktreeError(f"Export target already exists: {destination}")
     export_root.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source, destination)
-    files: list[dict[str, Any]] = []
-    for path in sorted(destination.rglob("*"), key=lambda value: str(value).lower()):
-        if not path.is_file():
-            continue
-        files.append(
-            {
-                "path": path.relative_to(destination).as_posix(),
-                "bytes": path.stat().st_size,
-                "sha256": sha256_file(path),
-            }
+    workbooks = sorted(source.glob("*.xlsx"), key=lambda value: value.name.casefold())
+    if len(workbooks) != 1:
+        raise WorktreeError(
+            f"External delivery requires exactly one top-level Excel workbook; found {len(workbooks)}"
         )
+    destination.mkdir(parents=True)
+    exported_workbook = destination / workbooks[0].name
+    shutil.copy2(workbooks[0], exported_workbook)
+    files = [
+        {
+            "path": exported_workbook.name,
+            "bytes": exported_workbook.stat().st_size,
+            "sha256": sha256_file(exported_workbook),
+        }
+    ]
     receipt = {
         "schema_version": "1.0",
         "action": "output_exported",
@@ -617,5 +620,4 @@ def export_output(
         "file_count": len(files),
         "files": files,
     }
-    write_json(destination / "export-receipt.json", receipt)
     return receipt

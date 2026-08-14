@@ -20,10 +20,11 @@ Build an auditable chain from raw sales rows to settlement lines, payment eviden
    - Compare the recalculated amount with the settlement reward amount.
    - Retain the exact Excel source-row numbers and per-store quantities.
 6. Reconcile the totals only after all individual lines pass or are explicitly marked as exceptions.
-7. Deduplicate mirrored sender/receiver views of the same transfer. Keep the visible occurrence count and deduplication basis. Do not infer a store identity from amount alone.
+7. Calculate SHA-256 and pHash for the settlement/transfer images, then deduplicate mirrored sender/receiver views of the same transfer by visible business evidence. Keep the visible occurrence count and deduplication basis; a pHash near-match is only a review lead. Do not infer a store identity from amount alone.
 8. Compare the multiset of store-level expected reward amounts with deduplicated transfers. If recipient/store identity or transfer date is not visible, report an identity limitation even when the amount multiset matches.
 9. Compare the evidence-supported amount, settlement line total, transfer total, and actual claimed amount. Explain every difference, including underclaims and rounding/manual adjustments.
 10. Return evidence JSON that conforms to [evidence.schema.json](references/evidence.schema.json). Then run `scripts/run_audit.py` through the project orchestrator to produce a result validated against `contracts/audit-result.schema.json`.
+11. Return to the parent Skill for the complete 1.4.1 analysis. For personnel materials, distinguish the proven SKU/quantity/payment facts from unverified authenticity controls; missing EXIF/GPS, digital signatures, budget, invoice, contract, recipient identity, or transfer date must be shown explicitly rather than inferred from an amount match.
 
 ## Fail-closed rules
 
@@ -33,6 +34,7 @@ Build an auditable chain from raw sales rows to settlement lines, payment eviden
 - Treat screenshot bubbles with the same amount as separate transfers unless the evidence supports pairing them as mirrored views.
 - Treat amount-only transfer-to-store matching as identity-unverified.
 - Preserve source values and distinguish extracted facts from calculated conclusions.
+- Do not describe SHA-256, amount agreement, or screenshot deduplication as proof that a source file was never altered or that a transfer recipient/date is authentic.
 
 ## Output requirements
 

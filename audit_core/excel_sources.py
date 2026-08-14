@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+from math import cos, pi
 from collections import defaultdict
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 from openpyxl import load_workbook
@@ -249,20 +251,60 @@ def _difference_hash(path: Path) -> str:
     return f"{value:016x}"
 
 
-def image_inventory(directory: str | Path) -> dict[str, Any]:
-    root = Path(directory).resolve()
-    if not root.is_dir():
-        raise AuditError(f"Photo directory does not exist: {root}")
-    paths = sorted(
-        [item for item in root.iterdir() if item.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}],
-        key=lambda item: item.name.lower(),
+def _perceptual_hash(path: Path) -> str:
+    size = 32
+    low = 8
+    with Image.open(path) as image:
+        gray = image.convert("L").resize((size, size), Image.Resampling.LANCZOS)
+        pixels = list(gray.get_flattened_data())
+    cosine = [
+        [cos((2 * position + 1) * frequency * pi / (2 * size)) for position in range(size)]
+        for frequency in range(low)
+    ]
+    row_transform = [[0.0 for _ in range(low)] for _ in range(size)]
+    for row in range(size):
+        offset = row * size
+        for horizontal_frequency in range(low):
+            row_transform[row][horizontal_frequency] = sum(
+                pixels[offset + column] * cosine[horizontal_frequency][column]
+                for column in range(size)
+            )
+    coefficients: list[float] = []
+    for vertical_frequency in range(low):
+        for horizontal_frequency in range(low):
+            coefficients.append(
+                sum(
+                    row_transform[row][horizontal_frequency]
+                    * cosine[vertical_frequency][row]
+                    for row in range(size)
+                )
+            )
+    threshold = median(coefficients[1:])
+    value = 0
+    for coefficient in coefficients:
+        value = (value << 1) | int(coefficient > threshold)
+    return f"{value:016x}"
+
+
+def _hamming_distance(left: str, right: str) -> int:
+    return (int(left, 16) ^ int(right, 16)).bit_count()
+
+
+def image_file_inventory(paths: list[str | Path], *, directory: str | Path | None = None) -> dict[str, Any]:
+    resolved_paths = sorted(
+        {Path(item).resolve() for item in paths},
+        key=lambda item: item.name.casefold(),
     )
     files: list[dict[str, Any]] = []
     sha_groups: dict[str, list[str]] = defaultdict(list)
     dhash_groups: dict[str, list[str]] = defaultdict(list)
-    for path in paths:
+    phash_groups: dict[str, list[str]] = defaultdict(list)
+    for path in resolved_paths:
+        if not path.is_file():
+            raise AuditError(f"Image file does not exist: {path}")
         sha = sha256_file(path)
         dhash = _difference_hash(path)
+        phash = _perceptual_hash(path)
         exif_datetime = None
         gps_present = False
         try:
@@ -286,21 +328,49 @@ def image_inventory(directory: str | Path) -> dict[str, Any]:
                 "height": height,
                 "sha256": sha,
                 "dhash": dhash,
+                "phash": phash,
                 "exif_datetime": exif_datetime,
                 "gps_present": gps_present,
             }
         )
         sha_groups[sha].append(path.name)
         dhash_groups[dhash].append(path.name)
+        phash_groups[phash].append(path.name)
+    phash_candidate_pairs: list[dict[str, Any]] = []
+    for index, left in enumerate(files):
+        for right in files[index + 1 :]:
+            distance = _hamming_distance(str(left["phash"]), str(right["phash"]))
+            if distance <= 8:
+                phash_candidate_pairs.append(
+                    {
+                        "files": [left["file_name"], right["file_name"]],
+                        "distance": distance,
+                    }
+                )
     return {
-        "directory": str(root),
+        "directory": str(Path(directory).resolve()) if directory is not None else None,
         "file_count": len(files),
         "files": files,
         "exact_duplicate_groups": [group for group in sha_groups.values() if len(group) > 1],
         "same_dhash_groups": [group for group in dhash_groups.values() if len(group) > 1],
+        "same_phash_groups": [group for group in phash_groups.values() if len(group) > 1],
+        "phash_candidate_pairs": phash_candidate_pairs,
+        "cross_activity_reuse_checked": False,
         "files_with_exif_datetime": sum(bool(item["exif_datetime"]) for item in files),
         "files_with_gps": sum(bool(item["gps_present"]) for item in files),
     }
+
+
+def image_inventory(directory: str | Path) -> dict[str, Any]:
+    root = Path(directory).resolve()
+    if not root.is_dir():
+        raise AuditError(f"Photo directory does not exist: {root}")
+    paths = [
+        item
+        for item in root.iterdir()
+        if item.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+    ]
+    return image_file_inventory(paths, directory=root)
 
 
 def pdf_inventory(path: str | Path) -> dict[str, Any]:

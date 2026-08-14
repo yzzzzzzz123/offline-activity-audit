@@ -58,6 +58,22 @@ def audit_display_case(
     review_rows = evidence["photo_reviews"]
     store_map = unique_by(contract_stores, "line_no", "contract store line number")
     review_map = unique_by(review_rows, "store_line_no", "photo review store line number")
+    review_lines_by_file: dict[str, set[int]] = {}
+    for review in review_rows:
+        line_no = int(review["store_line_no"])
+        for value in review.get("photo_files") or []:
+            review_lines_by_file.setdefault(Path(value).name, set()).add(line_no)
+    exact_duplicate_names = {
+        name for group in photos["exact_duplicate_groups"] for name in group
+    }
+    possible_cross_store_names: set[str] = set()
+    cross_store_candidate_pairs: list[dict[str, Any]] = []
+    for pair in photos.get("phash_candidate_pairs") or []:
+        names = [str(value) for value in pair.get("files") or []]
+        bound_lines = set().union(*(review_lines_by_file.get(name, set()) for name in names))
+        if len(bound_lines) > 1:
+            possible_cross_store_names.update(names)
+            cross_store_candidate_pairs.append(pair)
     exceptions: list[dict[str, Any]] = []
     fee = money(contract["fee_per_store"], label="fee per store")
     claimed = money(contract["claimed_amount"], label="claimed amount")
@@ -114,7 +130,13 @@ def audit_display_case(
         period_pass = review.get("period_match") == "match" and date_inside
         store_pass = review.get("store_match") in PASS_STORE_MATCHES
         display_pass = review.get("display_match") == "pass"
-        duplicate_pass = review.get("duplicate_check") == "none"
+        bound_names = {Path(value).name for value in photo_files}
+        duplicate_check = review.get("duplicate_check")
+        if bound_names & exact_duplicate_names:
+            duplicate_check = "exact"
+        elif bound_names & possible_cross_store_names:
+            duplicate_check = "possible"
+        duplicate_pass = duplicate_check == "none"
         file_pass = bool(photo_files) and not missing_files
         passed = all([file_pass, period_pass, store_pass, display_pass, duplicate_pass])
         status = "pass" if passed else "supplement"
@@ -124,6 +146,12 @@ def audit_display_case(
         if missing_files:
             risk_notes.append("结构化核验引用了不存在的照片文件：" + "、".join(missing_files))
             supplement.append("补齐缺失原始照片文件")
+        if duplicate_check == "exact":
+            risk_notes.append("确定存在SHA-256完全重复照片。")
+            supplement.append("说明重复文件用途，并提供对应门店的独立原始照片。")
+        elif duplicate_check == "possible":
+            risk_notes.append("pHash发现跨门店近似重复候选，需人工查看原图。")
+            supplement.append("核对近似照片是否跨门店复用，并提供独立原始照片或拍摄证明。")
         store_results.append(
             {
                 "store_line_no": line_no,
@@ -135,7 +163,7 @@ def audit_display_case(
                 "period_match": review.get("period_match"),
                 "store_match": review.get("store_match"),
                 "display_match": review.get("display_match"),
-                "duplicate_check": review.get("duplicate_check"),
+                "duplicate_check": duplicate_check,
                 "mapping_basis": review.get("mapping_basis"),
                 "status": status,
                 "supported_amount": json_number(supported),
@@ -199,6 +227,17 @@ def audit_display_case(
                 "可能存在重复核销或跨门店复用。",
                 "核对重复照片对应的门店与原始文件。",
                 source=str(photos["exact_duplicate_groups"]),
+            )
+        )
+    if cross_store_candidate_pairs:
+        exceptions.append(
+            exception(
+                "high",
+                "POSSIBLE_CROSS_STORE_PHOTO_REUSE",
+                f"pHash发现{len(cross_store_candidate_pairs)}组跨门店近似重复候选。",
+                "可能存在同一现场照片跨门店复用。",
+                "人工并排核对候选原图；无法排除复用时补充独立原始照片。",
+                source=str(cross_store_candidate_pairs),
             )
         )
     if photos["files_with_exif_datetime"] == 0 or photos["files_with_gps"] == 0:
