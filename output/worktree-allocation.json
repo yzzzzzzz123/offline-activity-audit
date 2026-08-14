@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "action": "worktree_allocated",
+  "requested_by": "trusted_supervisor",
+  "run_id": "20260814-first-live",
+  "branch": "run/offline-audit/20260814-first-live",
+  "path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-first-live",
+  "snapshot_commit": "a206d1f54fbe8b876711f65cbed64970a6e0d142",
+  "snapshot_tree": "8fc4e4e783985c58f1c45bdfd51c09c97bc50ed1",
+  "preflight_sha256": "f9b56e6d056af0c5054fd86c079ed41152756449bcfaab4bc92bfc5aa785d6ed",
+  "main_workspace_state_sha256": "e9deadcf2957f79cba7aa5eee9e93841920136eadf09cdad14e5cc1fff5fc85e"
+}
