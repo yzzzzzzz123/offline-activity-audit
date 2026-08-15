@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "action": "allocate_worktree",
+  "required_actor": "trusted_supervisor",
+  "run_id": "20260814-live-003",
+  "branch": "run/offline-audit/20260814-live-003",
+  "worktree": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-live-003",
+  "main_workspace": {
+    "head": "deb6a04497f40d45f3dd208796c1b3e3ec08c600",
+    "branch": "main",
+    "index_tree": "3f91809a6a454ca4e670459c82a5bd67a7d1bd06",
+    "snapshot_tree": "f1bd86ecd44d122a92aece039832b8fc6afd0f19",
+    "status_sha256": "0ea536f981d52e441eefc59dfc5ba69a6123e95f4da85fb88081da7b0e495ec6",
+    "dirty": true,
+    "untracked_gate": {
+      "status": "passed",
+      "untracked_count": 4,
+      "sensitive_count": 0,
+      "symlink_count": 0,
+      "oversized_count": 0
+    },
+    "state_sha256": "df013f6b8ebfbd8e43da9d65c1d6969a23ea1b4636d9c3178748479d74c5bc71"
+  },
+  "gates": {
+    "repository": "passed",
+    "identity_available": "passed",
+    "untracked_input_safety": "passed",
+    "isolated_index_snapshot": "passed"
+  },
+  "preflight_sha256": "b53080f9067ff123d4ded6b3e992c73f5b8f2e5d90ef282fd0d597d9fcad03c2"
+}

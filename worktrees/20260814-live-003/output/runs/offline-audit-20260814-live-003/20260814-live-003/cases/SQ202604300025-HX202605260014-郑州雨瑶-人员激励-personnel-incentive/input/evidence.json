@@ -1,0 +1,345 @@
+{
+  "schema_version": "1.0",
+  "scenario": "personnel_incentive",
+  "settlement": {
+    "source_file": "郑州雨瑶5.1-5.20人员激励活动结算单.jpg",
+    "customer_name": "郑州雨瑶化妆品有限公司",
+    "activity_start": "2026-05-01",
+    "activity_end": "2026-05-20",
+    "claimed_amount": 7350,
+    "declared_total_quantity": 2451,
+    "declared_total_reward": 7353,
+    "seal_visible": true,
+    "signed_date": "2026-05-23",
+    "notes": [
+      "The visible table contains 10 product rows; line_no values preserve their top-to-bottom order because the photographed sheet has no printed line identifiers.",
+      "The table total visibly shows quantity 2451, unit reward 3, and reward amount 7353. The separate 实际核销金额 field visibly shows 7350. These are extracted printed values, not recomputed values.",
+      "A red circular company seal is visible and overlaps part of the customer/date area; the printed customer name and date remain legible.",
+      "The narrative and table show a CNY 3 per box/set incentive but print no barcode crosswalk."
+    ],
+    "lines": [
+      {
+        "line_no": 1,
+        "product_name": "羟基磷灰石修复牙膏",
+        "quantity": 238,
+        "unit_reward": 3,
+        "reward_amount": 714,
+        "sales_match": {
+          "barcode": "6970356166832",
+          "excel_product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+          "basis": "The settlement prints no barcode. Selected the unique workbook SKU containing the distinctive 羟基磷灰石 toothpaste identity; the settlement adds 修复 and omits size/flavor. The barcode aggregate quantity of 238 corroborates the selection.",
+          "confidence": "medium"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 5, 17, 29, 41, 53, 65, and 77 is 238.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 5|5.1-5.20|云朵饰品|6970356166832|参半羟基磷灰石牙膏100g满陇桂雨味|22|24.9; 17|5.1-5.20|红梅名妆|6970356166832|参半羟基磷灰石牙膏100g满陇桂雨味|48|24.9; 29|5.1-5.20|丽源名妆|6970356166832|参半羟基磷灰石牙膏100g满陇桂雨味|27|24.9; 41|5.1-5.20|米菲精品|6970356166832|参半羟基磷灰石牙膏100g满陇桂雨味|28|24.9; 53|5.1-5.20|桐贝美妆|6970356166832|参半羟基磷灰石牙膏100g满陇桂雨味|48|24.9; 65|5.1-5.20|时尚密码|6970356166832|参半羟基磷灰石牙膏100g满陇桂雨味|37|24.9; 77|5.1-5.20|大物集美|6970356166832|参半羟基磷灰石牙膏100g满陇桂雨味|28|24.9."
+        ]
+      },
+      {
+        "line_no": 2,
+        "product_name": "沸石净齿牙膏",
+        "quantity": 275,
+        "unit_reward": 3,
+        "reward_amount": 825,
+        "sales_match": {
+          "barcode": "6970356162391",
+          "excel_product_name": "参半沸石净齿牙膏140g清新苍兰",
+          "basis": "The settlement prints no barcode. This is the unique workbook SKU with the exact distinctive core identity 沸石净齿牙膏; only the workbook includes the size/flavor suffix.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 6, 18, 30, 42, 54, 66, and 78 is 275.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 6|5.1-5.20|云朵饰品|6970356162391|参半沸石净齿牙膏140g清新苍兰|48|29.9; 18|5.1-5.20|红梅名妆|6970356162391|参半沸石净齿牙膏140g清新苍兰|28|29.9; 30|5.1-5.20|丽源名妆|6970356162391|参半沸石净齿牙膏140g清新苍兰|33|29.9; 42|5.1-5.20|米菲精品|6970356162391|参半沸石净齿牙膏140g清新苍兰|32|29.9; 54|5.1-5.20|桐贝美妆|6970356162391|参半沸石净齿牙膏140g清新苍兰|48|29.9; 66|5.1-5.20|时尚密码|6970356162391|参半沸石净齿牙膏140g清新苍兰|49|29.9; 78|5.1-5.20|大物集美|6970356162391|参半沸石净齿牙膏140g清新苍兰|37|29.9."
+        ]
+      },
+      {
+        "line_no": 3,
+        "product_name": "沸石美白牙膏",
+        "quantity": 284,
+        "unit_reward": 3,
+        "reward_amount": 852,
+        "sales_match": {
+          "barcode": "6970356162810",
+          "excel_product_name": "参半沸石美白牙膏140g海角雏菊",
+          "basis": "The settlement prints no barcode. This is the unique workbook SKU with the exact distinctive core identity 沸石美白牙膏; only the workbook includes the size/flavor suffix.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 7, 19, 31, 43, 55, 67, and 79 is 284.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 7|5.1-5.20|云朵饰品|6970356162810|参半沸石美白牙膏140g海角雏菊|60|29.9; 19|5.1-5.20|红梅名妆|6970356162810|参半沸石美白牙膏140g海角雏菊|36|29.9; 31|5.1-5.20|丽源名妆|6970356162810|参半沸石美白牙膏140g海角雏菊|36|29.9; 43|5.1-5.20|米菲精品|6970356162810|参半沸石美白牙膏140g海角雏菊|28|29.9; 55|5.1-5.20|桐贝美妆|6970356162810|参半沸石美白牙膏140g海角雏菊|47|29.9; 67|5.1-5.20|时尚密码|6970356162810|参半沸石美白牙膏140g海角雏菊|33|29.9; 79|5.1-5.20|大物集美|6970356162810|参半沸石美白牙膏140g海角雏菊|44|29.9."
+        ]
+      },
+      {
+        "line_no": 4,
+        "product_name": "1+2臻白套盒",
+        "quantity": 226,
+        "unit_reward": 3,
+        "reward_amount": 678,
+        "sales_match": {
+          "barcode": "6970356164388",
+          "excel_product_name": "参半臻白牙膏1+2特享装",
+          "basis": "The settlement prints no barcode. This is the unique SKU sharing the 1+2 and 臻白 bundle identity; the settlement calls it 套盒 while the workbook calls it 特享装.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 2, 14, 26, 38, 50, 62, and 74 is 226.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 2|5.1-5.20|云朵饰品|6970356164388|参半臻白牙膏1+2特享装|44|29.9; 14|5.1-5.20|红梅名妆|6970356164388|参半臻白牙膏1+2特享装|42|29.9; 26|5.1-5.20|丽源名妆|6970356164388|参半臻白牙膏1+2特享装|18|29.9; 38|5.1-5.20|米菲精品|6970356164388|参半臻白牙膏1+2特享装|44|29.9; 50|5.1-5.20|桐贝美妆|6970356164388|参半臻白牙膏1+2特享装|36|29.9; 62|5.1-5.20|时尚密码|6970356164388|参半臻白牙膏1+2特享装|24|29.9; 74|5.1-5.20|大物集美|6970356164388|参半臻白牙膏1+2特享装|18|29.9."
+        ]
+      },
+      {
+        "line_no": 5,
+        "product_name": "光白酵素1+1超值装牙膏",
+        "quantity": 225,
+        "unit_reward": 3,
+        "reward_amount": 675,
+        "sales_match": {
+          "barcode": "6970356164395",
+          "excel_product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+          "basis": "The settlement prints no barcode. This is the unique SKU sharing the 1+1, 光白酵素, and 超值装 identity; the workbook adds a leading 极 and component sizes. The barcode aggregate quantity of 225 corroborates the selection.",
+          "confidence": "medium"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 8, 20, 32, 44, 56, 68, and 80 is 225.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 8|5.1-5.20|云朵饰品|6970356164395|参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)|28|19.9; 20|5.1-5.20|红梅名妆|6970356164395|参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)|42|19.9; 32|5.1-5.20|丽源名妆|6970356164395|参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)|46|19.9; 44|5.1-5.20|米菲精品|6970356164395|参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)|24|19.9; 56|5.1-5.20|桐贝美妆|6970356164395|参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)|25|19.9; 68|5.1-5.20|时尚密码|6970356164395|参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)|36|19.9; 80|5.1-5.20|大物集美|6970356164395|参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)|24|19.9."
+        ]
+      },
+      {
+        "line_no": 6,
+        "product_name": "可益白牙膏葡萄知梨牙膏",
+        "quantity": 252,
+        "unit_reward": 3,
+        "reward_amount": 756,
+        "sales_match": {
+          "barcode": "6970356169338",
+          "excel_product_name": "参半可益白牙膏葡萄知梨120g",
+          "basis": "The settlement prints no barcode. This is the unique workbook SKU sharing both 可益白 and the distinctive 葡萄知梨 variant; the settlement repeats 牙膏 and omits size.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 10, 22, 34, 46, 58, 70, and 82 is 252.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 10|5.1-5.20|云朵饰品|6970356169338|参半可益白牙膏葡萄知梨120g|18|29.9; 22|5.1-5.20|红梅名妆|6970356169338|参半可益白牙膏葡萄知梨120g|36|29.9; 34|5.1-5.20|丽源名妆|6970356169338|参半可益白牙膏葡萄知梨120g|36|29.9; 46|5.1-5.20|米菲精品|6970356169338|参半可益白牙膏葡萄知梨120g|48|29.9; 58|5.1-5.20|桐贝美妆|6970356169338|参半可益白牙膏葡萄知梨120g|36|29.9; 70|5.1-5.20|时尚密码|6970356169338|参半可益白牙膏葡萄知梨120g|36|29.9; 82|5.1-5.20|大物集美|6970356169338|参半可益白牙膏葡萄知梨120g|42|29.9."
+        ]
+      },
+      {
+        "line_no": 7,
+        "product_name": "可益清牙膏葡见茶爽牙膏",
+        "quantity": 239,
+        "unit_reward": 3,
+        "reward_amount": 717,
+        "sales_match": {
+          "barcode": "6970356169321",
+          "excel_product_name": "参半可益清牙膏葡见茶爽120g",
+          "basis": "The settlement prints no barcode. This is the unique workbook SKU sharing both 可益清 and the distinctive 葡见茶爽 variant; the settlement repeats 牙膏 and omits size.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 11, 23, 35, 47, 59, 71, and 83 is 239.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 11|5.1-5.20|云朵饰品|6970356169321|参半可益清牙膏葡见茶爽120g|24|29.9; 23|5.1-5.20|红梅名妆|6970356169321|参半可益清牙膏葡见茶爽120g|37|29.9; 35|5.1-5.20|丽源名妆|6970356169321|参半可益清牙膏葡见茶爽120g|28|29.9; 47|5.1-5.20|米菲精品|6970356169321|参半可益清牙膏葡见茶爽120g|48|29.9; 59|5.1-5.20|桐贝美妆|6970356169321|参半可益清牙膏葡见茶爽120g|29|29.9; 71|5.1-5.20|时尚密码|6970356169321|参半可益清牙膏葡见茶爽120g|44|29.9; 83|5.1-5.20|大物集美|6970356169321|参半可益清牙膏葡见茶爽120g|29|29.9."
+        ]
+      },
+      {
+        "line_no": 8,
+        "product_name": "专研清新美白牙膏",
+        "quantity": 278,
+        "unit_reward": 3,
+        "reward_amount": 834,
+        "sales_match": {
+          "barcode": "6970356162636",
+          "excel_product_name": "参半专研清新美白牙膏100g",
+          "basis": "The settlement prints no barcode. This is the unique workbook SKU with the exact distinctive core identity 专研清新美白牙膏; brand and size are omitted on the settlement.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 9, 21, 33, 45, 57, 69, and 81 is 278.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 9|5.1-5.20|云朵饰品|6970356162636|参半专研清新美白牙膏100g|18|29.9; 21|5.1-5.20|红梅名妆|6970356162636|参半专研清新美白牙膏100g|36|29.9; 33|5.1-5.20|丽源名妆|6970356162636|参半专研清新美白牙膏100g|48|29.9; 45|5.1-5.20|米菲精品|6970356162636|参半专研清新美白牙膏100g|26|29.9; 57|5.1-5.20|桐贝美妆|6970356162636|参半专研清新美白牙膏100g|60|29.9; 69|5.1-5.20|时尚密码|6970356162636|参半专研清新美白牙膏100g|54|29.9; 81|5.1-5.20|大物集美|6970356162636|参半专研清新美白牙膏100g|36|29.9."
+        ]
+      },
+      {
+        "line_no": 9,
+        "product_name": "SP-4美白牙膏",
+        "quantity": 190,
+        "unit_reward": 3,
+        "reward_amount": 570,
+        "sales_match": {
+          "barcode": "6970356164289",
+          "excel_product_name": "参半美白牙膏120g香域茉莉味",
+          "basis": "The settlement prints no barcode, and the workbook does not print the SP-4 alias. Selected the only otherwise-unmapped plain 美白牙膏 SKU after enforcing the one-line/one-barcode constraint; its aggregate quantity is 190. Other workbook names also contain 美白, so this mapping is medium rather than high.",
+          "confidence": "medium"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 4, 16, 28, 40, 52, 64, and 76 is 190.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 4|5.1-5.20|云朵饰品|6970356164289|参半美白牙膏120g香域茉莉味|36|29.9; 16|5.1-5.20|红梅名妆|6970356164289|参半美白牙膏120g香域茉莉味|24|29.9; 28|5.1-5.20|丽源名妆|6970356164289|参半美白牙膏120g香域茉莉味|24|29.9; 40|5.1-5.20|米菲精品|6970356164289|参半美白牙膏120g香域茉莉味|24|29.9; 52|5.1-5.20|桐贝美妆|6970356164289|参半美白牙膏120g香域茉莉味|18|29.9; 64|5.1-5.20|时尚密码|6970356164289|参半美白牙膏120g香域茉莉味|28|29.9; 76|5.1-5.20|大物集美|6970356164289|参半美白牙膏120g香域茉莉味|36|29.9."
+        ]
+      },
+      {
+        "line_no": 10,
+        "product_name": "SP-4清新牙膏",
+        "quantity": 244,
+        "unit_reward": 3,
+        "reward_amount": 732,
+        "sales_match": {
+          "barcode": "6970356164296",
+          "excel_product_name": "参半清新牙膏120g动感薄荷",
+          "basis": "The settlement prints no barcode, and the workbook does not print the SP-4 alias. Selected the only otherwise-unmapped plain 清新牙膏 SKU after enforcing the one-line/one-barcode constraint; its aggregate quantity is 244. Other workbook names also contain 清新, so this mapping is medium rather than high.",
+          "confidence": "medium"
+        },
+        "notes": [
+          "Sales source 雨瑶人员激励参半销售数据2.xlsx, Sheet1: deterministic quantity aggregate across Excel rows 3, 15, 27, 39, 51, 63, and 75 is 244.",
+          "Excel detail rows, formatted as row|activity period|store|barcode|product name|quantity|unit price: 3|5.1-5.20|云朵饰品|6970356164296|参半清新牙膏120g动感薄荷|47|29.9; 15|5.1-5.20|红梅名妆|6970356164296|参半清新牙膏120g动感薄荷|23|29.9; 27|5.1-5.20|丽源名妆|6970356164296|参半清新牙膏120g动感薄荷|48|29.9; 39|5.1-5.20|米菲精品|6970356164296|参半清新牙膏120g动感薄荷|36|29.9; 51|5.1-5.20|桐贝美妆|6970356164296|参半清新牙膏120g动感薄荷|18|29.9; 63|5.1-5.20|时尚密码|6970356164296|参半清新牙膏120g动感薄荷|24|29.9; 75|5.1-5.20|大物集美|6970356164296|参半清新牙膏120g动感薄荷|48|29.9."
+        ]
+      }
+    ]
+  },
+  "transfers": [
+    {
+      "transfer_id": "transfer-001",
+      "amount": 1035,
+      "occurrence_count": 2,
+      "identity_visible": false,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": null,
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片.jpg"
+      ],
+      "dedup_basis": "Within the screenshot, ¥1035.00 appears once in a right-side transfer card marked 已被接收 and once in a left-side card marked 已收款. The amount is unique within this image, so these are retained as two mirrored visible occurrences of one transfer.",
+      "notes": [
+        "The chat title is 业务团队; no individual recipient or store name is visible.",
+        "A 星期四 17:17 separator, a 10:45 chat-time marker, and device time 10:46 are visible, but no calendar date is visible.",
+        "No store assignment is made from the amount."
+      ]
+    },
+    {
+      "transfer_id": "transfer-002",
+      "amount": 1056,
+      "occurrence_count": 2,
+      "identity_visible": false,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": null,
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片.jpg"
+      ],
+      "dedup_basis": "Within the screenshot, ¥1056.00 appears once in a right-side transfer card marked 已被接收 and once in a left-side card marked 已收款. The amount is unique within this image, so these are retained as two mirrored visible occurrences of one transfer.",
+      "notes": [
+        "The chat title is 业务团队; no individual recipient or store name is visible.",
+        "No calendar date is visible.",
+        "No store assignment is made from the amount."
+      ]
+    },
+    {
+      "transfer_id": "transfer-003",
+      "amount": 1032,
+      "occurrence_count": 2,
+      "identity_visible": false,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": null,
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片.jpg"
+      ],
+      "dedup_basis": "Within the screenshot, ¥1032.00 appears once in a right-side transfer card marked 已被接收 and once in a left-side card marked 已收款. The amount is unique within this image, so these are retained as two mirrored visible occurrences of one transfer.",
+      "notes": [
+        "The chat title is 业务团队; no individual recipient or store name is visible.",
+        "No calendar date is visible.",
+        "No store assignment is made from the amount."
+      ]
+    },
+    {
+      "transfer_id": "transfer-004",
+      "amount": 1014,
+      "occurrence_count": 2,
+      "identity_visible": true,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": "闫志文",
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片2.jpg"
+      ],
+      "dedup_basis": "Within the screenshot, ¥1014.00 appears once in a right-side transfer card marked 已被接收 and once in a left-side card marked 已收款; they are count-paired as two mirrored visible occurrences of one transfer.",
+      "notes": [
+        "The chat header visibly shows 同事 市场部 闫志文; recipient_name records the visible contact name, but no evidence links that person to an Excel store.",
+        "No transaction or chat date is visible; device time 10:54 is not treated as an event date.",
+        "No store assignment is made from the amount."
+      ]
+    },
+    {
+      "transfer_id": "transfer-005",
+      "amount": 1095,
+      "occurrence_count": 2,
+      "identity_visible": true,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": "闫志文",
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片2.jpg"
+      ],
+      "dedup_basis": "The screenshot contains two right-side ¥1095.00 cards and two left-side ¥1095.00 views. Count-preserving sender/receiver pairing yields two distinct ¥1095.00 transfers. This record is one of those transfers with two visible occurrences; the individual same-amount pair assignment is not distinguishable.",
+      "notes": [
+        "The chat header visibly shows 同事 市场部 闫志文; recipient_name records the visible contact name, but no evidence links that person to an Excel store.",
+        "One left-side ¥1095.00 card is fully visible with 已收款; the lower left-side ¥1095.00 occurrence is partly obscured by the input area, although its amount and receiver-side card are visible.",
+        "No transaction date is visible.",
+        "No store assignment is made from the amount."
+      ]
+    },
+    {
+      "transfer_id": "transfer-006",
+      "amount": 1095,
+      "occurrence_count": 2,
+      "identity_visible": true,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": "闫志文",
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片2.jpg"
+      ],
+      "dedup_basis": "The screenshot contains two right-side ¥1095.00 cards and two left-side ¥1095.00 views. Count-preserving sender/receiver pairing yields two distinct ¥1095.00 transfers. This record is the second of those transfers with two visible occurrences; the individual same-amount pair assignment is not distinguishable.",
+      "notes": [
+        "The chat header visibly shows 同事 市场部 闫志文; recipient_name records the visible contact name, but no evidence links that person to an Excel store.",
+        "One left-side ¥1095.00 card is fully visible with 已收款; the lower left-side ¥1095.00 occurrence is partly obscured by the input area, although its amount and receiver-side card are visible.",
+        "No transaction date is visible.",
+        "No store assignment is made from the amount."
+      ]
+    },
+    {
+      "transfer_id": "transfer-007",
+      "amount": 1026,
+      "occurrence_count": 2,
+      "identity_visible": true,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": "闫志文",
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片2.jpg"
+      ],
+      "dedup_basis": "Within the screenshot, ¥1026.00 appears once in a right-side transfer card marked 已被接收 and once in a left-side card marked 已收款; they are count-paired as two mirrored visible occurrences of one transfer.",
+      "notes": [
+        "The chat header visibly shows 同事 市场部 闫志文; recipient_name records the visible contact name, but no evidence links that person to an Excel store.",
+        "No transaction date is visible.",
+        "No store assignment is made from the amount."
+      ]
+    }
+  ],
+  "extraction_notes": [
+    "Inspected every file listed by case.json: 雨瑶人员激励参半销售数据2.xlsx, 郑州雨瑶5.1-5.20人员激励活动结算单.jpg, 雨瑶人员激励红包图片.jpg, and 雨瑶人员激励红包图片2.jpg.",
+    "Source root: C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\personnel_incentive.",
+    "Run identity: 20260814-live-003; case ID: SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive; snapshot commit: 95dba41af38bcaf2fc3542b7a250d1f6fd9f32a2.",
+    "The workbook contains one visible worksheet, Sheet1, with 70 valid detail rows. Rows 12, 24, 36, 48, 60, 72, and 84 are subtotal rows; blank separator rows were ignored. Every valid detail row is preserved in the applicable settlement-line notes.",
+    "All 70 workbook detail rows contain the activity-period text 5.1-5.20. The year 2026 comes from the photographed settlement, not from the workbook cells.",
+    "Each settlement line is mapped to one unique barcode, and no barcode is reused. Medium-confidence mappings explicitly retain their wording or alias limitations; no barcode was selected by amount alone.",
+    "Transfer screenshots show amounts and receipt statuses but no transfer-detail pages or transaction identifiers. Store names are not visible, so no transfer is assigned to a store from amount alone. Calendar dates are not visible.",
+    "The two ¥1095.00 transfers are preserved as two distinct count-based records rather than collapsed into one; each has two visible sender/receiver occurrences, with individual same-amount pairing ambiguous.",
+    "This object contains extracted and source-row-traceable evidence only; no final supported amount, suggested approval amount, or audit conclusion was calculated.",
+    "SHA-256 郑州雨瑶5.1-5.20人员激励活动结算单.jpg: 898a8061a91af8d681ccdb650b43a07a42b96272407ba249dd64dc53b4bbc4e6.",
+    "SHA-256 雨瑶人员激励参半销售数据2.xlsx: 5e1ac08e1c79fd721e2f0dcf60e09763452943309163bb2079e424b77837b5a6.",
+    "SHA-256 雨瑶人员激励红包图片.jpg: 8aeda7f356dcf9123086cb55e6e60b4fc2049bfeaf784513dffcffa6f15b2529.",
+    "SHA-256 雨瑶人员激励红包图片2.jpg: de4aa8f6d75027e207571fcf365ed5d805a350ff7622b45f29bc7d803db8c8ca."
+  ]
+}

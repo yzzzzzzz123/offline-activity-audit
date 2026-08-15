@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "run_id": "20260814-live-003",
+  "mode": "batch",
+  "status": "completed",
+  "started_at": "2026-08-14T08:42:22+00:00",
+  "snapshot_commit": "95dba41af38bcaf2fc3542b7a250d1f6fd9f32a2",
+  "completed_at": "2026-08-14T09:18:00+00:00",
+  "delivery": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-live-003\\output\\delivery.json",
+  "corrected_at": "2026-08-14T09:26:45+00:00",
+  "correction_receipt": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-live-003\\output\\correction-receipt.json",
+  "model_usage_summary": {
+    "model_invocation_count": 2,
+    "successful_invocation_count": 2,
+    "failed_invocation_count": 0,
+    "retry_count": 0,
+    "input_tokens": 4173182,
+    "cached_input_tokens": 3811712,
+    "output_tokens": 69587,
+    "reasoning_output_tokens": 32700,
+    "total_tokens": 4242769
+  },
+  "updated_at": "2026-08-14T10:12:53+00:00"
+}

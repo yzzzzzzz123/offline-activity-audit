@@ -1,0 +1,4 @@
+interface:
+  display_name: "Offline Audit Orchestrator"
+  short_description: "Route two ZIP submissions to the correct audit skill"
+  default_prompt: "Use $orchestrate-offline-audit to process the two ZIP files in input and route each case to the correct child skill."

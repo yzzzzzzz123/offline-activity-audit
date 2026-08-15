@@ -1,0 +1,1491 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-14T10:12:51+00:00",
+  "scenario": "promotional_display",
+  "case_id": "SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display",
+  "case_name": "SQ202603300076-HX202606040013-核销资料-诚成26年4月【堆头20家】",
+  "summary": {
+    "conclusion": "partial_pass",
+    "claimed_amount": 20000,
+    "contract_store_count": 20,
+    "fee_per_store": 1000,
+    "expected_contract_amount": 20000,
+    "passed_store_count": 14,
+    "supplement_store_count": 6,
+    "supported_amount": 14000,
+    "suggested_approved_amount": 14000,
+    "temporarily_held_amount": 6000,
+    "photo_count": 21,
+    "sales_sku_count": 36,
+    "sales_quantity": 13744,
+    "sales_retail_amount": 352032,
+    "high_exception_count": 6,
+    "medium_exception_count": 3
+  },
+  "contract": {
+    "source_file": "核销资料-诚成26年4月【堆头20家】/诚成4月堆头陈列-经销商签订促销合同.pdf",
+    "customer_name": "东莞市诚成行供应链管理有限公司",
+    "activity_start": "2026-04-01",
+    "activity_end": "2026-04-30",
+    "display_standard": "20家店*1平方米堆头或4纵陈列*1000元/家",
+    "fee_per_store": 1000,
+    "claimed_amount": 20000,
+    "seal_visible": true,
+    "stores": [
+      {
+        "line_no": 1,
+        "store_name": "66广场家家欣",
+        "address": null
+      },
+      {
+        "line_no": 2,
+        "store_name": "百佳华松岗店",
+        "address": null
+      },
+      {
+        "line_no": 3,
+        "store_name": "百佳华百货（公明店）",
+        "address": null
+      },
+      {
+        "line_no": 4,
+        "store_name": "百佳华佳漾汇（新桥店）",
+        "address": null
+      },
+      {
+        "line_no": 5,
+        "store_name": "华都超市（东坑大道北店）",
+        "address": null
+      },
+      {
+        "line_no": 6,
+        "store_name": "金大福（东浦金正和总店）",
+        "address": null
+      },
+      {
+        "line_no": 7,
+        "store_name": "古原千禧（U·ONE 优城店）",
+        "address": null
+      },
+      {
+        "line_no": 8,
+        "store_name": "虎门家家欣",
+        "address": null
+      },
+      {
+        "line_no": 9,
+        "store_name": "花都宜多",
+        "address": null
+      },
+      {
+        "line_no": 10,
+        "store_name": "挺拇指生活超市（横沥店）",
+        "address": null
+      },
+      {
+        "line_no": 11,
+        "store_name": "人人购物广场荟和二店",
+        "address": null
+      },
+      {
+        "line_no": 12,
+        "store_name": "三乐购物广场（森扬商业广场店）",
+        "address": null
+      },
+      {
+        "line_no": 13,
+        "store_name": "沙井九龙",
+        "address": null
+      },
+      {
+        "line_no": 14,
+        "store_name": "润家连锁超市（美联购物中心店）",
+        "address": null
+      },
+      {
+        "line_no": 15,
+        "store_name": "百佳华（石岩店）",
+        "address": null
+      },
+      {
+        "line_no": 16,
+        "store_name": "田心金正和",
+        "address": null
+      },
+      {
+        "line_no": 17,
+        "store_name": "荟和超市（莹展荟店）",
+        "address": null
+      },
+      {
+        "line_no": 18,
+        "store_name": "三乐购物广场（坦洲店）",
+        "address": null
+      },
+      {
+        "line_no": 19,
+        "store_name": "大康惠福源商业广场",
+        "address": null
+      },
+      {
+        "line_no": 20,
+        "store_name": "好多宝精选超市（龙眼市场店）",
+        "address": null
+      }
+    ],
+    "notes": [
+      "PDF第1页“经销商签订促销合同”列明合同签订方、预算20000元、执行周期2026年4月1日—4月30日、门店清单第1—20行，以及计算规则“20家店*1平方米堆头或4纵陈列*1000元/家”。",
+      "PDF第1页可见“东莞市诚成行供应链管理有限公司”红色印章及落款日期2026年3月30日；seal_visible仅记录肉眼可见，不验证印章真伪。",
+      "PDF第2页“市场费用结算单”致厦门参半商贸有限公司，列明活动期2026年4月1日至4月30日、20个地堆/堆头、1000元/堆头、合计20000元，并可见客户红色印章及日期2026年5月15日。",
+      "PDF第3—4页为该客户2026-04-01至2026-04-30商品销售明细扫描件。合同门店清单未提供独立地址列，因此stores.address均为null。"
+    ]
+  },
+  "contract_pdf": {
+    "source_file": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\诚成4月堆头陈列-经销商签订促销合同.pdf",
+    "page_count": 4,
+    "sha256": "15ac05c881cda510b1d24743a2ae7ef7e19e5e78946b4407e6e57200cbb6a75a",
+    "title": ""
+  },
+  "sales": {
+    "source_file": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\2026年4月销售明细20260509164207765.xlsx",
+    "sheet": "Sheet1",
+    "header_row": 1,
+    "sku_count": 36,
+    "total_quantity": 13744,
+    "retail_amount": 352032,
+    "customers": [
+      "东莞市诚成行供应链管理有限公司"
+    ],
+    "period_values": [
+      "2026-04-01 至 2026-04-30"
+    ],
+    "external_formula_cells": [
+      "H10",
+      "H11",
+      "H16",
+      "H17",
+      "H21",
+      "H22",
+      "H27",
+      "H30",
+      "H31",
+      "H33",
+      "H34",
+      "H9",
+      "L11",
+      "L13",
+      "L14",
+      "L15",
+      "L16",
+      "L17",
+      "L2",
+      "L20",
+      "L21",
+      "L23",
+      "L24",
+      "L25",
+      "L27",
+      "L29",
+      "L30",
+      "L31",
+      "L32",
+      "L33",
+      "L35",
+      "L36",
+      "L37",
+      "L5",
+      "L6",
+      "L7"
+    ],
+    "records": [
+      {
+        "excel_row": 2,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260012",
+        "barcode": "6970356167334",
+        "product_name": "参半oralshark-SP1高山茉莉味科研白牙膏180g",
+        "quantity": 812,
+        "retail_price": 16.9,
+        "total_amount": 13722.8
+      },
+      {
+        "excel_row": 3,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260011",
+        "barcode": "6970356167341",
+        "product_name": "参半oralshark-SP1玫瑰清茶味净清新牙膏180g",
+        "quantity": 1099,
+        "retail_price": 13.8,
+        "total_amount": 15166.2
+      },
+      {
+        "excel_row": 4,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260009",
+        "barcode": "6970356164241",
+        "product_name": "参半oralshark-SP2凝香茉莉味氨基酸牙膏180g",
+        "quantity": 567,
+        "retail_price": 19.9,
+        "total_amount": 11283.3
+      },
+      {
+        "excel_row": 5,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260007",
+        "barcode": "6970356164203",
+        "product_name": "参半oralshark-SP2十里晚香味益清新牙膏180g",
+        "quantity": 308,
+        "retail_price": 24.9,
+        "total_amount": 7669.2
+      },
+      {
+        "excel_row": 6,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260008",
+        "barcode": "6970356164258",
+        "product_name": "参半oralshark-SP3清水白桃味星璨白牙膏160g",
+        "quantity": 61,
+        "retail_price": 29.9,
+        "total_amount": 1823.9
+      },
+      {
+        "excel_row": 7,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260013",
+        "barcode": "6970356164296",
+        "product_name": "参半oralshark-SP4倍感薄荷味清新牙膏120g",
+        "quantity": 129,
+        "retail_price": 39.9,
+        "total_amount": 5147.1
+      },
+      {
+        "excel_row": 8,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260010",
+        "barcode": "6970356164289",
+        "product_name": "参半oralshark-SP4美白牙膏120g",
+        "quantity": 325,
+        "retail_price": 29.9,
+        "total_amount": 9717.5
+      },
+      {
+        "excel_row": 9,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260031",
+        "barcode": "6970356166979",
+        "product_name": "参半oralshark口气清新护理3+2量贩装160g+160g+100g",
+        "quantity": 3517,
+        "retail_price": 29.9,
+        "total_amount": 105158.3
+      },
+      {
+        "excel_row": 10,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260037",
+        "barcode": "6970356164388",
+        "product_name": "参半oralshark臻白沁香1+2特享装牙膏（小苏打160g+西柚100g+龙井100g）",
+        "quantity": 406,
+        "retail_price": 29.9,
+        "total_amount": 12139.4
+      },
+      {
+        "excel_row": 11,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160008",
+        "barcode": "6970356164159",
+        "product_name": "参半白巧棒牙刷（单支装 ）代言人",
+        "quantity": 128,
+        "retail_price": 16.8,
+        "total_amount": 2150.4
+      },
+      {
+        "excel_row": 12,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260034",
+        "barcode": "6970356168454",
+        "product_name": "参半倍养护牙膏100g",
+        "quantity": 813,
+        "retail_price": 19.9,
+        "total_amount": 16178.7
+      },
+      {
+        "excel_row": 13,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260005",
+        "barcode": "6970356165774",
+        "product_name": "参半草莓优格味儿童乳酸菌牙膏60g",
+        "quantity": 114,
+        "retail_price": 21.9,
+        "total_amount": 2496.6
+      },
+      {
+        "excel_row": 14,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260015",
+        "barcode": "6970356168904",
+        "product_name": "参半多效清新口腔喷雾（劲爽薄荷）20ml",
+        "quantity": 28,
+        "retail_price": 26.0,
+        "total_amount": 728.0
+      },
+      {
+        "excel_row": 15,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260019",
+        "barcode": "6970356165910",
+        "product_name": "参半儿童蜜桃味奥拉氟牙膏60g",
+        "quantity": 98,
+        "retail_price": 29.9,
+        "total_amount": 2930.2
+      },
+      {
+        "excel_row": 16,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160005",
+        "barcode": "6970356166450",
+        "product_name": "参半儿童泡泡魔法棒牙刷双支装",
+        "quantity": 170,
+        "retail_price": 25.9,
+        "total_amount": 4403.0
+      },
+      {
+        "excel_row": 17,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160004",
+        "barcode": "6970356166931",
+        "product_name": "参半儿童宇航员牙刷双支装",
+        "quantity": 145,
+        "retail_price": 19.9,
+        "total_amount": 2885.5
+      },
+      {
+        "excel_row": 18,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260022",
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g",
+        "quantity": 1082,
+        "retail_price": 29.9,
+        "total_amount": 32351.8
+      },
+      {
+        "excel_row": 19,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260023",
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g",
+        "quantity": 1139,
+        "retail_price": 29.9,
+        "total_amount": 34056.1
+      },
+      {
+        "excel_row": 20,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160009",
+        "barcode": "6970356160304",
+        "product_name": "参半光感密柔牙刷 双支装",
+        "quantity": 104,
+        "retail_price": 13.8,
+        "total_amount": 1435.2
+      },
+      {
+        "excel_row": 21,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160007",
+        "barcode": "6970356164500",
+        "product_name": "参半黑巧棒牙刷（单支装 ）代言人",
+        "quantity": 96,
+        "retail_price": 16.8,
+        "total_amount": 1612.8
+      },
+      {
+        "excel_row": 22,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260006",
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 182,
+        "retail_price": 25.8,
+        "total_amount": 4695.6
+      },
+      {
+        "excel_row": 23,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260016",
+        "barcode": "6970356167853",
+        "product_name": "参半可护愈创木香味牙膏160g",
+        "quantity": 169,
+        "retail_price": 29.9,
+        "total_amount": 5053.1
+      },
+      {
+        "excel_row": 24,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260018",
+        "barcode": "6970356167839",
+        "product_name": "参半可清火绒草香味牙膏100g",
+        "quantity": 53,
+        "retail_price": 39.9,
+        "total_amount": 2114.7
+      },
+      {
+        "excel_row": 25,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260046",
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 75,
+        "retail_price": 29.9,
+        "total_amount": 2242.5
+      },
+      {
+        "excel_row": 26,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260035",
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 950,
+        "retail_price": 24.9,
+        "total_amount": 23655.0
+      },
+      {
+        "excel_row": 27,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160003",
+        "barcode": "6970356165095",
+        "product_name": "参半宽头绵云牙刷双支装",
+        "quantity": 262,
+        "retail_price": 19.9,
+        "total_amount": 5213.8
+      },
+      {
+        "excel_row": 28,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260024",
+        "barcode": "6970356162919",
+        "product_name": "参半零度清新牙膏120g",
+        "quantity": 86,
+        "retail_price": 33.9,
+        "total_amount": 2915.4
+      },
+      {
+        "excel_row": 29,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160012",
+        "barcode": "6970356160496",
+        "product_name": "参半梦幻绒感牙刷 双支装",
+        "quantity": 77,
+        "retail_price": 15.8,
+        "total_amount": 1216.6
+      },
+      {
+        "excel_row": 30,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160002",
+        "barcode": "6970356165156",
+        "product_name": "参半绒感净护牙刷双支装",
+        "quantity": 50,
+        "retail_price": 19.9,
+        "total_amount": 995.0
+      },
+      {
+        "excel_row": 31,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160001",
+        "barcode": "6970356166429",
+        "product_name": "参半星星魔法棒牙刷单支装",
+        "quantity": 43,
+        "retail_price": 19.9,
+        "total_amount": 855.7
+      },
+      {
+        "excel_row": 32,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160010",
+        "barcode": "6970356160366",
+        "product_name": "参半旋风净白牙刷 双支装",
+        "quantity": 89,
+        "retail_price": 13.8,
+        "total_amount": 1228.2
+      },
+      {
+        "excel_row": 33,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260002",
+        "barcode": "6970356165453",
+        "product_name": "参半益生菌漱口水-海洋薄荷250ml",
+        "quantity": 23,
+        "retail_price": 19.9,
+        "total_amount": 457.7
+      },
+      {
+        "excel_row": 34,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260001",
+        "barcode": "6970356164548",
+        "product_name": "参半益生菌漱口水-阳光西柚250ml",
+        "quantity": 41,
+        "retail_price": 11.9,
+        "total_amount": 487.9
+      },
+      {
+        "excel_row": 35,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "030160011",
+        "barcode": "6970356161721",
+        "product_name": "参半羽感宽护牙刷 双支装",
+        "quantity": 43,
+        "retail_price": 13.8,
+        "total_amount": 593.4
+      },
+      {
+        "excel_row": 36,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260017",
+        "barcode": "6970356167846",
+        "product_name": "参半植清尤加利香味牙膏180g",
+        "quantity": 149,
+        "retail_price": 32.5,
+        "total_amount": 4842.5
+      },
+      {
+        "excel_row": 37,
+        "customer_name": "东莞市诚成行供应链管理有限公司",
+        "period_text": "2026-04-01 至 2026-04-30",
+        "product_code": "020260025",
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 311,
+        "retail_price": 39.9,
+        "total_amount": 12408.9
+      }
+    ],
+    "store_level_available": false
+  },
+  "photo_inventory": {
+    "directory": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片",
+    "file_count": 21,
+    "files": [
+      {
+        "file_name": "1.厚街汉邦66广场家家欣.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\1.厚街汉邦66广场家家欣.jpg",
+        "size": 491884,
+        "width": 1279,
+        "height": 1706,
+        "sha256": "2bc5b681403c0d0e05ba6394449fd73b18e211370dbdfc3b1e3166678fb33aad",
+        "dhash": "d00713d3935a4615",
+        "phash": "bc40623f5dbacec0",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "10-1挺拇指生活超市(横沥店).jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\10-1挺拇指生活超市(横沥店).jpg",
+        "size": 767287,
+        "width": 1279,
+        "height": 1706,
+        "sha256": "f12dd735b31b0e3be209767b443a5dde76af047139821839e1c380befa2f17ba",
+        "dhash": "6f67e7f77db14996",
+        "phash": "db04a4716159b5bd",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "10-2挺拇指生活超市(横沥店).jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\10-2挺拇指生活超市(横沥店).jpg",
+        "size": 872772,
+        "width": 1279,
+        "height": 1706,
+        "sha256": "1d4f8b92c71131ea2dbe09e06cff7496a82afca0ba4d7fced7ab272948670884",
+        "dhash": "2b295955d4c6f43d",
+        "phash": "8ad1fd2beb28f404",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "11.人人购物荟和超市.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\11.人人购物荟和超市.jpg",
+        "size": 3431541,
+        "width": 4525,
+        "height": 4496,
+        "sha256": "7cf34a44ba05a348179771b0c36be20c19f6a0a76fb0c72fc6742c1070011f87",
+        "dhash": "93939994d070786d",
+        "phash": "df42b870745ec23c",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "12.三乐购物广场(森扬商业广场店).jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\12.三乐购物广场(森扬商业广场店).jpg",
+        "size": 2609173,
+        "width": 3028,
+        "height": 4032,
+        "sha256": "817e1b01120475a5f72ab39bce2334a3f0c5d2d7c66d02b0d02e648e70bca0e9",
+        "dhash": "92b254949870783c",
+        "phash": "854b6c27e570735c",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "13.沙井九龙.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\13.沙井九龙.jpg",
+        "size": 2762473,
+        "width": 4000,
+        "height": 3003,
+        "sha256": "bea6157436ef7f0a45babca793b9fc67e06ac2beacd1b9eae36c44097b0e3888",
+        "dhash": "f031717971facaca",
+        "phash": "8ef4e07ec22cd664",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "14.润家连锁超市(美联购物中心店).jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\14.润家连锁超市(美联购物中心店).jpg",
+        "size": 501429,
+        "width": 1280,
+        "height": 1706,
+        "sha256": "0589b66788746499b68c9813b97ef042c2d1a239cd70be63056d57f4a9587fe5",
+        "dhash": "5959455c59571389",
+        "phash": "aecc9d1341633373",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "15。石岩百佳华.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\15。石岩百佳华.jpg",
+        "size": 501947,
+        "width": 1279,
+        "height": 1706,
+        "sha256": "9845f5c8c808e139ae93bf4a163372cf5e54e7aeb39a8dfbfa1d0aa47e5dfca8",
+        "dhash": "8186e2f0f070e4ee",
+        "phash": "d142a7f456b03e2b",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "16.田心金正和.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\16.田心金正和.jpg",
+        "size": 762202,
+        "width": 1279,
+        "height": 1706,
+        "sha256": "f00f97dc46a52568db5b292f7edb26bedfbc0d6f786e746acea6a56940a7c500",
+        "dhash": "cf892d6f5927b134",
+        "phash": "eb89b563d205b296",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "17·荟和超市(莹展荟店).jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\17·荟和超市(莹展荟店).jpg",
+        "size": 420260,
+        "width": 1080,
+        "height": 1920,
+        "sha256": "c6a9ac8b3b620adf996334ec432e725c45b4e302c481354caa4959a97c6f1ef1",
+        "dhash": "0c32f4f0389eecaa",
+        "phash": "c0357e5c8cec3574",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "18.三乐购物广场(坦洲店).jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\18.三乐购物广场(坦洲店).jpg",
+        "size": 511770,
+        "width": 1281,
+        "height": 1706,
+        "sha256": "61f0c8113bfbfafd9cc02a2ae69881cb8cc456e911c32c78ba618ab3467153fe",
+        "dhash": "a3eb23bb1f3b61e7",
+        "phash": "ff181159c160e0ff",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "19.福源大康惠.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\19.福源大康惠.jpg",
+        "size": 760801,
+        "width": 1279,
+        "height": 1706,
+        "sha256": "a83b7852588f47ff9fc8c43791eab025aa930eb7efa97d4da13cd54024be754c",
+        "dhash": "c38712d6c6f8b683",
+        "phash": "944b3b3cb4a64e65",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "2.松岗百佳华.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\2.松岗百佳华.jpg",
+        "size": 2775745,
+        "width": 3024,
+        "height": 3759,
+        "sha256": "12b86e89b2996c4ee22ce55cfa65249237f10c2651963f0a74d6748f6fbdf29f",
+        "dhash": "e6fcd3fadbd3d3f6",
+        "phash": "d45ed0c3d0cf9847",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "20.好多宝精选超市(龙眼市场店).jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\20.好多宝精选超市(龙眼市场店).jpg",
+        "size": 380438,
+        "width": 1200,
+        "height": 1600,
+        "sha256": "a2bc6e9f7833a6b2dace149843649c6c2a6b5988e04def5a9bc64d4b2b8740fc",
+        "dhash": "dcebad3db48cd0b3",
+        "phash": "d58198ddeb4063e3",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "3.公明百佳华.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\3.公明百佳华.jpg",
+        "size": 676711,
+        "width": 1279,
+        "height": 1706,
+        "sha256": "334f7fe95b8f70a59cf89c0e2b65a47ba1a19c70d8b1695a51ecd59bdce07463",
+        "dhash": "d66f8ba5303236b6",
+        "phash": "d909f0b55d483c73",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "4.新桥百佳华.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\4.新桥百佳华.jpg",
+        "size": 123308,
+        "width": 600,
+        "height": 800,
+        "sha256": "df7c36d02303fc3b8df13e63888d0dcfed56860ca91d2a86501f67168d32c3ff",
+        "dhash": "98fe676761d2e2c1",
+        "phash": "d21e05732f4ee5c4",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "5.华都超市(东坑大道北店).jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\5.华都超市(东坑大道北店).jpg",
+        "size": 439863,
+        "width": 1081,
+        "height": 1440,
+        "sha256": "61e7f18669fe68e0686638d9bf53e6e488e8ce9ccb78192cdb6647915337dad0",
+        "dhash": "222b277549a9aded",
+        "phash": "bb17807f857c84c9",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "6.东浦金正和.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\6.东浦金正和.jpg",
+        "size": 1084548,
+        "width": 1080,
+        "height": 1920,
+        "sha256": "5443f87d47fe6646e5da357f0e53a41c8934f58255619fe749eae9b7ad9596a0",
+        "dhash": "13636953d3f07070",
+        "phash": "dfc1434a3552174f",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "7.宝安优城店.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\7.宝安优城店.jpg",
+        "size": 434133,
+        "width": 1081,
+        "height": 1440,
+        "sha256": "80ff9c92a5eb1b780e9b0002a5d99c5239d71f592406992133c1e49e77e5834f",
+        "dhash": "c6866ee6fef8e8e9",
+        "phash": "d04ea67a36654e71",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "8.虎门赤岗家家欣.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\8.虎门赤岗家家欣.jpg",
+        "size": 129411,
+        "width": 600,
+        "height": 800,
+        "sha256": "a397af48c29cc108f54a66ac21d7aec414e79f20838ee3bb2e4851619d1f9e0a",
+        "dhash": "1a232703a29cf0b4",
+        "phash": "8d45457f6421a5bd",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "9.花都宜多.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\堆头照片\\9.花都宜多.jpg",
+        "size": 830839,
+        "width": 1279,
+        "height": 1706,
+        "sha256": "37a3bb4647855bff6147f370f02897142fb739c3b1f015546c9701327ca79c87",
+        "dhash": "163bb9fb5aecf8d4",
+        "phash": "c413a95f3c3c3173",
+        "exif_datetime": null,
+        "gps_present": false
+      }
+    ],
+    "exact_duplicate_groups": [],
+    "same_dhash_groups": [],
+    "same_phash_groups": [],
+    "phash_candidate_pairs": [],
+    "cross_activity_reuse_checked": false,
+    "files_with_exif_datetime": 0,
+    "files_with_gps": 0
+  },
+  "store_reconciliation": [
+    {
+      "store_line_no": 1,
+      "contract_store_name": "66广场家家欣",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/1.厚街汉邦66广场家家欣.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "广东省东莞市厚街镇汉邦广场",
+      "period_match": "match",
+      "store_match": "mismatch",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第1行是“66广场家家欣”；照片水印仅显示“广东省东莞市厚街镇汉邦广场”，未出现“家家欣”或“66广场”。文件名含完整门店线索，但未作为独立地点证明。",
+      "status": "supplement",
+      "supported_amount": 0,
+      "risk_notes": [
+        "画面显示参半礼盒/牙膏在大型多层岛柜上多列陈列，可见至少4纵陈列特征。",
+        "水印地点与合同门店名称未形成独立一致映射。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=2bc5b681403c0d0e05ba6394449fd73b18e211370dbdfc3b1e3166678fb33aad，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充“66广场家家欣”与“厚街镇汉邦广场”的地址/入驻关系证明，或提供同日带完整门店名称与地点水印的现场照片。"
+      ]
+    },
+    {
+      "store_line_no": 2,
+      "contract_store_name": "百佳华松岗店",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/2.松岗百佳华.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市·百佳华超市(松岗百佳华商场店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第2行和水印均含“百佳华”“松岗”；水印完整名为“百佳华超市(松岗百佳华商场店)”，按名称扩展/缩写兼容。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "参半产品在多层货架上形成多列陈列，可见至少4纵陈列特征。",
+        "合同简称与水印全称并非逐字相同。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=12b86e89b2996c4ee22ce55cfa65249237f10c2651963f0a74d6748f6fbdf29f，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如需严格同店证明，补充“百佳华松岗店”与“百佳华超市(松岗百佳华商场店)”的门店编码或地址映射。"
+      ]
+    },
+    {
+      "store_line_no": 3,
+      "contract_store_name": "百佳华百货（公明店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/3.公明百佳华.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市·百佳华佳漾汇(公明店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第3行和水印均含“百佳华”“公明店”，但合同写“百货”，水印写“佳漾汇”；按可能更名/业态名称变化兼容并保留映射风险。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "多层端架上可见参半礼盒多列陈列，至少4个纵向陈列位可辨。",
+        "“百佳华百货”与“百佳华佳漾汇”的名称变化未附正式说明。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=334f7fe95b8f70a59cf89c0e2b65a47ba1a19c70d8b1695a51ecd59bdce07463，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充公明店更名、门店编码或地址一致性证明。"
+      ]
+    },
+    {
+      "store_line_no": 4,
+      "contract_store_name": "百佳华佳漾汇（新桥店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/4.新桥百佳华.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市宝安区新桥街道·百佳华佳漾汇(新桥店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印完整显示“百佳华佳漾汇(新桥店)”，与合同第4行同名同分店。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "画面可见多层端架及参半礼盒/盒装产品多列陈列，满足至少4纵陈列的可见特征。",
+        "原图仅600×800，细节分辨率有限。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=df7c36d02303fc3b8df13e63888d0dcfed56860ca91d2a86501f67168d32c3ff，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如制度要求原始定位证明，补充含EXIF/GPS的原始未压缩照片。"
+      ]
+    },
+    {
+      "store_line_no": 5,
+      "contract_store_name": "华都超市（东坑大道北店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/5.华都超市(东坑大道北店).jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-02",
+      "visible_location": "东莞市·华都超市(东坑大道北店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印完整显示“华都超市(东坑大道北店)”，与合同第5行同名同分店。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "画面可见参半产品在多层岛柜上成组、多列陈列，至少4纵陈列特征清晰。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=61e7f18669fe68e0686638d9bf53e6e488e8ce9ccb78192cdb6647915337dad0，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如制度要求原始定位证明，补充含EXIF/GPS的原始未压缩照片。"
+      ]
+    },
+    {
+      "store_line_no": 6,
+      "contract_store_name": "金大福（东浦金正和总店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/6.东浦金正和.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": null,
+      "visible_location": null,
+      "period_match": "unverifiable",
+      "store_match": "filename_only",
+      "display_match": "uncertain",
+      "duplicate_check": "none",
+      "mapping_basis": "仅文件名“6.东浦金正和.jpg”对应合同第6行；画面没有可见日期、地点或门店名称，EXIF亦为空。",
+      "status": "supplement",
+      "supported_amount": 0,
+      "risk_notes": [
+        "画面可见参半3+2礼盒及竖盒放在红色促销台上，但单一正面角度无法可靠确认1平方米占地，且4纵陈列计数不够明确。",
+        "缺少任何画面内日期和门店/地点水印。",
+        "JPEG文件EXIF为空，无法从元数据独立验证拍摄日期或地点。",
+        "文件SHA-256=5443f87d47fe6646e5da357f0e53a41c8934f58255619fe749eae9b7ad9596a0，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充活动期内带可见日期、完整门店名称/地点水印的现场全景原图。",
+        "补充能清楚证明1平方米占地或至少4纵陈列的宽角度照片/尺寸标识。"
+      ]
+    },
+    {
+      "store_line_no": 7,
+      "contract_store_name": "古原千禧（U·ONE 优城店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/7.宝安优城店.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-03",
+      "visible_location": "深圳市·古原千禧(优城店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第7行为“古原千禧（U·ONE 优城店）”，水印为“古原千禧(优城店)”；主体门店名和分店名一致，水印省略“U·ONE”。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "多层端架上参半礼盒/盒装产品有多列、多层陈列，可见至少4纵陈列特征。",
+        "水印省略合同中的“U·ONE”。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=80ff9c92a5eb1b780e9b0002a5d99c5239d71f592406992133c1e49e77e5834f，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如需严格名称一致，补充U·ONE优城店与水印“古原千禧(优城店)”的门店编码或地址映射。"
+      ]
+    },
+    {
+      "store_line_no": 8,
+      "contract_store_name": "虎门家家欣",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/8.虎门赤岗家家欣.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·赤岗家家欣商场",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第8行为“虎门家家欣”，水印为“赤岗家家欣商场”；共同门店主体为“家家欣”，区域词“虎门/赤岗”不同，按可能地址层级兼容但无正式映射。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "多层端架上参半礼盒至少形成4个纵向陈列位。",
+        "原图仅600×800，且未提供赤岗与合同“虎门”分店的地址关系。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=a397af48c29cc108f54a66ac21d7aec414e79f20838ee3bb2e4851619d1f9e0a，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充“虎门家家欣”与“赤岗家家欣商场”的地址、门店编码或组织关系证明。"
+      ]
+    },
+    {
+      "store_line_no": 9,
+      "contract_store_name": "花都宜多",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/9.花都宜多.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "广东省广州市花都区炭步镇·炭步宜多百货",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第9行为“花都宜多”；水印显示花都区炭步镇的“炭步宜多百货”，地区与门店主体一致，按分店全称扩展兼容。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "画面为大型多面岛柜，参半牙膏、礼盒等产品多层多列陈列，可见面积/纵列明显超过最低特征。",
+        "合同简称未列“炭步”，未附门店编码。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=37a3bb4647855bff6147f370f02897142fb739c3b1f015546c9701327ca79c87，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充“花都宜多”与“炭步宜多百货”的门店编码或地址映射。"
+      ]
+    },
+    {
+      "store_line_no": 10,
+      "contract_store_name": "挺拇指生活超市（横沥店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/10-1挺拇指生活超市(横沥店).jpg",
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/10-2挺拇指生活超市(横沥店).jpg"
+      ],
+      "photo_count": 2,
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·南铭购物乐园",
+      "period_match": "match",
+      "store_match": "mismatch",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "两张照片水印均为“东莞市·南铭购物乐园”，未显示合同门店“挺拇指生活超市(横沥店)”；文件名仅作归组线索。",
+      "status": "supplement",
+      "supported_amount": 0,
+      "risk_notes": [
+        "10-1为多层端架全景，10-2为另一侧近景；合并观察可见参半产品多层多列陈列，至少4纵陈列特征明确。",
+        "可见地点名称与合同门店名称不同，未提供商场入驻/更名映射。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "10-1挺拇指生活超市(横沥店).jpg SHA-256=f12dd735b31b0e3be209767b443a5dde76af047139821839e1c380befa2f17ba、精确哈希出现次数1；10-2挺拇指生活超市(横沥店).jpg SHA-256=1d4f8b92c71131ea2dbe09e06cff7496a82afca0ba4d7fced7ab272948670884、精确哈希出现次数1；两图内容不同，感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充“挺拇指生活超市(横沥店)”位于或更名自“南铭购物乐园”的正式地址/门店映射，或提供带合同门店名称水印的现场照片。"
+      ]
+    },
+    {
+      "store_line_no": 11,
+      "contract_store_name": "人人购物广场荟和二店",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/11.人人购物荟和超市.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市·荟和超市(人人购物同乐店)",
+      "period_match": "match",
+      "store_match": "mismatch",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第11行为“人人购物广场荟和二店”，水印为“荟和超市(人人购物同乐店)”；“二店”与“同乐店”并不一致，未提供同店/更名证明。",
+      "status": "supplement",
+      "supported_amount": 0,
+      "risk_notes": [
+        "大型多层端架上参半产品有多列多层陈列，至少4纵陈列特征明确。",
+        "水印指向“同乐店”，合同指向“二店”。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=7cf34a44ba05a348179771b0c36be20c19f6a0a76fb0c72fc6742c1070011f87，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充“荟和二店”与“人人购物同乐店”的门店编码、地址或更名证明，或提供合同门店对应照片。"
+      ]
+    },
+    {
+      "store_line_no": 12,
+      "contract_store_name": "三乐购物广场（森扬商业广场店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/12.三乐购物广场(森扬商业广场店).jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·三乐购物广场(森扬商业广场店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印完整显示“三乐购物广场(森扬商业广场店)”，与合同第12行同名同分店。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "参半产品在宽幅多层陈列柜上多列摆放，上方另有堆叠，至少4纵陈列特征明确。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=817e1b01120475a5f72ab39bce2334a3f0c5d2d7c66d02b0d02e648e70bca0e9，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如制度要求原始定位证明，补充含EXIF/GPS的原始未压缩照片。"
+      ]
+    },
+    {
+      "store_line_no": 13,
+      "contract_store_name": "沙井九龙",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/13.沙井九龙.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-29",
+      "visible_location": "深圳市·九龙购物中心(宝安沙井店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第13行为“沙井九龙”，水印为“九龙购物中心(宝安沙井店)”；“九龙”和“沙井”两项关键身份均一致，按简称/全称兼容。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "大型岛柜上参半牙膏多层多列陈列，可见面积及纵列均明显达到合同陈列特征。",
+        "合同为简称，未列完整购物中心名称。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=bea6157436ef7f0a45babca793b9fc67e06ac2beacd1b9eae36c44097b0e3888，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如需严格名称一致，补充“沙井九龙”与“九龙购物中心(宝安沙井店)”的门店编码或地址映射。"
+      ]
+    },
+    {
+      "store_line_no": 14,
+      "contract_store_name": "润家连锁超市（美联购物中心店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/14.润家连锁超市(美联购物中心店).jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市宝安区·深圳紫云快捷宾馆",
+      "period_match": "match",
+      "store_match": "mismatch",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第14行为“润家连锁超市(美联购物中心店)”，水印却显示“深圳紫云快捷宾馆”，未出现合同门店或美联购物中心。",
+      "status": "supplement",
+      "supported_amount": 0,
+      "risk_notes": [
+        "画面中参半礼盒/牙膏在多层货架上形成多列陈列，至少4纵陈列特征明确。",
+        "可见地点指向宾馆，与合同门店名称冲突。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=0589b66788746499b68c9813b97ef042c2d1a239cd70be63056d57f4a9587fe5，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "提供“深圳紫云快捷宾馆”定位与润家连锁超市(美联购物中心店)同址的权威地址证明，或重拍带合同门店地点水印的现场照片。"
+      ]
+    },
+    {
+      "store_line_no": 15,
+      "contract_store_name": "百佳华（石岩店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/15。石岩百佳华.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "广东省深圳市宝安区石岩街道佳华豪苑",
+      "period_match": "match",
+      "store_match": "mismatch",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第15行为“百佳华(石岩店)”，水印仅显示“石岩街道佳华豪苑”，没有百佳华门店名；文件名仅作归组线索。",
+      "status": "supplement",
+      "supported_amount": 0,
+      "risk_notes": [
+        "虽画面略模糊，但多层端架上参半礼盒/盒装产品至少4纵陈列仍可辨。",
+        "可见地点是“佳华豪苑”，未提供其与百佳华石岩店同址的证据。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=9845f5c8c808e139ae93bf4a163372cf5e54e7aeb39a8dfbfa1d0aa47e5dfca8，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充百佳华(石岩店)与“佳华豪苑”的权威地址/入驻关系证明，或提供带完整门店名地点水印的清晰原图。"
+      ]
+    },
+    {
+      "store_line_no": 16,
+      "contract_store_name": "田心金正和",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/16.田心金正和.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·金正和百货(田心文化商业广场店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印显示“金正和百货(田心文化商业广场店)”，与合同第16行“田心金正和”在门店主体和田心分店身份上直接一致。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "大型多面岛柜上参半礼盒、牙膏等多层多列陈列，可见面积/纵列明显达到合同陈列特征。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=f00f97dc46a52568db5b292f7edb26bedfbc0d6f786e746acea6a56940a7c500，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如制度要求原始定位证明，补充含EXIF/GPS的原始未压缩照片。"
+      ]
+    },
+    {
+      "store_line_no": 17,
+      "contract_store_name": "荟和超市（莹展荟店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/17·荟和超市(莹展荟店).jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市·荟和超市(莹展荟店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印完整显示“荟和超市(莹展荟店)”，与合同第17行同名同分店。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "大型多面岛柜上参半盒装产品多层多列陈列，可见面积/纵列明显达到合同陈列特征。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=c6a9ac8b3b620adf996334ec432e725c45b4e302c481354caa4959a97c6f1ef1，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如制度要求原始定位证明，补充含EXIF/GPS的原始未压缩照片。"
+      ]
+    },
+    {
+      "store_line_no": 18,
+      "contract_store_name": "三乐购物广场（坦洲店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/18.三乐购物广场(坦洲店).jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-06",
+      "visible_location": "中山市·三乐购物广场(坦洲店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印完整显示“三乐购物广场(坦洲店)”，与合同第18行同名同分店。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "多层端架上参半礼盒成组陈列，画面下层可见至少4个纵向陈列位。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=61f0c8113bfbfafd9cc02a2ae69881cb8cc456e911c32c78ba618ab3467153fe，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "如制度要求原始定位证明，补充含EXIF/GPS的原始未压缩照片。"
+      ]
+    },
+    {
+      "store_line_no": 19,
+      "contract_store_name": "大康惠福源商业广场",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/19.福源大康惠.jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·福源商业广场",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第19行为“大康惠福源商业广场”，水印为“福源商业广场”；核心地点名一致，但水印省略“大康惠”，按简称兼容。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "大型四面岛柜上参半牙膏/礼盒多层多列陈列，可见面积与纵列明显达到合同陈列特征。",
+        "水印为缩略名称，未附正式门店名称映射。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=a83b7852588f47ff9fc8c43791eab025aa930eb7efa97d4da13cd54024be754c，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充“大康惠福源商业广场”与“福源商业广场”的门店/地址映射。"
+      ]
+    },
+    {
+      "store_line_no": 20,
+      "contract_store_name": "好多宝精选超市（龙眼市场店）",
+      "photo_files": [
+        "核销资料-诚成26年4月【堆头20家】/堆头照片/20.好多宝精选超市(龙眼市场店).jpg"
+      ],
+      "photo_count": 1,
+      "visible_date": "2026-04-02",
+      "visible_location": "龙眼市场(龙眼路)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "合同第20行为“好多宝精选超市(龙眼市场店)”，水印显示“龙眼市场(龙眼路)”；分店地点关键字一致，但水印未显示“好多宝精选超市”品牌，按地点兼容并保留风险。",
+      "status": "pass",
+      "supported_amount": 1000,
+      "risk_notes": [
+        "多层端架上参半盒装产品至少形成4个纵向陈列位。",
+        "水印只证明龙眼市场地点，未直接显示合同门店品牌。",
+        "JPEG文件EXIF为空；日期和地点只来自画面内可见水印，未由EXIF/GPS独立验证。",
+        "文件SHA-256=a2bc6e9f7833a6b2dace149843649c6c2a6b5988e04def5a9bc64d4b2b8740fc，在本案21张照片中精确哈希出现次数为1；感知指纹筛查未见近似重复。"
+      ],
+      "supplement_advice": [
+        "补充好多宝精选超市(龙眼市场店)在“龙眼市场(龙眼路)”的门店编码、地址或入驻证明。"
+      ]
+    }
+  ],
+  "unreferenced_photos": [],
+  "exceptions": [
+    {
+      "severity": "high",
+      "code": "STORE_DISPLAY_EVIDENCE_INCOMPLETE",
+      "message": "合同第1家“66广场家家欣”未通过：门店未匹配。",
+      "impact": "暂不支持该店1000.00元费用。",
+      "suggestion": "补充“66广场家家欣”与“厚街镇汉邦广场”的地址/入驻关系证明，或提供同日带完整门店名称与地点水印的现场照片。",
+      "source": "核销资料-诚成26年4月【堆头20家】/堆头照片/1.厚街汉邦66广场家家欣.jpg"
+    },
+    {
+      "severity": "high",
+      "code": "STORE_DISPLAY_EVIDENCE_INCOMPLETE",
+      "message": "合同第6家“金大福（东浦金正和总店）”未通过：期间未通过、门店未匹配、陈列标准未通过。",
+      "impact": "暂不支持该店1000.00元费用。",
+      "suggestion": "补充活动期内带可见日期、完整门店名称/地点水印的现场全景原图。；补充能清楚证明1平方米占地或至少4纵陈列的宽角度照片/尺寸标识。",
+      "source": "核销资料-诚成26年4月【堆头20家】/堆头照片/6.东浦金正和.jpg"
+    },
+    {
+      "severity": "high",
+      "code": "STORE_DISPLAY_EVIDENCE_INCOMPLETE",
+      "message": "合同第10家“挺拇指生活超市（横沥店）”未通过：门店未匹配。",
+      "impact": "暂不支持该店1000.00元费用。",
+      "suggestion": "补充“挺拇指生活超市(横沥店)”位于或更名自“南铭购物乐园”的正式地址/门店映射，或提供带合同门店名称水印的现场照片。",
+      "source": "核销资料-诚成26年4月【堆头20家】/堆头照片/10-1挺拇指生活超市(横沥店).jpg、核销资料-诚成26年4月【堆头20家】/堆头照片/10-2挺拇指生活超市(横沥店).jpg"
+    },
+    {
+      "severity": "high",
+      "code": "STORE_DISPLAY_EVIDENCE_INCOMPLETE",
+      "message": "合同第11家“人人购物广场荟和二店”未通过：门店未匹配。",
+      "impact": "暂不支持该店1000.00元费用。",
+      "suggestion": "补充“荟和二店”与“人人购物同乐店”的门店编码、地址或更名证明，或提供合同门店对应照片。",
+      "source": "核销资料-诚成26年4月【堆头20家】/堆头照片/11.人人购物荟和超市.jpg"
+    },
+    {
+      "severity": "high",
+      "code": "STORE_DISPLAY_EVIDENCE_INCOMPLETE",
+      "message": "合同第14家“润家连锁超市（美联购物中心店）”未通过：门店未匹配。",
+      "impact": "暂不支持该店1000.00元费用。",
+      "suggestion": "提供“深圳紫云快捷宾馆”定位与润家连锁超市(美联购物中心店)同址的权威地址证明，或重拍带合同门店地点水印的现场照片。",
+      "source": "核销资料-诚成26年4月【堆头20家】/堆头照片/14.润家连锁超市(美联购物中心店).jpg"
+    },
+    {
+      "severity": "high",
+      "code": "STORE_DISPLAY_EVIDENCE_INCOMPLETE",
+      "message": "合同第15家“百佳华（石岩店）”未通过：门店未匹配。",
+      "impact": "暂不支持该店1000.00元费用。",
+      "suggestion": "补充百佳华(石岩店)与“佳华豪苑”的权威地址/入驻关系证明，或提供带完整门店名地点水印的清晰原图。",
+      "source": "核销资料-诚成26年4月【堆头20家】/堆头照片/15。石岩百佳华.jpg"
+    },
+    {
+      "severity": "medium",
+      "code": "PHOTO_ORIGINAL_METADATA_ABSENT",
+      "message": "照片缺少可用的EXIF拍摄时间或GPS，主要依赖画面水印。",
+      "impact": "无法从原始文件元数据独立验证拍摄时空。",
+      "suggestion": "保留原始拍摄文件，或补充平台定位/签到记录。"
+    },
+    {
+      "severity": "medium",
+      "code": "SALES_DATA_NOT_STORE_LEVEL",
+      "message": "销售Excel为经销商汇总，不能拆分到合同中的各门店。",
+      "impact": "销售数据只能证明活动期总体销售，不能独立证明逐店执行。",
+      "suggestion": "如政策要求逐店销售佐证，补交门店级POS或出库明细。",
+      "source": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\sources\\promotional_display\\核销资料-诚成26年4月【堆头20家】\\2026年4月销售明细20260509164207765.xlsx"
+    },
+    {
+      "severity": "medium",
+      "code": "SALES_EXCEL_EXTERNAL_LINKS",
+      "message": "销售Excel有36个公式引用缺失的外部工作簿。",
+      "impact": "部分单位或零售价无法在当前文件内独立重算。",
+      "suggestion": "补交被引用主数据或将外链转为可追溯静态值。",
+      "source": "H10,H11,H16,H17,H21,H22,H27,H30,H31,H33,H34,H9,L11,L13,L14,L15,L16,L17,L2,L20"
+    }
+  ],
+  "model_usage": {
+    "schema_version": "1.0",
+    "provider": "codex_cli",
+    "model": "default",
+    "model_invocation_count": 1,
+    "successful_invocation_count": 1,
+    "failed_invocation_count": 0,
+    "retry_count": 0,
+    "input_tokens": 3102566,
+    "cached_input_tokens": 2838400,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 37643,
+    "reasoning_output_tokens": 15886,
+    "total_tokens": 3140209,
+    "attempts": [
+      {
+        "attempt_no": 1,
+        "status": "success",
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 3102566,
+          "cached_input_tokens": 2838400,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 37643,
+          "reasoning_output_tokens": 15886,
+          "total_tokens": 3140209
+        }
+      }
+    ],
+    "case_id": "SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display",
+    "scenario": "promotional_display",
+    "source": "captured_from_completed_run_usage"
+  }
+}

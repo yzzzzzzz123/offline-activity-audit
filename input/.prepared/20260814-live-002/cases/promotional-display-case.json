@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "case_id": "SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display",
+  "case_name": "SQ202603300076-HX202606040013-核销资料-诚成26年4月【堆头20家】",
+  "scenario": "promotional_display",
+  "case_root": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-002\\sources\\promotional_display",
+  "files": {
+    "contract_pdf": "核销资料-诚成26年4月【堆头20家】/诚成4月堆头陈列-经销商签订促销合同.pdf",
+    "sales_excel": "核销资料-诚成26年4月【堆头20家】/2026年4月销售明细20260509164207765.xlsx",
+    "photo_dir": "核销资料-诚成26年4月【堆头20家】/堆头照片"
+  }
+}

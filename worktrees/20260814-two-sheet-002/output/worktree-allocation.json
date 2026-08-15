@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "action": "worktree_allocated",
+  "requested_by": "trusted_supervisor",
+  "run_id": "20260814-two-sheet-002",
+  "branch": "run/offline-audit/20260814-two-sheet-002",
+  "path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-two-sheet-002",
+  "snapshot_commit": "e49e0fa03f8b07b963ce323a8eda8e34ac903eab",
+  "snapshot_tree": "149f181d4b01ca6d5d0590fdc459a02db1125769",
+  "preflight_sha256": "489f4642ce2ef7decbeb03fc61c13112791558ec0758839dcd349a298b2071de",
+  "main_workspace_state_sha256": "70c963e2ba036d03fb6a8472867a0caeb32e1cf7e9874923716387d2e1da7f47"
+}

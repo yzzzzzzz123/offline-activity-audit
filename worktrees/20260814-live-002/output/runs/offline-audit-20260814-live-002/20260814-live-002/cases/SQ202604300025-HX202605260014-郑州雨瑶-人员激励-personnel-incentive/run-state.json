@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
+  "scenario": "personnel_incentive",
+  "status": "failed",
+  "started_at": "2026-08-14T08:36:34+00:00",
+  "failed_at": "2026-08-14T08:38:32+00:00",
+  "error": "Codex evidence extraction failed with exit 1: Reading prompt from stdin..."
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "offline-audit-20260814-two-sheet-002",
+  "excel_name": "20260814-two-sheet-002-线下活动核销结果.xlsx",
+  "input_manifest": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\input-manifest.json",
+  "cases": [
+    {
+      "case": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\cases\\personnel-incentive-case.json",
+      "evidence": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-two-sheet-001\\output\\runs\\offline-audit-20260814-two-sheet-001\\20260814-two-sheet-001\\cases\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive\\input\\evidence.json",
+      "model_usage_from_result": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-two-sheet-001\\output\\runs\\offline-audit-20260814-two-sheet-001\\20260814-two-sheet-001\\cases\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive\\result\\audit-result.json"
+    },
+    {
+      "case": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\cases\\promotional-display-case.json",
+      "evidence": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-two-sheet-001\\output\\runs\\offline-audit-20260814-two-sheet-001\\20260814-two-sheet-001\\cases\\SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display\\input\\evidence.json",
+      "model_usage_from_result": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\worktrees\\20260814-two-sheet-001\\output\\runs\\offline-audit-20260814-two-sheet-001\\20260814-two-sheet-001\\cases\\SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display\\result\\audit-result.json"
+    }
+  ]
+}

@@ -1,0 +1,3452 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-14T11:14:47+00:00",
+  "scenario": "personnel_incentive",
+  "case_id": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
+  "case_name": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励",
+  "summary": {
+    "conclusion": "partial_pass",
+    "claimed_amount": 7350,
+    "settlement_line_quantity": 2451,
+    "excel_mapped_quantity": 2017,
+    "quantity_difference": -434,
+    "settlement_line_reward": 7353,
+    "calculated_line_reward": 7353,
+    "transfer_total": 7353,
+    "quantity_supported_reward": 6051,
+    "suggested_approved_amount": 6051,
+    "temporarily_held_amount": 1299,
+    "settlement_line_count": 10,
+    "matched_sku_count": 8,
+    "quantity_match_count": 8,
+    "excel_detail_row_count": 70,
+    "store_count": 7,
+    "high_exception_count": 4,
+    "medium_exception_count": 3
+  },
+  "settlement": {
+    "source_file": "郑州雨瑶5.1-5.20人员激励活动结算单.jpg",
+    "customer_name": "郑州雨瑶化妆品有限公司",
+    "activity_start": "2026-05-01",
+    "activity_end": "2026-05-20",
+    "claimed_amount": 7350,
+    "declared_total_quantity": 2451,
+    "declared_total_reward": 7353,
+    "seal_visible": true,
+    "signed_date": "2026-05-23",
+    "notes": [
+      "Visible document title: 市场费用结算单; addressee: 厦门参半商贸有限公司; project: 市场费用（人员激励）.",
+      "The document visibly states 实际核销金额：7350 below a total row showing quantity 2451 and reward 7353.",
+      "A red circular company seal is visible over the customer/date area; visual presence is extracted but is not an authenticity verification.",
+      "The image has no printed settlement line numbers; line_no 1-10 preserves the top-to-bottom order of the ten product rows."
+    ],
+    "lines": [
+      {
+        "line_no": 1,
+        "product_name": "羟基磷灰石修复牙膏",
+        "quantity": 238,
+        "unit_reward": 3,
+        "reward_amount": 714,
+        "sales_match": {
+          "barcode": "6970356166832",
+          "excel_product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+          "basis": "The settlement has no barcode. 羟基磷灰石 is a distinctive term appearing in exactly one workbook SKU; the settlement adds 修复 while the workbook adds brand, size, and flavor. The deterministic Excel quantity for that barcode is 238, corroborating the visible line quantity.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Workbook raw rows for barcode 6970356166832 / 参半羟基磷灰石牙膏100g满陇桂雨味 (period text 5.1-5.20 and sales unit price 24.9 on every row): row 5 云朵饰品 quantity 22; row 17 红梅名妆 quantity 48; row 29 丽源名妆 quantity 27; row 41 米菲精品 quantity 28; row 53 桐贝美妆 quantity 48; row 65 时尚密码 quantity 37; row 77 大物集美 quantity 28. Deterministic total: 238."
+        ]
+      },
+      {
+        "line_no": 2,
+        "product_name": "沸石净齿牙膏",
+        "quantity": 275,
+        "unit_reward": 3,
+        "reward_amount": 825,
+        "sales_match": {
+          "barcode": "6970356162391",
+          "excel_product_name": "参半沸石净齿牙膏140g清新苍兰",
+          "basis": "The settlement has no barcode. The exact distinctive core 沸石净齿牙膏 appears in one workbook SKU; workbook size/flavor text is additional. The deterministic Excel quantity is 275, corroborating the visible line quantity.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Workbook raw rows for barcode 6970356162391 / 参半沸石净齿牙膏140g清新苍兰 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 6 云朵饰品 quantity 48; row 18 红梅名妆 quantity 28; row 30 丽源名妆 quantity 33; row 42 米菲精品 quantity 32; row 54 桐贝美妆 quantity 48; row 66 时尚密码 quantity 49; row 78 大物集美 quantity 37. Deterministic total: 275."
+        ]
+      },
+      {
+        "line_no": 3,
+        "product_name": "沸石美白牙膏",
+        "quantity": 284,
+        "unit_reward": 3,
+        "reward_amount": 852,
+        "sales_match": {
+          "barcode": "6970356162810",
+          "excel_product_name": "参半沸石美白牙膏140g海角雏菊",
+          "basis": "The settlement has no barcode. The exact distinctive core 沸石美白牙膏 appears in one workbook SKU; workbook size/flavor text is additional. The deterministic Excel quantity is 284, corroborating the visible line quantity.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Workbook raw rows for barcode 6970356162810 / 参半沸石美白牙膏140g海角雏菊 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 7 云朵饰品 quantity 60; row 19 红梅名妆 quantity 36; row 31 丽源名妆 quantity 36; row 43 米菲精品 quantity 28; row 55 桐贝美妆 quantity 47; row 67 时尚密码 quantity 33; row 79 大物集美 quantity 44. Deterministic total: 284."
+        ]
+      },
+      {
+        "line_no": 4,
+        "product_name": "1+2臻白套盒",
+        "quantity": 226,
+        "unit_reward": 3,
+        "reward_amount": 678,
+        "sales_match": {
+          "barcode": "6970356164388",
+          "excel_product_name": "参半臻白牙膏1+2特享装",
+          "basis": "The settlement has no barcode. The combined identifiers 1+2 and 臻白 uniquely match the workbook's 1+2特享装 SKU. The deterministic Excel quantity is 226, corroborating the visible line quantity.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Workbook raw rows for barcode 6970356164388 / 参半臻白牙膏1+2特享装 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 2 云朵饰品 quantity 44; row 14 红梅名妆 quantity 42; row 26 丽源名妆 quantity 18; row 38 米菲精品 quantity 44; row 50 桐贝美妆 quantity 36; row 62 时尚密码 quantity 24; row 74 大物集美 quantity 18. Deterministic total: 226."
+        ]
+      },
+      {
+        "line_no": 5,
+        "product_name": "光白酵素1+1超值装牙膏",
+        "quantity": 225,
+        "unit_reward": 3,
+        "reward_amount": 675,
+        "sales_match": {
+          "barcode": "6970356164395",
+          "excel_product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+          "basis": "The settlement has no barcode. The distinctive combined phrase 光白酵素1+1超值装 uniquely corresponds to the workbook's 极光白酵素1+1超值装 SKU. The deterministic Excel quantity is 225, corroborating the visible line quantity.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Workbook raw rows for barcode 6970356164395 / 参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g) (period text 5.1-5.20 and sales unit price 19.9 on every row): row 8 云朵饰品 quantity 28; row 20 红梅名妆 quantity 42; row 32 丽源名妆 quantity 46; row 44 米菲精品 quantity 24; row 56 桐贝美妆 quantity 25; row 68 时尚密码 quantity 36; row 80 大物集美 quantity 24. Deterministic total: 225."
+        ]
+      },
+      {
+        "line_no": 6,
+        "product_name": "可益白牙膏葡萄知梨牙膏",
+        "quantity": 252,
+        "unit_reward": 3,
+        "reward_amount": 756,
+        "sales_match": {
+          "barcode": "6970356169338",
+          "excel_product_name": "参半可益白牙膏葡萄知梨120g",
+          "basis": "The settlement has no barcode. The distinctive identifiers 可益白 and 葡萄知梨 uniquely match one workbook SKU; the repeated 牙膏 in the settlement and the workbook's brand/120g suffix do not create a competing SKU. The deterministic Excel quantity is 252.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Workbook raw rows for barcode 6970356169338 / 参半可益白牙膏葡萄知梨120g (period text 5.1-5.20 and sales unit price 29.9 on every row): row 10 云朵饰品 quantity 18; row 22 红梅名妆 quantity 36; row 34 丽源名妆 quantity 36; row 46 米菲精品 quantity 48; row 58 桐贝美妆 quantity 36; row 70 时尚密码 quantity 36; row 82 大物集美 quantity 42. Deterministic total: 252."
+        ]
+      },
+      {
+        "line_no": 7,
+        "product_name": "可益清牙膏葡见茶爽牙膏",
+        "quantity": 239,
+        "unit_reward": 3,
+        "reward_amount": 717,
+        "sales_match": {
+          "barcode": "6970356169321",
+          "excel_product_name": "参半可益清牙膏葡见茶爽120g",
+          "basis": "The settlement has no barcode. The distinctive identifiers 可益清 and 葡见茶爽 uniquely match one workbook SKU; the repeated 牙膏 in the settlement and the workbook's brand/120g suffix do not create a competing SKU. The deterministic Excel quantity is 239.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Workbook raw rows for barcode 6970356169321 / 参半可益清牙膏葡见茶爽120g (period text 5.1-5.20 and sales unit price 29.9 on every row): row 11 云朵饰品 quantity 24; row 23 红梅名妆 quantity 37; row 35 丽源名妆 quantity 28; row 47 米菲精品 quantity 48; row 59 桐贝美妆 quantity 29; row 71 时尚密码 quantity 44; row 83 大物集美 quantity 29. Deterministic total: 239."
+        ]
+      },
+      {
+        "line_no": 8,
+        "product_name": "专研清新美白牙膏",
+        "quantity": 278,
+        "unit_reward": 3,
+        "reward_amount": 834,
+        "sales_match": {
+          "barcode": "6970356162636",
+          "excel_product_name": "参半专研清新美白牙膏100g",
+          "basis": "The settlement has no barcode. The exact distinctive sequence 专研清新美白牙膏 appears in one workbook SKU; brand/100g text is additional. The deterministic Excel quantity is 278.",
+          "confidence": "high"
+        },
+        "notes": [
+          "Workbook raw rows for barcode 6970356162636 / 参半专研清新美白牙膏100g (period text 5.1-5.20 and sales unit price 29.9 on every row): row 9 云朵饰品 quantity 18; row 21 红梅名妆 quantity 36; row 33 丽源名妆 quantity 48; row 45 米菲精品 quantity 26; row 57 桐贝美妆 quantity 60; row 69 时尚密码 quantity 54; row 81 大物集美 quantity 36. Deterministic total: 278."
+        ]
+      },
+      {
+        "line_no": 9,
+        "product_name": "SP-4 美白牙膏",
+        "quantity": 190,
+        "unit_reward": 3,
+        "reward_amount": 570,
+        "sales_match": {
+          "barcode": null,
+          "excel_product_name": null,
+          "basis": "The settlement has no barcode, and SP-4 appears in no workbook product name. 美白牙膏 is a product-family phrase shared by multiple workbook SKUs. Barcode 6970356164289 / 参半美白牙膏120g香域茉莉味 totals 190 and is the residual quantity candidate, but quantity/residual matching does not establish the missing SP-4 identity, so no barcode is selected.",
+          "confidence": "ambiguous"
+        },
+        "notes": [
+          "Unresolved candidate raw rows for barcode 6970356164289 / 参半美白牙膏120g香域茉莉味 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 4 云朵饰品 quantity 36; row 16 红梅名妆 quantity 24; row 28 丽源名妆 quantity 24; row 40 米菲精品 quantity 24; row 52 桐贝美妆 quantity 18; row 64 时尚密码 quantity 28; row 76 大物集美 quantity 36. Deterministic candidate total: 190.",
+          "Kept null/ambiguous because the source materials provide no SP-4-to-barcode lookup and product-family/quantity agreement alone is insufficient."
+        ]
+      },
+      {
+        "line_no": 10,
+        "product_name": "SP-4 清新牙膏",
+        "quantity": 244,
+        "unit_reward": 3,
+        "reward_amount": 732,
+        "sales_match": {
+          "barcode": null,
+          "excel_product_name": null,
+          "basis": "The settlement has no barcode, and SP-4 appears in no workbook product name. 清新牙膏 is not a unique full-product identifier in the workbook. Barcode 6970356164296 / 参半清新牙膏120g动感薄荷 totals 244 and is the residual quantity candidate, but quantity/residual matching does not establish the missing SP-4 identity, so no barcode is selected.",
+          "confidence": "ambiguous"
+        },
+        "notes": [
+          "Unresolved candidate raw rows for barcode 6970356164296 / 参半清新牙膏120g动感薄荷 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 3 云朵饰品 quantity 47; row 15 红梅名妆 quantity 23; row 27 丽源名妆 quantity 48; row 39 米菲精品 quantity 36; row 51 桐贝美妆 quantity 18; row 63 时尚密码 quantity 24; row 75 大物集美 quantity 48. Deterministic candidate total: 244.",
+          "Kept null/ambiguous because the source materials provide no SP-4-to-barcode lookup and product-family/quantity agreement alone is insufficient."
+        ]
+      }
+    ]
+  },
+  "sales": {
+    "source_file": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\sources\\personnel_incentive\\雨瑶人员激励参半销售数据2.xlsx",
+    "sheet": "Sheet1",
+    "header_row": 1,
+    "detail_row_count": 70,
+    "sku_count": 10,
+    "store_count": 7,
+    "total_quantity": 2451,
+    "period_values": [
+      "5.1-5.20"
+    ],
+    "records": [
+      {
+        "excel_row": 2,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356164388",
+        "product_name": "参半臻白牙膏1+2特享装",
+        "quantity": 44,
+        "unit_price": 29.9,
+        "amount_cell": "=E2*F2"
+      },
+      {
+        "excel_row": 3,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356164296",
+        "product_name": "参半清新牙膏120g动感薄荷",
+        "quantity": 47,
+        "unit_price": 29.9,
+        "amount_cell": "=E3*F3"
+      },
+      {
+        "excel_row": 4,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356164289",
+        "product_name": "参半美白牙膏120g香域茉莉味",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E4*F4"
+      },
+      {
+        "excel_row": 5,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356166832",
+        "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+        "quantity": 22,
+        "unit_price": 24.9,
+        "amount_cell": "=E5*F5"
+      },
+      {
+        "excel_row": 6,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g清新苍兰",
+        "quantity": 48,
+        "unit_price": 29.9,
+        "amount_cell": "=E6*F6"
+      },
+      {
+        "excel_row": 7,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g海角雏菊",
+        "quantity": 60,
+        "unit_price": 29.9,
+        "amount_cell": "=E7*F7"
+      },
+      {
+        "excel_row": 8,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 28,
+        "unit_price": 19.9,
+        "amount_cell": "=E8*F8"
+      },
+      {
+        "excel_row": 9,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 18,
+        "unit_price": 29.9,
+        "amount_cell": "=E9*F9"
+      },
+      {
+        "excel_row": 10,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 18,
+        "unit_price": 29.9,
+        "amount_cell": "=E10*F10"
+      },
+      {
+        "excel_row": 11,
+        "period_text": "5.1-5.20",
+        "store_name": "云朵饰品",
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 24,
+        "unit_price": 29.9,
+        "amount_cell": "=E11*F11"
+      },
+      {
+        "excel_row": 14,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356164388",
+        "product_name": "参半臻白牙膏1+2特享装",
+        "quantity": 42,
+        "unit_price": 29.9,
+        "amount_cell": "=E14*F14"
+      },
+      {
+        "excel_row": 15,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356164296",
+        "product_name": "参半清新牙膏120g动感薄荷",
+        "quantity": 23,
+        "unit_price": 29.9,
+        "amount_cell": "=E15*F15"
+      },
+      {
+        "excel_row": 16,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356164289",
+        "product_name": "参半美白牙膏120g香域茉莉味",
+        "quantity": 24,
+        "unit_price": 29.9,
+        "amount_cell": "=E16*F16"
+      },
+      {
+        "excel_row": 17,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356166832",
+        "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+        "quantity": 48,
+        "unit_price": 24.9,
+        "amount_cell": "=E17*F17"
+      },
+      {
+        "excel_row": 18,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g清新苍兰",
+        "quantity": 28,
+        "unit_price": 29.9,
+        "amount_cell": "=E18*F18"
+      },
+      {
+        "excel_row": 19,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g海角雏菊",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E19*F19"
+      },
+      {
+        "excel_row": 20,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 42,
+        "unit_price": 19.9,
+        "amount_cell": "=E20*F20"
+      },
+      {
+        "excel_row": 21,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E21*F21"
+      },
+      {
+        "excel_row": 22,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E22*F22"
+      },
+      {
+        "excel_row": 23,
+        "period_text": "5.1-5.20",
+        "store_name": "红梅名妆",
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 37,
+        "unit_price": 29.9,
+        "amount_cell": "=E23*F23"
+      },
+      {
+        "excel_row": 26,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356164388",
+        "product_name": "参半臻白牙膏1+2特享装",
+        "quantity": 18,
+        "unit_price": 29.9,
+        "amount_cell": "=E26*F26"
+      },
+      {
+        "excel_row": 27,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356164296",
+        "product_name": "参半清新牙膏120g动感薄荷",
+        "quantity": 48,
+        "unit_price": 29.9,
+        "amount_cell": "=E27*F27"
+      },
+      {
+        "excel_row": 28,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356164289",
+        "product_name": "参半美白牙膏120g香域茉莉味",
+        "quantity": 24,
+        "unit_price": 29.9,
+        "amount_cell": "=E28*F28"
+      },
+      {
+        "excel_row": 29,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356166832",
+        "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+        "quantity": 27,
+        "unit_price": 24.9,
+        "amount_cell": "=E29*F29"
+      },
+      {
+        "excel_row": 30,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g清新苍兰",
+        "quantity": 33,
+        "unit_price": 29.9,
+        "amount_cell": "=E30*F30"
+      },
+      {
+        "excel_row": 31,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g海角雏菊",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E31*F31"
+      },
+      {
+        "excel_row": 32,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 46,
+        "unit_price": 19.9,
+        "amount_cell": "=E32*F32"
+      },
+      {
+        "excel_row": 33,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 48,
+        "unit_price": 29.9,
+        "amount_cell": "=E33*F33"
+      },
+      {
+        "excel_row": 34,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E34*F34"
+      },
+      {
+        "excel_row": 35,
+        "period_text": "5.1-5.20",
+        "store_name": "丽源名妆",
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 28,
+        "unit_price": 29.9,
+        "amount_cell": "=E35*F35"
+      },
+      {
+        "excel_row": 38,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356164388",
+        "product_name": "参半臻白牙膏1+2特享装",
+        "quantity": 44,
+        "unit_price": 29.9,
+        "amount_cell": "=E38*F38"
+      },
+      {
+        "excel_row": 39,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356164296",
+        "product_name": "参半清新牙膏120g动感薄荷",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E39*F39"
+      },
+      {
+        "excel_row": 40,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356164289",
+        "product_name": "参半美白牙膏120g香域茉莉味",
+        "quantity": 24,
+        "unit_price": 29.9,
+        "amount_cell": "=E40*F40"
+      },
+      {
+        "excel_row": 41,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356166832",
+        "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+        "quantity": 28,
+        "unit_price": 24.9,
+        "amount_cell": "=E41*F41"
+      },
+      {
+        "excel_row": 42,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g清新苍兰",
+        "quantity": 32,
+        "unit_price": 29.9,
+        "amount_cell": "=E42*F42"
+      },
+      {
+        "excel_row": 43,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g海角雏菊",
+        "quantity": 28,
+        "unit_price": 29.9,
+        "amount_cell": "=E43*F43"
+      },
+      {
+        "excel_row": 44,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 24,
+        "unit_price": 19.9,
+        "amount_cell": "=E44*F44"
+      },
+      {
+        "excel_row": 45,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 26,
+        "unit_price": 29.9,
+        "amount_cell": "=E45*F45"
+      },
+      {
+        "excel_row": 46,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 48,
+        "unit_price": 29.9,
+        "amount_cell": "=E46*F46"
+      },
+      {
+        "excel_row": 47,
+        "period_text": "5.1-5.20",
+        "store_name": "米菲精品",
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 48,
+        "unit_price": 29.9,
+        "amount_cell": "=E47*F47"
+      },
+      {
+        "excel_row": 50,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356164388",
+        "product_name": "参半臻白牙膏1+2特享装",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E50*F50"
+      },
+      {
+        "excel_row": 51,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356164296",
+        "product_name": "参半清新牙膏120g动感薄荷",
+        "quantity": 18,
+        "unit_price": 29.9,
+        "amount_cell": "=E51*F51"
+      },
+      {
+        "excel_row": 52,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356164289",
+        "product_name": "参半美白牙膏120g香域茉莉味",
+        "quantity": 18,
+        "unit_price": 29.9,
+        "amount_cell": "=E52*F52"
+      },
+      {
+        "excel_row": 53,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356166832",
+        "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+        "quantity": 48,
+        "unit_price": 24.9,
+        "amount_cell": "=E53*F53"
+      },
+      {
+        "excel_row": 54,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g清新苍兰",
+        "quantity": 48,
+        "unit_price": 29.9,
+        "amount_cell": "=E54*F54"
+      },
+      {
+        "excel_row": 55,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g海角雏菊",
+        "quantity": 47,
+        "unit_price": 29.9,
+        "amount_cell": "=E55*F55"
+      },
+      {
+        "excel_row": 56,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 25,
+        "unit_price": 19.9,
+        "amount_cell": "=E56*F56"
+      },
+      {
+        "excel_row": 57,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 60,
+        "unit_price": 29.9,
+        "amount_cell": "=E57*F57"
+      },
+      {
+        "excel_row": 58,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E58*F58"
+      },
+      {
+        "excel_row": 59,
+        "period_text": "5.1-5.20",
+        "store_name": "桐贝美妆",
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 29,
+        "unit_price": 29.9,
+        "amount_cell": "=E59*F59"
+      },
+      {
+        "excel_row": 62,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356164388",
+        "product_name": "参半臻白牙膏1+2特享装",
+        "quantity": 24,
+        "unit_price": 29.9,
+        "amount_cell": "=E62*F62"
+      },
+      {
+        "excel_row": 63,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356164296",
+        "product_name": "参半清新牙膏120g动感薄荷",
+        "quantity": 24,
+        "unit_price": 29.9,
+        "amount_cell": "=E63*F63"
+      },
+      {
+        "excel_row": 64,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356164289",
+        "product_name": "参半美白牙膏120g香域茉莉味",
+        "quantity": 28,
+        "unit_price": 29.9,
+        "amount_cell": "=E64*F64"
+      },
+      {
+        "excel_row": 65,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356166832",
+        "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+        "quantity": 37,
+        "unit_price": 24.9,
+        "amount_cell": "=E65*F65"
+      },
+      {
+        "excel_row": 66,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g清新苍兰",
+        "quantity": 49,
+        "unit_price": 29.9,
+        "amount_cell": "=E66*F66"
+      },
+      {
+        "excel_row": 67,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g海角雏菊",
+        "quantity": 33,
+        "unit_price": 29.9,
+        "amount_cell": "=E67*F67"
+      },
+      {
+        "excel_row": 68,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 36,
+        "unit_price": 19.9,
+        "amount_cell": "=E68*F68"
+      },
+      {
+        "excel_row": 69,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 54,
+        "unit_price": 29.9,
+        "amount_cell": "=E69*F69"
+      },
+      {
+        "excel_row": 70,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E70*F70"
+      },
+      {
+        "excel_row": 71,
+        "period_text": "5.1-5.20",
+        "store_name": "时尚密码",
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 44,
+        "unit_price": 29.9,
+        "amount_cell": "=E71*F71"
+      },
+      {
+        "excel_row": 74,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356164388",
+        "product_name": "参半臻白牙膏1+2特享装",
+        "quantity": 18,
+        "unit_price": 29.9,
+        "amount_cell": "=E74*F74"
+      },
+      {
+        "excel_row": 75,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356164296",
+        "product_name": "参半清新牙膏120g动感薄荷",
+        "quantity": 48,
+        "unit_price": 29.9,
+        "amount_cell": "=E75*F75"
+      },
+      {
+        "excel_row": 76,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356164289",
+        "product_name": "参半美白牙膏120g香域茉莉味",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E76*F76"
+      },
+      {
+        "excel_row": 77,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356166832",
+        "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+        "quantity": 28,
+        "unit_price": 24.9,
+        "amount_cell": "=E77*F77"
+      },
+      {
+        "excel_row": 78,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g清新苍兰",
+        "quantity": 37,
+        "unit_price": 29.9,
+        "amount_cell": "=E78*F78"
+      },
+      {
+        "excel_row": 79,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g海角雏菊",
+        "quantity": 44,
+        "unit_price": 29.9,
+        "amount_cell": "=E79*F79"
+      },
+      {
+        "excel_row": 80,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 24,
+        "unit_price": 19.9,
+        "amount_cell": "=E80*F80"
+      },
+      {
+        "excel_row": 81,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 36,
+        "unit_price": 29.9,
+        "amount_cell": "=E81*F81"
+      },
+      {
+        "excel_row": 82,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 42,
+        "unit_price": 29.9,
+        "amount_cell": "=E82*F82"
+      },
+      {
+        "excel_row": 83,
+        "period_text": "5.1-5.20",
+        "store_name": "大物集美",
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 29,
+        "unit_price": 29.9,
+        "amount_cell": "=E83*F83"
+      }
+    ],
+    "skus": [
+      {
+        "barcode": "6970356164388",
+        "product_name": "参半臻白牙膏1+2特享装",
+        "quantity": 226,
+        "excel_rows": [
+          2,
+          14,
+          26,
+          38,
+          50,
+          62,
+          74
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 18
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 44
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 18
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 24
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 36
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 44
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 42
+          }
+        ]
+      },
+      {
+        "barcode": "6970356164296",
+        "product_name": "参半清新牙膏120g动感薄荷",
+        "quantity": 244,
+        "excel_rows": [
+          3,
+          15,
+          27,
+          39,
+          51,
+          63,
+          75
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 48
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 47
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 48
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 24
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 18
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 36
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 23
+          }
+        ]
+      },
+      {
+        "barcode": "6970356164289",
+        "product_name": "参半美白牙膏120g香域茉莉味",
+        "quantity": 190,
+        "excel_rows": [
+          4,
+          16,
+          28,
+          40,
+          52,
+          64,
+          76
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 24
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 36
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 36
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 28
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 18
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 24
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 24
+          }
+        ]
+      },
+      {
+        "barcode": "6970356166832",
+        "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+        "quantity": 238,
+        "excel_rows": [
+          5,
+          17,
+          29,
+          41,
+          53,
+          65,
+          77
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 27
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 22
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 28
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 37
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 48
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 28
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 48
+          }
+        ]
+      },
+      {
+        "barcode": "6970356162391",
+        "product_name": "参半沸石净齿牙膏140g清新苍兰",
+        "quantity": 275,
+        "excel_rows": [
+          6,
+          18,
+          30,
+          42,
+          54,
+          66,
+          78
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 33
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 48
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 37
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 49
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 48
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 32
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 28
+          }
+        ]
+      },
+      {
+        "barcode": "6970356162810",
+        "product_name": "参半沸石美白牙膏140g海角雏菊",
+        "quantity": 284,
+        "excel_rows": [
+          7,
+          19,
+          31,
+          43,
+          55,
+          67,
+          79
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 36
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 60
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 44
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 33
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 47
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 28
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 36
+          }
+        ]
+      },
+      {
+        "barcode": "6970356164395",
+        "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+        "quantity": 225,
+        "excel_rows": [
+          8,
+          20,
+          32,
+          44,
+          56,
+          68,
+          80
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 46
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 28
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 24
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 36
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 25
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 24
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 42
+          }
+        ]
+      },
+      {
+        "barcode": "6970356162636",
+        "product_name": "参半专研清新美白牙膏100g",
+        "quantity": 278,
+        "excel_rows": [
+          9,
+          21,
+          33,
+          45,
+          57,
+          69,
+          81
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 48
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 18
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 36
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 54
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 60
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 26
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 36
+          }
+        ]
+      },
+      {
+        "barcode": "6970356169338",
+        "product_name": "参半可益白牙膏葡萄知梨120g",
+        "quantity": 252,
+        "excel_rows": [
+          10,
+          22,
+          34,
+          46,
+          58,
+          70,
+          82
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 36
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 18
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 42
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 36
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 36
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 48
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 36
+          }
+        ]
+      },
+      {
+        "barcode": "6970356169321",
+        "product_name": "参半可益清牙膏葡见茶爽120g",
+        "quantity": 239,
+        "excel_rows": [
+          11,
+          23,
+          35,
+          47,
+          59,
+          71,
+          83
+        ],
+        "store_quantities": [
+          {
+            "store_name": "丽源名妆",
+            "quantity": 28
+          },
+          {
+            "store_name": "云朵饰品",
+            "quantity": 24
+          },
+          {
+            "store_name": "大物集美",
+            "quantity": 29
+          },
+          {
+            "store_name": "时尚密码",
+            "quantity": 44
+          },
+          {
+            "store_name": "桐贝美妆",
+            "quantity": 29
+          },
+          {
+            "store_name": "米菲精品",
+            "quantity": 48
+          },
+          {
+            "store_name": "红梅名妆",
+            "quantity": 37
+          }
+        ]
+      }
+    ],
+    "stores": [
+      {
+        "store_name": "云朵饰品",
+        "quantity": 345,
+        "excel_rows": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ]
+      },
+      {
+        "store_name": "红梅名妆",
+        "quantity": 352,
+        "excel_rows": [
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ]
+      },
+      {
+        "store_name": "丽源名妆",
+        "quantity": 344,
+        "excel_rows": [
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35
+        ]
+      },
+      {
+        "store_name": "米菲精品",
+        "quantity": 338,
+        "excel_rows": [
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47
+        ]
+      },
+      {
+        "store_name": "桐贝美妆",
+        "quantity": 365,
+        "excel_rows": [
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59
+        ]
+      },
+      {
+        "store_name": "时尚密码",
+        "quantity": 365,
+        "excel_rows": [
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71
+        ]
+      },
+      {
+        "store_name": "大物集美",
+        "quantity": 342,
+        "excel_rows": [
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83
+        ]
+      }
+    ]
+  },
+  "sku_reconciliation": [
+    {
+      "line_no": 1,
+      "settlement_product_name": "羟基磷灰石修复牙膏",
+      "mapped_barcode": "6970356166832",
+      "mapping_basis": "The settlement has no barcode. 羟基磷灰石 is a distinctive term appearing in exactly one workbook SKU; the settlement adds 修复 while the workbook adds brand, size, and flavor. The deterministic Excel quantity for that barcode is 238, corroborating the visible line quantity.",
+      "mapping_confidence": "high",
+      "settlement_quantity": 238,
+      "unit_reward": 3,
+      "settlement_reward_amount": 714,
+      "calculated_settlement_reward": 714,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+      "excel_quantity": 238,
+      "quantity_difference": 0,
+      "excel_rows": [
+        5,
+        17,
+        29,
+        41,
+        53,
+        65,
+        77
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 27
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 22
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 28
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 37
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 48
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 28
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 48
+        }
+      ],
+      "quantity_status": "match",
+      "amount_status": "match",
+      "mapping_status": "matched",
+      "supported_quantity": 238,
+      "supported_reward_amount": 714,
+      "notes": [
+        "Workbook raw rows for barcode 6970356166832 / 参半羟基磷灰石牙膏100g满陇桂雨味 (period text 5.1-5.20 and sales unit price 24.9 on every row): row 5 云朵饰品 quantity 22; row 17 红梅名妆 quantity 48; row 29 丽源名妆 quantity 27; row 41 米菲精品 quantity 28; row 53 桐贝美妆 quantity 48; row 65 时尚密码 quantity 37; row 77 大物集美 quantity 28. Deterministic total: 238."
+      ]
+    },
+    {
+      "line_no": 2,
+      "settlement_product_name": "沸石净齿牙膏",
+      "mapped_barcode": "6970356162391",
+      "mapping_basis": "The settlement has no barcode. The exact distinctive core 沸石净齿牙膏 appears in one workbook SKU; workbook size/flavor text is additional. The deterministic Excel quantity is 275, corroborating the visible line quantity.",
+      "mapping_confidence": "high",
+      "settlement_quantity": 275,
+      "unit_reward": 3,
+      "settlement_reward_amount": 825,
+      "calculated_settlement_reward": 825,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": "参半沸石净齿牙膏140g清新苍兰",
+      "excel_quantity": 275,
+      "quantity_difference": 0,
+      "excel_rows": [
+        6,
+        18,
+        30,
+        42,
+        54,
+        66,
+        78
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 33
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 48
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 37
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 49
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 48
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 32
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 28
+        }
+      ],
+      "quantity_status": "match",
+      "amount_status": "match",
+      "mapping_status": "matched",
+      "supported_quantity": 275,
+      "supported_reward_amount": 825,
+      "notes": [
+        "Workbook raw rows for barcode 6970356162391 / 参半沸石净齿牙膏140g清新苍兰 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 6 云朵饰品 quantity 48; row 18 红梅名妆 quantity 28; row 30 丽源名妆 quantity 33; row 42 米菲精品 quantity 32; row 54 桐贝美妆 quantity 48; row 66 时尚密码 quantity 49; row 78 大物集美 quantity 37. Deterministic total: 275."
+      ]
+    },
+    {
+      "line_no": 3,
+      "settlement_product_name": "沸石美白牙膏",
+      "mapped_barcode": "6970356162810",
+      "mapping_basis": "The settlement has no barcode. The exact distinctive core 沸石美白牙膏 appears in one workbook SKU; workbook size/flavor text is additional. The deterministic Excel quantity is 284, corroborating the visible line quantity.",
+      "mapping_confidence": "high",
+      "settlement_quantity": 284,
+      "unit_reward": 3,
+      "settlement_reward_amount": 852,
+      "calculated_settlement_reward": 852,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": "参半沸石美白牙膏140g海角雏菊",
+      "excel_quantity": 284,
+      "quantity_difference": 0,
+      "excel_rows": [
+        7,
+        19,
+        31,
+        43,
+        55,
+        67,
+        79
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 36
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 60
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 44
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 33
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 47
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 28
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 36
+        }
+      ],
+      "quantity_status": "match",
+      "amount_status": "match",
+      "mapping_status": "matched",
+      "supported_quantity": 284,
+      "supported_reward_amount": 852,
+      "notes": [
+        "Workbook raw rows for barcode 6970356162810 / 参半沸石美白牙膏140g海角雏菊 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 7 云朵饰品 quantity 60; row 19 红梅名妆 quantity 36; row 31 丽源名妆 quantity 36; row 43 米菲精品 quantity 28; row 55 桐贝美妆 quantity 47; row 67 时尚密码 quantity 33; row 79 大物集美 quantity 44. Deterministic total: 284."
+      ]
+    },
+    {
+      "line_no": 4,
+      "settlement_product_name": "1+2臻白套盒",
+      "mapped_barcode": "6970356164388",
+      "mapping_basis": "The settlement has no barcode. The combined identifiers 1+2 and 臻白 uniquely match the workbook's 1+2特享装 SKU. The deterministic Excel quantity is 226, corroborating the visible line quantity.",
+      "mapping_confidence": "high",
+      "settlement_quantity": 226,
+      "unit_reward": 3,
+      "settlement_reward_amount": 678,
+      "calculated_settlement_reward": 678,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": "参半臻白牙膏1+2特享装",
+      "excel_quantity": 226,
+      "quantity_difference": 0,
+      "excel_rows": [
+        2,
+        14,
+        26,
+        38,
+        50,
+        62,
+        74
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 18
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 44
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 18
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 24
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 36
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 44
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 42
+        }
+      ],
+      "quantity_status": "match",
+      "amount_status": "match",
+      "mapping_status": "matched",
+      "supported_quantity": 226,
+      "supported_reward_amount": 678,
+      "notes": [
+        "Workbook raw rows for barcode 6970356164388 / 参半臻白牙膏1+2特享装 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 2 云朵饰品 quantity 44; row 14 红梅名妆 quantity 42; row 26 丽源名妆 quantity 18; row 38 米菲精品 quantity 44; row 50 桐贝美妆 quantity 36; row 62 时尚密码 quantity 24; row 74 大物集美 quantity 18. Deterministic total: 226."
+      ]
+    },
+    {
+      "line_no": 5,
+      "settlement_product_name": "光白酵素1+1超值装牙膏",
+      "mapped_barcode": "6970356164395",
+      "mapping_basis": "The settlement has no barcode. The distinctive combined phrase 光白酵素1+1超值装 uniquely corresponds to the workbook's 极光白酵素1+1超值装 SKU. The deterministic Excel quantity is 225, corroborating the visible line quantity.",
+      "mapping_confidence": "high",
+      "settlement_quantity": 225,
+      "unit_reward": 3,
+      "settlement_reward_amount": 675,
+      "calculated_settlement_reward": 675,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+      "excel_quantity": 225,
+      "quantity_difference": 0,
+      "excel_rows": [
+        8,
+        20,
+        32,
+        44,
+        56,
+        68,
+        80
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 46
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 28
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 24
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 36
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 25
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 24
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 42
+        }
+      ],
+      "quantity_status": "match",
+      "amount_status": "match",
+      "mapping_status": "matched",
+      "supported_quantity": 225,
+      "supported_reward_amount": 675,
+      "notes": [
+        "Workbook raw rows for barcode 6970356164395 / 参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g) (period text 5.1-5.20 and sales unit price 19.9 on every row): row 8 云朵饰品 quantity 28; row 20 红梅名妆 quantity 42; row 32 丽源名妆 quantity 46; row 44 米菲精品 quantity 24; row 56 桐贝美妆 quantity 25; row 68 时尚密码 quantity 36; row 80 大物集美 quantity 24. Deterministic total: 225."
+      ]
+    },
+    {
+      "line_no": 6,
+      "settlement_product_name": "可益白牙膏葡萄知梨牙膏",
+      "mapped_barcode": "6970356169338",
+      "mapping_basis": "The settlement has no barcode. The distinctive identifiers 可益白 and 葡萄知梨 uniquely match one workbook SKU; the repeated 牙膏 in the settlement and the workbook's brand/120g suffix do not create a competing SKU. The deterministic Excel quantity is 252.",
+      "mapping_confidence": "high",
+      "settlement_quantity": 252,
+      "unit_reward": 3,
+      "settlement_reward_amount": 756,
+      "calculated_settlement_reward": 756,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": "参半可益白牙膏葡萄知梨120g",
+      "excel_quantity": 252,
+      "quantity_difference": 0,
+      "excel_rows": [
+        10,
+        22,
+        34,
+        46,
+        58,
+        70,
+        82
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 36
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 18
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 42
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 36
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 36
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 48
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 36
+        }
+      ],
+      "quantity_status": "match",
+      "amount_status": "match",
+      "mapping_status": "matched",
+      "supported_quantity": 252,
+      "supported_reward_amount": 756,
+      "notes": [
+        "Workbook raw rows for barcode 6970356169338 / 参半可益白牙膏葡萄知梨120g (period text 5.1-5.20 and sales unit price 29.9 on every row): row 10 云朵饰品 quantity 18; row 22 红梅名妆 quantity 36; row 34 丽源名妆 quantity 36; row 46 米菲精品 quantity 48; row 58 桐贝美妆 quantity 36; row 70 时尚密码 quantity 36; row 82 大物集美 quantity 42. Deterministic total: 252."
+      ]
+    },
+    {
+      "line_no": 7,
+      "settlement_product_name": "可益清牙膏葡见茶爽牙膏",
+      "mapped_barcode": "6970356169321",
+      "mapping_basis": "The settlement has no barcode. The distinctive identifiers 可益清 and 葡见茶爽 uniquely match one workbook SKU; the repeated 牙膏 in the settlement and the workbook's brand/120g suffix do not create a competing SKU. The deterministic Excel quantity is 239.",
+      "mapping_confidence": "high",
+      "settlement_quantity": 239,
+      "unit_reward": 3,
+      "settlement_reward_amount": 717,
+      "calculated_settlement_reward": 717,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": "参半可益清牙膏葡见茶爽120g",
+      "excel_quantity": 239,
+      "quantity_difference": 0,
+      "excel_rows": [
+        11,
+        23,
+        35,
+        47,
+        59,
+        71,
+        83
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 28
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 24
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 29
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 44
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 29
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 48
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 37
+        }
+      ],
+      "quantity_status": "match",
+      "amount_status": "match",
+      "mapping_status": "matched",
+      "supported_quantity": 239,
+      "supported_reward_amount": 717,
+      "notes": [
+        "Workbook raw rows for barcode 6970356169321 / 参半可益清牙膏葡见茶爽120g (period text 5.1-5.20 and sales unit price 29.9 on every row): row 11 云朵饰品 quantity 24; row 23 红梅名妆 quantity 37; row 35 丽源名妆 quantity 28; row 47 米菲精品 quantity 48; row 59 桐贝美妆 quantity 29; row 71 时尚密码 quantity 44; row 83 大物集美 quantity 29. Deterministic total: 239."
+      ]
+    },
+    {
+      "line_no": 8,
+      "settlement_product_name": "专研清新美白牙膏",
+      "mapped_barcode": "6970356162636",
+      "mapping_basis": "The settlement has no barcode. The exact distinctive sequence 专研清新美白牙膏 appears in one workbook SKU; brand/100g text is additional. The deterministic Excel quantity is 278.",
+      "mapping_confidence": "high",
+      "settlement_quantity": 278,
+      "unit_reward": 3,
+      "settlement_reward_amount": 834,
+      "calculated_settlement_reward": 834,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": "参半专研清新美白牙膏100g",
+      "excel_quantity": 278,
+      "quantity_difference": 0,
+      "excel_rows": [
+        9,
+        21,
+        33,
+        45,
+        57,
+        69,
+        81
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 48
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 18
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 36
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 54
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 60
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 26
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 36
+        }
+      ],
+      "quantity_status": "match",
+      "amount_status": "match",
+      "mapping_status": "matched",
+      "supported_quantity": 278,
+      "supported_reward_amount": 834,
+      "notes": [
+        "Workbook raw rows for barcode 6970356162636 / 参半专研清新美白牙膏100g (period text 5.1-5.20 and sales unit price 29.9 on every row): row 9 云朵饰品 quantity 18; row 21 红梅名妆 quantity 36; row 33 丽源名妆 quantity 48; row 45 米菲精品 quantity 26; row 57 桐贝美妆 quantity 60; row 69 时尚密码 quantity 54; row 81 大物集美 quantity 36. Deterministic total: 278."
+      ]
+    },
+    {
+      "line_no": 9,
+      "settlement_product_name": "SP-4 美白牙膏",
+      "mapped_barcode": null,
+      "mapping_basis": "The settlement has no barcode, and SP-4 appears in no workbook product name. 美白牙膏 is a product-family phrase shared by multiple workbook SKUs. Barcode 6970356164289 / 参半美白牙膏120g香域茉莉味 totals 190 and is the residual quantity candidate, but quantity/residual matching does not establish the missing SP-4 identity, so no barcode is selected.",
+      "mapping_confidence": "ambiguous",
+      "settlement_quantity": 190,
+      "unit_reward": 3,
+      "settlement_reward_amount": 570,
+      "calculated_settlement_reward": 570,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": null,
+      "excel_quantity": null,
+      "quantity_difference": null,
+      "excel_rows": [],
+      "store_quantities": [],
+      "quantity_status": "unmatched",
+      "amount_status": "match",
+      "mapping_status": "unmatched",
+      "supported_quantity": 0,
+      "supported_reward_amount": 0,
+      "notes": [
+        "Unresolved candidate raw rows for barcode 6970356164289 / 参半美白牙膏120g香域茉莉味 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 4 云朵饰品 quantity 36; row 16 红梅名妆 quantity 24; row 28 丽源名妆 quantity 24; row 40 米菲精品 quantity 24; row 52 桐贝美妆 quantity 18; row 64 时尚密码 quantity 28; row 76 大物集美 quantity 36. Deterministic candidate total: 190.",
+        "Kept null/ambiguous because the source materials provide no SP-4-to-barcode lookup and product-family/quantity agreement alone is insufficient."
+      ]
+    },
+    {
+      "line_no": 10,
+      "settlement_product_name": "SP-4 清新牙膏",
+      "mapped_barcode": null,
+      "mapping_basis": "The settlement has no barcode, and SP-4 appears in no workbook product name. 清新牙膏 is not a unique full-product identifier in the workbook. Barcode 6970356164296 / 参半清新牙膏120g动感薄荷 totals 244 and is the residual quantity candidate, but quantity/residual matching does not establish the missing SP-4 identity, so no barcode is selected.",
+      "mapping_confidence": "ambiguous",
+      "settlement_quantity": 244,
+      "unit_reward": 3,
+      "settlement_reward_amount": 732,
+      "calculated_settlement_reward": 732,
+      "settlement_line_amount_difference": 0,
+      "excel_product_name": null,
+      "excel_quantity": null,
+      "quantity_difference": null,
+      "excel_rows": [],
+      "store_quantities": [],
+      "quantity_status": "unmatched",
+      "amount_status": "match",
+      "mapping_status": "unmatched",
+      "supported_quantity": 0,
+      "supported_reward_amount": 0,
+      "notes": [
+        "Unresolved candidate raw rows for barcode 6970356164296 / 参半清新牙膏120g动感薄荷 (period text 5.1-5.20 and sales unit price 29.9 on every row): row 3 云朵饰品 quantity 47; row 15 红梅名妆 quantity 23; row 27 丽源名妆 quantity 48; row 39 米菲精品 quantity 36; row 51 桐贝美妆 quantity 18; row 63 时尚密码 quantity 24; row 75 大物集美 quantity 48. Deterministic candidate total: 244.",
+        "Kept null/ambiguous because the source materials provide no SP-4-to-barcode lookup and product-family/quantity agreement alone is insufficient."
+      ]
+    }
+  ],
+  "sales_trace": [
+    {
+      "excel_row": 2,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356164388",
+      "product_name": "参半臻白牙膏1+2特享装",
+      "quantity": 44,
+      "unit_price": 29.9,
+      "amount_cell": "=E2*F2",
+      "settlement_line_no": 4,
+      "settlement_product_name": "1+2臻白套盒",
+      "unit_reward": 3,
+      "expected_reward_amount": 132
+    },
+    {
+      "excel_row": 3,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356164296",
+      "product_name": "参半清新牙膏120g动感薄荷",
+      "quantity": 47,
+      "unit_price": 29.9,
+      "amount_cell": "=E3*F3",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 4,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356164289",
+      "product_name": "参半美白牙膏120g香域茉莉味",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E4*F4",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 5,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356166832",
+      "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+      "quantity": 22,
+      "unit_price": 24.9,
+      "amount_cell": "=E5*F5",
+      "settlement_line_no": 1,
+      "settlement_product_name": "羟基磷灰石修复牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 66
+    },
+    {
+      "excel_row": 6,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356162391",
+      "product_name": "参半沸石净齿牙膏140g清新苍兰",
+      "quantity": 48,
+      "unit_price": 29.9,
+      "amount_cell": "=E6*F6",
+      "settlement_line_no": 2,
+      "settlement_product_name": "沸石净齿牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 144
+    },
+    {
+      "excel_row": 7,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356162810",
+      "product_name": "参半沸石美白牙膏140g海角雏菊",
+      "quantity": 60,
+      "unit_price": 29.9,
+      "amount_cell": "=E7*F7",
+      "settlement_line_no": 3,
+      "settlement_product_name": "沸石美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 180
+    },
+    {
+      "excel_row": 8,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356164395",
+      "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+      "quantity": 28,
+      "unit_price": 19.9,
+      "amount_cell": "=E8*F8",
+      "settlement_line_no": 5,
+      "settlement_product_name": "光白酵素1+1超值装牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 84
+    },
+    {
+      "excel_row": 9,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356162636",
+      "product_name": "参半专研清新美白牙膏100g",
+      "quantity": 18,
+      "unit_price": 29.9,
+      "amount_cell": "=E9*F9",
+      "settlement_line_no": 8,
+      "settlement_product_name": "专研清新美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 54
+    },
+    {
+      "excel_row": 10,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356169338",
+      "product_name": "参半可益白牙膏葡萄知梨120g",
+      "quantity": 18,
+      "unit_price": 29.9,
+      "amount_cell": "=E10*F10",
+      "settlement_line_no": 6,
+      "settlement_product_name": "可益白牙膏葡萄知梨牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 54
+    },
+    {
+      "excel_row": 11,
+      "period_text": "5.1-5.20",
+      "store_name": "云朵饰品",
+      "barcode": "6970356169321",
+      "product_name": "参半可益清牙膏葡见茶爽120g",
+      "quantity": 24,
+      "unit_price": 29.9,
+      "amount_cell": "=E11*F11",
+      "settlement_line_no": 7,
+      "settlement_product_name": "可益清牙膏葡见茶爽牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 72
+    },
+    {
+      "excel_row": 14,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356164388",
+      "product_name": "参半臻白牙膏1+2特享装",
+      "quantity": 42,
+      "unit_price": 29.9,
+      "amount_cell": "=E14*F14",
+      "settlement_line_no": 4,
+      "settlement_product_name": "1+2臻白套盒",
+      "unit_reward": 3,
+      "expected_reward_amount": 126
+    },
+    {
+      "excel_row": 15,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356164296",
+      "product_name": "参半清新牙膏120g动感薄荷",
+      "quantity": 23,
+      "unit_price": 29.9,
+      "amount_cell": "=E15*F15",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 16,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356164289",
+      "product_name": "参半美白牙膏120g香域茉莉味",
+      "quantity": 24,
+      "unit_price": 29.9,
+      "amount_cell": "=E16*F16",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 17,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356166832",
+      "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+      "quantity": 48,
+      "unit_price": 24.9,
+      "amount_cell": "=E17*F17",
+      "settlement_line_no": 1,
+      "settlement_product_name": "羟基磷灰石修复牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 144
+    },
+    {
+      "excel_row": 18,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356162391",
+      "product_name": "参半沸石净齿牙膏140g清新苍兰",
+      "quantity": 28,
+      "unit_price": 29.9,
+      "amount_cell": "=E18*F18",
+      "settlement_line_no": 2,
+      "settlement_product_name": "沸石净齿牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 84
+    },
+    {
+      "excel_row": 19,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356162810",
+      "product_name": "参半沸石美白牙膏140g海角雏菊",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E19*F19",
+      "settlement_line_no": 3,
+      "settlement_product_name": "沸石美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 20,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356164395",
+      "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+      "quantity": 42,
+      "unit_price": 19.9,
+      "amount_cell": "=E20*F20",
+      "settlement_line_no": 5,
+      "settlement_product_name": "光白酵素1+1超值装牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 126
+    },
+    {
+      "excel_row": 21,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356162636",
+      "product_name": "参半专研清新美白牙膏100g",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E21*F21",
+      "settlement_line_no": 8,
+      "settlement_product_name": "专研清新美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 22,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356169338",
+      "product_name": "参半可益白牙膏葡萄知梨120g",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E22*F22",
+      "settlement_line_no": 6,
+      "settlement_product_name": "可益白牙膏葡萄知梨牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 23,
+      "period_text": "5.1-5.20",
+      "store_name": "红梅名妆",
+      "barcode": "6970356169321",
+      "product_name": "参半可益清牙膏葡见茶爽120g",
+      "quantity": 37,
+      "unit_price": 29.9,
+      "amount_cell": "=E23*F23",
+      "settlement_line_no": 7,
+      "settlement_product_name": "可益清牙膏葡见茶爽牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 111
+    },
+    {
+      "excel_row": 26,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356164388",
+      "product_name": "参半臻白牙膏1+2特享装",
+      "quantity": 18,
+      "unit_price": 29.9,
+      "amount_cell": "=E26*F26",
+      "settlement_line_no": 4,
+      "settlement_product_name": "1+2臻白套盒",
+      "unit_reward": 3,
+      "expected_reward_amount": 54
+    },
+    {
+      "excel_row": 27,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356164296",
+      "product_name": "参半清新牙膏120g动感薄荷",
+      "quantity": 48,
+      "unit_price": 29.9,
+      "amount_cell": "=E27*F27",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 28,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356164289",
+      "product_name": "参半美白牙膏120g香域茉莉味",
+      "quantity": 24,
+      "unit_price": 29.9,
+      "amount_cell": "=E28*F28",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 29,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356166832",
+      "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+      "quantity": 27,
+      "unit_price": 24.9,
+      "amount_cell": "=E29*F29",
+      "settlement_line_no": 1,
+      "settlement_product_name": "羟基磷灰石修复牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 81
+    },
+    {
+      "excel_row": 30,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356162391",
+      "product_name": "参半沸石净齿牙膏140g清新苍兰",
+      "quantity": 33,
+      "unit_price": 29.9,
+      "amount_cell": "=E30*F30",
+      "settlement_line_no": 2,
+      "settlement_product_name": "沸石净齿牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 99
+    },
+    {
+      "excel_row": 31,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356162810",
+      "product_name": "参半沸石美白牙膏140g海角雏菊",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E31*F31",
+      "settlement_line_no": 3,
+      "settlement_product_name": "沸石美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 32,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356164395",
+      "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+      "quantity": 46,
+      "unit_price": 19.9,
+      "amount_cell": "=E32*F32",
+      "settlement_line_no": 5,
+      "settlement_product_name": "光白酵素1+1超值装牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 138
+    },
+    {
+      "excel_row": 33,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356162636",
+      "product_name": "参半专研清新美白牙膏100g",
+      "quantity": 48,
+      "unit_price": 29.9,
+      "amount_cell": "=E33*F33",
+      "settlement_line_no": 8,
+      "settlement_product_name": "专研清新美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 144
+    },
+    {
+      "excel_row": 34,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356169338",
+      "product_name": "参半可益白牙膏葡萄知梨120g",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E34*F34",
+      "settlement_line_no": 6,
+      "settlement_product_name": "可益白牙膏葡萄知梨牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 35,
+      "period_text": "5.1-5.20",
+      "store_name": "丽源名妆",
+      "barcode": "6970356169321",
+      "product_name": "参半可益清牙膏葡见茶爽120g",
+      "quantity": 28,
+      "unit_price": 29.9,
+      "amount_cell": "=E35*F35",
+      "settlement_line_no": 7,
+      "settlement_product_name": "可益清牙膏葡见茶爽牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 84
+    },
+    {
+      "excel_row": 38,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356164388",
+      "product_name": "参半臻白牙膏1+2特享装",
+      "quantity": 44,
+      "unit_price": 29.9,
+      "amount_cell": "=E38*F38",
+      "settlement_line_no": 4,
+      "settlement_product_name": "1+2臻白套盒",
+      "unit_reward": 3,
+      "expected_reward_amount": 132
+    },
+    {
+      "excel_row": 39,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356164296",
+      "product_name": "参半清新牙膏120g动感薄荷",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E39*F39",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 40,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356164289",
+      "product_name": "参半美白牙膏120g香域茉莉味",
+      "quantity": 24,
+      "unit_price": 29.9,
+      "amount_cell": "=E40*F40",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 41,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356166832",
+      "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+      "quantity": 28,
+      "unit_price": 24.9,
+      "amount_cell": "=E41*F41",
+      "settlement_line_no": 1,
+      "settlement_product_name": "羟基磷灰石修复牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 84
+    },
+    {
+      "excel_row": 42,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356162391",
+      "product_name": "参半沸石净齿牙膏140g清新苍兰",
+      "quantity": 32,
+      "unit_price": 29.9,
+      "amount_cell": "=E42*F42",
+      "settlement_line_no": 2,
+      "settlement_product_name": "沸石净齿牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 96
+    },
+    {
+      "excel_row": 43,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356162810",
+      "product_name": "参半沸石美白牙膏140g海角雏菊",
+      "quantity": 28,
+      "unit_price": 29.9,
+      "amount_cell": "=E43*F43",
+      "settlement_line_no": 3,
+      "settlement_product_name": "沸石美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 84
+    },
+    {
+      "excel_row": 44,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356164395",
+      "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+      "quantity": 24,
+      "unit_price": 19.9,
+      "amount_cell": "=E44*F44",
+      "settlement_line_no": 5,
+      "settlement_product_name": "光白酵素1+1超值装牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 72
+    },
+    {
+      "excel_row": 45,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356162636",
+      "product_name": "参半专研清新美白牙膏100g",
+      "quantity": 26,
+      "unit_price": 29.9,
+      "amount_cell": "=E45*F45",
+      "settlement_line_no": 8,
+      "settlement_product_name": "专研清新美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 78
+    },
+    {
+      "excel_row": 46,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356169338",
+      "product_name": "参半可益白牙膏葡萄知梨120g",
+      "quantity": 48,
+      "unit_price": 29.9,
+      "amount_cell": "=E46*F46",
+      "settlement_line_no": 6,
+      "settlement_product_name": "可益白牙膏葡萄知梨牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 144
+    },
+    {
+      "excel_row": 47,
+      "period_text": "5.1-5.20",
+      "store_name": "米菲精品",
+      "barcode": "6970356169321",
+      "product_name": "参半可益清牙膏葡见茶爽120g",
+      "quantity": 48,
+      "unit_price": 29.9,
+      "amount_cell": "=E47*F47",
+      "settlement_line_no": 7,
+      "settlement_product_name": "可益清牙膏葡见茶爽牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 144
+    },
+    {
+      "excel_row": 50,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356164388",
+      "product_name": "参半臻白牙膏1+2特享装",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E50*F50",
+      "settlement_line_no": 4,
+      "settlement_product_name": "1+2臻白套盒",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 51,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356164296",
+      "product_name": "参半清新牙膏120g动感薄荷",
+      "quantity": 18,
+      "unit_price": 29.9,
+      "amount_cell": "=E51*F51",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 52,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356164289",
+      "product_name": "参半美白牙膏120g香域茉莉味",
+      "quantity": 18,
+      "unit_price": 29.9,
+      "amount_cell": "=E52*F52",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 53,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356166832",
+      "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+      "quantity": 48,
+      "unit_price": 24.9,
+      "amount_cell": "=E53*F53",
+      "settlement_line_no": 1,
+      "settlement_product_name": "羟基磷灰石修复牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 144
+    },
+    {
+      "excel_row": 54,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356162391",
+      "product_name": "参半沸石净齿牙膏140g清新苍兰",
+      "quantity": 48,
+      "unit_price": 29.9,
+      "amount_cell": "=E54*F54",
+      "settlement_line_no": 2,
+      "settlement_product_name": "沸石净齿牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 144
+    },
+    {
+      "excel_row": 55,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356162810",
+      "product_name": "参半沸石美白牙膏140g海角雏菊",
+      "quantity": 47,
+      "unit_price": 29.9,
+      "amount_cell": "=E55*F55",
+      "settlement_line_no": 3,
+      "settlement_product_name": "沸石美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 141
+    },
+    {
+      "excel_row": 56,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356164395",
+      "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+      "quantity": 25,
+      "unit_price": 19.9,
+      "amount_cell": "=E56*F56",
+      "settlement_line_no": 5,
+      "settlement_product_name": "光白酵素1+1超值装牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 75
+    },
+    {
+      "excel_row": 57,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356162636",
+      "product_name": "参半专研清新美白牙膏100g",
+      "quantity": 60,
+      "unit_price": 29.9,
+      "amount_cell": "=E57*F57",
+      "settlement_line_no": 8,
+      "settlement_product_name": "专研清新美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 180
+    },
+    {
+      "excel_row": 58,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356169338",
+      "product_name": "参半可益白牙膏葡萄知梨120g",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E58*F58",
+      "settlement_line_no": 6,
+      "settlement_product_name": "可益白牙膏葡萄知梨牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 59,
+      "period_text": "5.1-5.20",
+      "store_name": "桐贝美妆",
+      "barcode": "6970356169321",
+      "product_name": "参半可益清牙膏葡见茶爽120g",
+      "quantity": 29,
+      "unit_price": 29.9,
+      "amount_cell": "=E59*F59",
+      "settlement_line_no": 7,
+      "settlement_product_name": "可益清牙膏葡见茶爽牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 87
+    },
+    {
+      "excel_row": 62,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356164388",
+      "product_name": "参半臻白牙膏1+2特享装",
+      "quantity": 24,
+      "unit_price": 29.9,
+      "amount_cell": "=E62*F62",
+      "settlement_line_no": 4,
+      "settlement_product_name": "1+2臻白套盒",
+      "unit_reward": 3,
+      "expected_reward_amount": 72
+    },
+    {
+      "excel_row": 63,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356164296",
+      "product_name": "参半清新牙膏120g动感薄荷",
+      "quantity": 24,
+      "unit_price": 29.9,
+      "amount_cell": "=E63*F63",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 64,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356164289",
+      "product_name": "参半美白牙膏120g香域茉莉味",
+      "quantity": 28,
+      "unit_price": 29.9,
+      "amount_cell": "=E64*F64",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 65,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356166832",
+      "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+      "quantity": 37,
+      "unit_price": 24.9,
+      "amount_cell": "=E65*F65",
+      "settlement_line_no": 1,
+      "settlement_product_name": "羟基磷灰石修复牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 111
+    },
+    {
+      "excel_row": 66,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356162391",
+      "product_name": "参半沸石净齿牙膏140g清新苍兰",
+      "quantity": 49,
+      "unit_price": 29.9,
+      "amount_cell": "=E66*F66",
+      "settlement_line_no": 2,
+      "settlement_product_name": "沸石净齿牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 147
+    },
+    {
+      "excel_row": 67,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356162810",
+      "product_name": "参半沸石美白牙膏140g海角雏菊",
+      "quantity": 33,
+      "unit_price": 29.9,
+      "amount_cell": "=E67*F67",
+      "settlement_line_no": 3,
+      "settlement_product_name": "沸石美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 99
+    },
+    {
+      "excel_row": 68,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356164395",
+      "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+      "quantity": 36,
+      "unit_price": 19.9,
+      "amount_cell": "=E68*F68",
+      "settlement_line_no": 5,
+      "settlement_product_name": "光白酵素1+1超值装牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 69,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356162636",
+      "product_name": "参半专研清新美白牙膏100g",
+      "quantity": 54,
+      "unit_price": 29.9,
+      "amount_cell": "=E69*F69",
+      "settlement_line_no": 8,
+      "settlement_product_name": "专研清新美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 162
+    },
+    {
+      "excel_row": 70,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356169338",
+      "product_name": "参半可益白牙膏葡萄知梨120g",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E70*F70",
+      "settlement_line_no": 6,
+      "settlement_product_name": "可益白牙膏葡萄知梨牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 71,
+      "period_text": "5.1-5.20",
+      "store_name": "时尚密码",
+      "barcode": "6970356169321",
+      "product_name": "参半可益清牙膏葡见茶爽120g",
+      "quantity": 44,
+      "unit_price": 29.9,
+      "amount_cell": "=E71*F71",
+      "settlement_line_no": 7,
+      "settlement_product_name": "可益清牙膏葡见茶爽牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 132
+    },
+    {
+      "excel_row": 74,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356164388",
+      "product_name": "参半臻白牙膏1+2特享装",
+      "quantity": 18,
+      "unit_price": 29.9,
+      "amount_cell": "=E74*F74",
+      "settlement_line_no": 4,
+      "settlement_product_name": "1+2臻白套盒",
+      "unit_reward": 3,
+      "expected_reward_amount": 54
+    },
+    {
+      "excel_row": 75,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356164296",
+      "product_name": "参半清新牙膏120g动感薄荷",
+      "quantity": 48,
+      "unit_price": 29.9,
+      "amount_cell": "=E75*F75",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 76,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356164289",
+      "product_name": "参半美白牙膏120g香域茉莉味",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E76*F76",
+      "settlement_line_no": null,
+      "settlement_product_name": null,
+      "unit_reward": null,
+      "expected_reward_amount": null
+    },
+    {
+      "excel_row": 77,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356166832",
+      "product_name": "参半羟基磷灰石牙膏100g满陇桂雨味",
+      "quantity": 28,
+      "unit_price": 24.9,
+      "amount_cell": "=E77*F77",
+      "settlement_line_no": 1,
+      "settlement_product_name": "羟基磷灰石修复牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 84
+    },
+    {
+      "excel_row": 78,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356162391",
+      "product_name": "参半沸石净齿牙膏140g清新苍兰",
+      "quantity": 37,
+      "unit_price": 29.9,
+      "amount_cell": "=E78*F78",
+      "settlement_line_no": 2,
+      "settlement_product_name": "沸石净齿牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 111
+    },
+    {
+      "excel_row": 79,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356162810",
+      "product_name": "参半沸石美白牙膏140g海角雏菊",
+      "quantity": 44,
+      "unit_price": 29.9,
+      "amount_cell": "=E79*F79",
+      "settlement_line_no": 3,
+      "settlement_product_name": "沸石美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 132
+    },
+    {
+      "excel_row": 80,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356164395",
+      "product_name": "参半极光白酵素1+1超值装牙膏(极光白160g+龙井100g)",
+      "quantity": 24,
+      "unit_price": 19.9,
+      "amount_cell": "=E80*F80",
+      "settlement_line_no": 5,
+      "settlement_product_name": "光白酵素1+1超值装牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 72
+    },
+    {
+      "excel_row": 81,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356162636",
+      "product_name": "参半专研清新美白牙膏100g",
+      "quantity": 36,
+      "unit_price": 29.9,
+      "amount_cell": "=E81*F81",
+      "settlement_line_no": 8,
+      "settlement_product_name": "专研清新美白牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 108
+    },
+    {
+      "excel_row": 82,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356169338",
+      "product_name": "参半可益白牙膏葡萄知梨120g",
+      "quantity": 42,
+      "unit_price": 29.9,
+      "amount_cell": "=E82*F82",
+      "settlement_line_no": 6,
+      "settlement_product_name": "可益白牙膏葡萄知梨牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 126
+    },
+    {
+      "excel_row": 83,
+      "period_text": "5.1-5.20",
+      "store_name": "大物集美",
+      "barcode": "6970356169321",
+      "product_name": "参半可益清牙膏葡见茶爽120g",
+      "quantity": 29,
+      "unit_price": 29.9,
+      "amount_cell": "=E83*F83",
+      "settlement_line_no": 7,
+      "settlement_product_name": "可益清牙膏葡见茶爽牙膏",
+      "unit_reward": 3,
+      "expected_reward_amount": 87
+    }
+  ],
+  "store_transfer_reconciliation": [
+    {
+      "store_name": "云朵饰品",
+      "excel_quantity": 345,
+      "expected_reward_amount": 786,
+      "transfer_id": null,
+      "transfer_amount": null,
+      "amount_difference": null,
+      "match_basis": null,
+      "identity_status": "unmatched",
+      "status": "unmatched"
+    },
+    {
+      "store_name": "红梅名妆",
+      "excel_quantity": 352,
+      "expected_reward_amount": 915,
+      "transfer_id": null,
+      "transfer_amount": null,
+      "amount_difference": null,
+      "match_basis": null,
+      "identity_status": "unmatched",
+      "status": "unmatched"
+    },
+    {
+      "store_name": "丽源名妆",
+      "excel_quantity": 344,
+      "expected_reward_amount": 816,
+      "transfer_id": null,
+      "transfer_amount": null,
+      "amount_difference": null,
+      "match_basis": null,
+      "identity_status": "unmatched",
+      "status": "unmatched"
+    },
+    {
+      "store_name": "米菲精品",
+      "excel_quantity": 338,
+      "expected_reward_amount": 834,
+      "transfer_id": null,
+      "transfer_amount": null,
+      "amount_difference": null,
+      "match_basis": null,
+      "identity_status": "unmatched",
+      "status": "unmatched"
+    },
+    {
+      "store_name": "桐贝美妆",
+      "excel_quantity": 365,
+      "expected_reward_amount": 987,
+      "transfer_id": null,
+      "transfer_amount": null,
+      "amount_difference": null,
+      "match_basis": null,
+      "identity_status": "unmatched",
+      "status": "unmatched"
+    },
+    {
+      "store_name": "时尚密码",
+      "excel_quantity": 365,
+      "expected_reward_amount": 939,
+      "transfer_id": null,
+      "transfer_amount": null,
+      "amount_difference": null,
+      "match_basis": null,
+      "identity_status": "unmatched",
+      "status": "unmatched"
+    },
+    {
+      "store_name": "大物集美",
+      "excel_quantity": 342,
+      "expected_reward_amount": 774,
+      "transfer_id": null,
+      "transfer_amount": null,
+      "amount_difference": null,
+      "match_basis": null,
+      "identity_status": "unmatched",
+      "status": "unmatched"
+    }
+  ],
+  "transfer_evidence": [
+    {
+      "transfer_id": "transfer-001",
+      "amount": 1035,
+      "occurrence_count": 2,
+      "identity_visible": false,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": null,
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片.jpg"
+      ],
+      "dedup_basis": "Paired one right-side card marked 已被接收 with one left-side card marked 已收款 because they share amount 1035 and the corresponding first position in the repeated 1035/1056/1032 sequence. occurrence_count retains both visible cards; this is a screenshot-level two-view inference, not amount-only store matching.",
+      "notes": [
+        "The visible chat title is 业务团队, which does not identify an individual recipient or store.",
+        "Only weekday/time-style UI labels and a device clock are visible; no calendar transfer date or transaction identifier is shown."
+      ]
+    },
+    {
+      "transfer_id": "transfer-002",
+      "amount": 1056,
+      "occurrence_count": 2,
+      "identity_visible": false,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": null,
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片.jpg"
+      ],
+      "dedup_basis": "Paired one right-side card marked 已被接收 with one left-side card marked 已收款 because they share amount 1056 and the corresponding second position in the repeated 1035/1056/1032 sequence. occurrence_count retains both visible cards; this is a screenshot-level two-view inference, not amount-only store matching.",
+      "notes": [
+        "The visible chat title is 业务团队, which does not identify an individual recipient or store.",
+        "Only weekday/time-style UI labels and a device clock are visible; no calendar transfer date or transaction identifier is shown."
+      ]
+    },
+    {
+      "transfer_id": "transfer-003",
+      "amount": 1032,
+      "occurrence_count": 2,
+      "identity_visible": false,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": null,
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片.jpg"
+      ],
+      "dedup_basis": "Paired one right-side card marked 已被接收 with one left-side card marked 已收款 because they share amount 1032 and the corresponding third position in the repeated 1035/1056/1032 sequence. occurrence_count retains both visible cards; this is a screenshot-level two-view inference, not amount-only store matching.",
+      "notes": [
+        "The visible chat title is 业务团队, which does not identify an individual recipient or store.",
+        "Only weekday/time-style UI labels and a device clock are visible; no calendar transfer date or transaction identifier is shown."
+      ]
+    },
+    {
+      "transfer_id": "transfer-004",
+      "amount": 1014,
+      "occurrence_count": 2,
+      "identity_visible": true,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": "闫志文",
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片2.jpg"
+      ],
+      "dedup_basis": "Paired the first right-side 1014 card marked 已被接收 with the first left-side 1014 card marked 已收款 based on identical amount and corresponding position in the repeated transfer multiset. occurrence_count retains both visible cards; no store assignment was made.",
+      "notes": [
+        "The chat header visibly reads 同事 市场部 闫志文; recipient_name records only the visible name 闫志文 and does not establish a link to any Excel store.",
+        "The device clock 10:54 is visible, but no calendar transfer date or transaction identifier is shown."
+      ]
+    },
+    {
+      "transfer_id": "transfer-005",
+      "amount": 1095,
+      "occurrence_count": 2,
+      "identity_visible": true,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": "闫志文",
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片2.jpg"
+      ],
+      "dedup_basis": "The screenshot contains two right-side 1095 cards and two left-side 1095 cards, so two underlying same-amount transfers are retained. This entry represents one count-based pairing of one right and one left occurrence; exact pairing between the identical 1095 cards is visually indistinguishable.",
+      "notes": [
+        "The chat header visibly reads 同事 市场部 闫志文; recipient_name records only the visible name 闫志文 and does not establish a link to any Excel store.",
+        "Among the four 1095 occurrences, one left-side card is partially cropped by the bottom input bar; because the same-amount transactions are indistinguishable, that crop limitation cannot be assigned to one specific transfer.",
+        "No calendar transfer date or transaction identifier is shown."
+      ]
+    },
+    {
+      "transfer_id": "transfer-006",
+      "amount": 1095,
+      "occurrence_count": 2,
+      "identity_visible": true,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": "闫志文",
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片2.jpg"
+      ],
+      "dedup_basis": "The screenshot contains two right-side 1095 cards and two left-side 1095 cards, so two underlying same-amount transfers are retained. This entry represents the second count-based pairing of one right and one left occurrence; exact pairing between the identical 1095 cards is visually indistinguishable.",
+      "notes": [
+        "The chat header visibly reads 同事 市场部 闫志文; recipient_name records only the visible name 闫志文 and does not establish a link to any Excel store.",
+        "Among the four 1095 occurrences, one left-side card is partially cropped by the bottom input bar; because the same-amount transactions are indistinguishable, that crop limitation cannot be assigned to one specific transfer.",
+        "No calendar transfer date or transaction identifier is shown."
+      ]
+    },
+    {
+      "transfer_id": "transfer-007",
+      "amount": 1026,
+      "occurrence_count": 2,
+      "identity_visible": true,
+      "event_date_visible": false,
+      "store_name": null,
+      "recipient_name": "闫志文",
+      "transfer_date": null,
+      "source_files": [
+        "雨瑶人员激励红包图片2.jpg"
+      ],
+      "dedup_basis": "Paired the right-side 1026 card marked 已被接收 with the left-side 1026 card marked 已收款 based on identical amount and the repeated transfer multiset. occurrence_count retains both visible cards; no store assignment was made.",
+      "notes": [
+        "The chat header visibly reads 同事 市场部 闫志文; recipient_name records only the visible name 闫志文 and does not establish a link to any Excel store.",
+        "The device clock 10:54 is visible, but no calendar transfer date or transaction identifier is shown."
+      ]
+    }
+  ],
+  "image_inventory": {
+    "directory": null,
+    "file_count": 3,
+    "files": [
+      {
+        "file_name": "郑州雨瑶5.1-5.20人员激励活动结算单.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\sources\\personnel_incentive\\郑州雨瑶5.1-5.20人员激励活动结算单.jpg",
+        "size": 645182,
+        "width": 1920,
+        "height": 1080,
+        "sha256": "898a8061a91af8d681ccdb650b43a07a42b96272407ba249dd64dc53b4bbc4e6",
+        "dhash": "84a9a99f93a6aeba",
+        "phash": "d5f1828fc49e9332",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "雨瑶人员激励红包图片.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\sources\\personnel_incentive\\雨瑶人员激励红包图片.jpg",
+        "size": 194094,
+        "width": 1280,
+        "height": 2774,
+        "sha256": "8aeda7f356dcf9123086cb55e6e60b4fc2049bfeaf784513dffcffa6f15b2529",
+        "dhash": "c884e470f9f1e969",
+        "phash": "872ef460ead5ea41",
+        "exif_datetime": null,
+        "gps_present": false
+      },
+      {
+        "file_name": "雨瑶人员激励红包图片2.jpg",
+        "absolute_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\sources\\personnel_incentive\\雨瑶人员激励红包图片2.jpg",
+        "size": 192057,
+        "width": 1280,
+        "height": 2774,
+        "sha256": "de4aa8f6d75027e207571fcf365ed5d805a350ff7622b45f29bc7d803db8c8ca",
+        "dhash": "c4c4e470f9f9e949",
+        "phash": "870ef568ea55aa51",
+        "exif_datetime": null,
+        "gps_present": false
+      }
+    ],
+    "exact_duplicate_groups": [],
+    "same_dhash_groups": [],
+    "same_phash_groups": [],
+    "phash_candidate_pairs": [
+      {
+        "files": [
+          "雨瑶人员激励红包图片.jpg",
+          "雨瑶人员激励红包图片2.jpg"
+        ],
+        "distance": 6
+      }
+    ],
+    "cross_activity_reuse_checked": false,
+    "files_with_exif_datetime": 0,
+    "files_with_gps": 0
+  },
+  "unmatched_sales_skus": [
+    {
+      "barcode": "6970356164296",
+      "product_name": "参半清新牙膏120g动感薄荷",
+      "quantity": 244,
+      "excel_rows": [
+        3,
+        15,
+        27,
+        39,
+        51,
+        63,
+        75
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 48
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 47
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 48
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 24
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 18
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 36
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 23
+        }
+      ]
+    },
+    {
+      "barcode": "6970356164289",
+      "product_name": "参半美白牙膏120g香域茉莉味",
+      "quantity": 190,
+      "excel_rows": [
+        4,
+        16,
+        28,
+        40,
+        52,
+        64,
+        76
+      ],
+      "store_quantities": [
+        {
+          "store_name": "丽源名妆",
+          "quantity": 24
+        },
+        {
+          "store_name": "云朵饰品",
+          "quantity": 36
+        },
+        {
+          "store_name": "大物集美",
+          "quantity": 36
+        },
+        {
+          "store_name": "时尚密码",
+          "quantity": 28
+        },
+        {
+          "store_name": "桐贝美妆",
+          "quantity": 18
+        },
+        {
+          "store_name": "米菲精品",
+          "quantity": 24
+        },
+        {
+          "store_name": "红梅名妆",
+          "quantity": 24
+        }
+      ]
+    }
+  ],
+  "exceptions": [
+    {
+      "severity": "high",
+      "code": "SETTLEMENT_SKU_UNMAPPED",
+      "message": "结算单第9行“SP-4 美白牙膏”未映射到销售Excel条码。",
+      "impact": "无法执行逐SKU销售数量核对。",
+      "suggestion": "补充条码或由业务人员确认唯一商品映射。",
+      "source": "settlement line 9"
+    },
+    {
+      "severity": "high",
+      "code": "SETTLEMENT_SKU_UNMAPPED",
+      "message": "结算单第10行“SP-4 清新牙膏”未映射到销售Excel条码。",
+      "impact": "无法执行逐SKU销售数量核对。",
+      "suggestion": "补充条码或由业务人员确认唯一商品映射。",
+      "source": "settlement line 10"
+    },
+    {
+      "severity": "high",
+      "code": "EXCEL_SKU_NOT_ON_SETTLEMENT",
+      "message": "销售Excel有2个SKU未进入结算单逐项映射。",
+      "impact": "Excel总销量与结算范围可能不一致。",
+      "suggestion": "确认未结算SKU是否属于本活动；如属于，补充或更正结算单。",
+      "source": "6970356164296,6970356164289"
+    },
+    {
+      "severity": "medium",
+      "code": "CLAIM_DIFFERS_FROM_SETTLEMENT_LINES",
+      "message": "实际核销金额7350.00与结算单逐行合计7353.00相差-3.00元。",
+      "impact": "需要明确人工调整、舍尾或扣减口径。",
+      "suggestion": "提供差额说明并在审批记录中保留调整依据。"
+    },
+    {
+      "severity": "medium",
+      "code": "TRANSFER_STORE_IDENTITY_NOT_VISIBLE",
+      "message": "转账截图未显示可核验的门店/收款人身份，只能按金额集合勾稽。",
+      "impact": "无法证明每笔款项实际支付给对应门店。",
+      "suggestion": "补充显示收款人、门店映射和交易单号的转账详情。"
+    },
+    {
+      "severity": "medium",
+      "code": "TRANSFER_DATE_NOT_VISIBLE",
+      "message": "转账截图未显示完整交易日期。",
+      "impact": "无法独立确认付款发生在活动结算周期内。",
+      "suggestion": "补充带交易日期和交易单号的明细。"
+    },
+    {
+      "severity": "high",
+      "code": "TRANSFER_AMOUNT_MULTISET_MISMATCH",
+      "message": "有7家门店预期金额或7笔转账无法按金额集合匹配。",
+      "impact": "付款证据不能完整覆盖门店应付金额。",
+      "suggestion": "核对缺失、重复或金额错误的转账凭证。"
+    }
+  ],
+  "model_usage": {
+    "schema_version": "1.0",
+    "provider": "codex_cli",
+    "model": "default",
+    "model_invocation_count": 1,
+    "successful_invocation_count": 1,
+    "failed_invocation_count": 0,
+    "retry_count": 0,
+    "input_tokens": 2294089,
+    "cached_input_tokens": 2124672,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 45590,
+    "reasoning_output_tokens": 22309,
+    "total_tokens": 2339679,
+    "attempts": [
+      {
+        "attempt_no": 1,
+        "status": "success",
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 2294089,
+          "cached_input_tokens": 2124672,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 45590,
+          "reasoning_output_tokens": 22309,
+          "total_tokens": 2339679
+        }
+      }
+    ],
+    "case_id": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
+    "scenario": "personnel_incentive"
+  }
+}

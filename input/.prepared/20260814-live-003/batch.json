@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "offline-audit-20260814-live-003",
+  "excel_name": "20260814-live-003-线下活动核销结果.xlsx",
+  "cases": [
+    {
+      "case": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\cases\\personnel-incentive-case.json"
+    },
+    {
+      "case": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-live-003\\cases\\promotional-display-case.json"
+    }
+  ]
+}

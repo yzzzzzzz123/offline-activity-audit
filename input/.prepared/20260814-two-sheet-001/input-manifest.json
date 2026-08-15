@@ -1,0 +1,180 @@
+{
+  "schema_version": "1.0",
+  "run_id": "20260814-two-sheet-001",
+  "input_dir": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input",
+  "prepared_root": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001",
+  "batch_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\batch.json",
+  "routing": {
+    "personnel_incentive": {
+      "archive": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励.zip",
+      "archive_sha256": "d0f5754effbd4ad45db4d048da9dfd9c69bfebfc957cff78c7c15420c298a15f",
+      "scenario": "personnel_incentive",
+      "child_skill": "audit-personnel-incentive",
+      "case_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\cases\\personnel-incentive-case.json"
+    },
+    "promotional_display": {
+      "archive": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\SQ202603300076-HX202606040013-核销资料-诚成26年4月【堆头20家】.zip",
+      "archive_sha256": "21216fbbf454cc0d2c59f1a55222d9e5d5b4887cccc3282a920251165d3af97a",
+      "scenario": "promotional_display",
+      "child_skill": "audit-promotional-display",
+      "case_path": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\cases\\promotional-display-case.json"
+    }
+  },
+  "extractions": {
+    "personnel_incentive": {
+      "archive": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励.zip",
+      "archive_bytes": 970440,
+      "archive_sha256": "d0f5754effbd4ad45db4d048da9dfd9c69bfebfc957cff78c7c15420c298a15f",
+      "extraction_root": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\sources\\personnel_incentive",
+      "file_count": 4,
+      "expanded_bytes": 1045724,
+      "files": [
+        {
+          "path": "郑州雨瑶5.1-5.20人员激励活动结算单.jpg",
+          "bytes": 645182,
+          "sha256": "898a8061a91af8d681ccdb650b43a07a42b96272407ba249dd64dc53b4bbc4e6"
+        },
+        {
+          "path": "雨瑶人员激励参半销售数据2.xlsx",
+          "bytes": 14391,
+          "sha256": "5e1ac08e1c79fd721e2f0dcf60e09763452943309163bb2079e424b77837b5a6"
+        },
+        {
+          "path": "雨瑶人员激励红包图片.jpg",
+          "bytes": 194094,
+          "sha256": "8aeda7f356dcf9123086cb55e6e60b4fc2049bfeaf784513dffcffa6f15b2529"
+        },
+        {
+          "path": "雨瑶人员激励红包图片2.jpg",
+          "bytes": 192057,
+          "sha256": "de4aa8f6d75027e207571fcf365ed5d805a350ff7622b45f29bc7d803db8c8ca"
+        }
+      ]
+    },
+    "promotional_display": {
+      "archive": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\SQ202603300076-HX202606040013-核销资料-诚成26年4月【堆头20家】.zip",
+      "archive_bytes": 43430687,
+      "archive_sha256": "21216fbbf454cc0d2c59f1a55222d9e5d5b4887cccc3282a920251165d3af97a",
+      "extraction_root": "C:\\Users\\EDY\\Desktop\\新建文件夹\\offline-activity-audit\\input\\.prepared\\20260814-two-sheet-001\\sources\\promotional_display",
+      "file_count": 23,
+      "expanded_bytes": 43452756,
+      "files": [
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/2026年4月销售明细20260509164207765.xlsx",
+          "bytes": 30213,
+          "sha256": "0504612568924d6686a2b752f56a5ff102fe727f901fbc631d808bd7cbfc3b48"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/1.厚街汉邦66广场家家欣.jpg",
+          "bytes": 491884,
+          "sha256": "2bc5b681403c0d0e05ba6394449fd73b18e211370dbdfc3b1e3166678fb33aad"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/10-1挺拇指生活超市(横沥店).jpg",
+          "bytes": 767287,
+          "sha256": "f12dd735b31b0e3be209767b443a5dde76af047139821839e1c380befa2f17ba"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/10-2挺拇指生活超市(横沥店).jpg",
+          "bytes": 872772,
+          "sha256": "1d4f8b92c71131ea2dbe09e06cff7496a82afca0ba4d7fced7ab272948670884"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/11.人人购物荟和超市.jpg",
+          "bytes": 3431541,
+          "sha256": "7cf34a44ba05a348179771b0c36be20c19f6a0a76fb0c72fc6742c1070011f87"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/12.三乐购物广场(森扬商业广场店).jpg",
+          "bytes": 2609173,
+          "sha256": "817e1b01120475a5f72ab39bce2334a3f0c5d2d7c66d02b0d02e648e70bca0e9"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/13.沙井九龙.jpg",
+          "bytes": 2762473,
+          "sha256": "bea6157436ef7f0a45babca793b9fc67e06ac2beacd1b9eae36c44097b0e3888"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/14.润家连锁超市(美联购物中心店).jpg",
+          "bytes": 501429,
+          "sha256": "0589b66788746499b68c9813b97ef042c2d1a239cd70be63056d57f4a9587fe5"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/15。石岩百佳华.jpg",
+          "bytes": 501947,
+          "sha256": "9845f5c8c808e139ae93bf4a163372cf5e54e7aeb39a8dfbfa1d0aa47e5dfca8"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/16.田心金正和.jpg",
+          "bytes": 762202,
+          "sha256": "f00f97dc46a52568db5b292f7edb26bedfbc0d6f786e746acea6a56940a7c500"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/17·荟和超市(莹展荟店).jpg",
+          "bytes": 420260,
+          "sha256": "c6a9ac8b3b620adf996334ec432e725c45b4e302c481354caa4959a97c6f1ef1"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/18.三乐购物广场(坦洲店).jpg",
+          "bytes": 511770,
+          "sha256": "61f0c8113bfbfafd9cc02a2ae69881cb8cc456e911c32c78ba618ab3467153fe"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/19.福源大康惠.jpg",
+          "bytes": 760801,
+          "sha256": "a83b7852588f47ff9fc8c43791eab025aa930eb7efa97d4da13cd54024be754c"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/2.松岗百佳华.jpg",
+          "bytes": 2775745,
+          "sha256": "12b86e89b2996c4ee22ce55cfa65249237f10c2651963f0a74d6748f6fbdf29f"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/20.好多宝精选超市(龙眼市场店).jpg",
+          "bytes": 380438,
+          "sha256": "a2bc6e9f7833a6b2dace149843649c6c2a6b5988e04def5a9bc64d4b2b8740fc"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/3.公明百佳华.jpg",
+          "bytes": 676711,
+          "sha256": "334f7fe95b8f70a59cf89c0e2b65a47ba1a19c70d8b1695a51ecd59bdce07463"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/4.新桥百佳华.jpg",
+          "bytes": 123308,
+          "sha256": "df7c36d02303fc3b8df13e63888d0dcfed56860ca91d2a86501f67168d32c3ff"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/5.华都超市(东坑大道北店).jpg",
+          "bytes": 439863,
+          "sha256": "61e7f18669fe68e0686638d9bf53e6e488e8ce9ccb78192cdb6647915337dad0"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/6.东浦金正和.jpg",
+          "bytes": 1084548,
+          "sha256": "5443f87d47fe6646e5da357f0e53a41c8934f58255619fe749eae9b7ad9596a0"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/7.宝安优城店.jpg",
+          "bytes": 434133,
+          "sha256": "80ff9c92a5eb1b780e9b0002a5d99c5239d71f592406992133c1e49e77e5834f"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/8.虎门赤岗家家欣.jpg",
+          "bytes": 129411,
+          "sha256": "a397af48c29cc108f54a66ac21d7aec414e79f20838ee3bb2e4851619d1f9e0a"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/堆头照片/9.花都宜多.jpg",
+          "bytes": 830839,
+          "sha256": "37a3bb4647855bff6147f370f02897142fb739c3b1f015546c9701327ca79c87"
+        },
+        {
+          "path": "核销资料-诚成26年4月【堆头20家】/诚成4月堆头陈列-经销商签订促销合同.pdf",
+          "bytes": 22154008,
+          "sha256": "15ac05c881cda510b1d24743a2ae7ef7e19e5e78946b4407e6e57200cbb6a75a"
+        }
+      ]
+    }
+  }
+}

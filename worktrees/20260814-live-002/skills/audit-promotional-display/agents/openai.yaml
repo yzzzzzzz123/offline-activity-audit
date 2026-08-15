@@ -1,0 +1,4 @@
+interface:
+  display_name: "Promotional Display Audit"
+  short_description: "Verify display evidence and support amount store by store"
+  default_prompt: "Use $audit-promotional-display to audit this display claim in an isolated Git worktree."
