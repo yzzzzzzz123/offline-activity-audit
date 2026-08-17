@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "run_id": "20260817-full-001",
+  "mode": "batch",
+  "status": "completed",
+  "started_at": "2026-08-17T06:36:55+00:00",
+  "snapshot_commit": "8eebf95da05d9f84e0f5b0fad9c7b74dd7f4f8a5",
+  "completed_at": "2026-08-17T07:17:59+00:00",
+  "delivery": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-full-001\\output\\delivery.json"
+}

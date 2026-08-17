@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "action": "allocate_worktree",
+  "required_actor": "trusted_supervisor",
+  "run_id": "20260817-full-001",
+  "branch": "run/offline-audit/20260817-full-001",
+  "worktree": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-full-001",
+  "main_workspace": {
+    "head": "b385a1bf3f377d0a07316d941e45574cfb9b5b3e",
+    "branch": "main",
+    "index_tree": "57d90c31891ae2b807c9f56dc336d5ff74e58c5a",
+    "snapshot_tree": "373d9ca2456d253b750504aec6b19b6ba4d25fc2",
+    "status_sha256": "c1921e8f701dbed4d05b059015e0d0a49de3863f965e9075b28947d3e14222b6",
+    "dirty": true,
+    "untracked_gate": {
+      "status": "passed",
+      "untracked_count": 1,
+      "sensitive_count": 0,
+      "symlink_count": 0,
+      "oversized_count": 0
+    },
+    "state_sha256": "810f5bd76a459a7068a2f9dde04b8aab4bfa3a8cbe3f460b9bbae6318f016616"
+  },
+  "gates": {
+    "repository": "passed",
+    "identity_available": "passed",
+    "untracked_input_safety": "passed",
+    "isolated_index_snapshot": "passed"
+  },
+  "preflight_sha256": "69920295ab12f0b789cf5b1d8184ab0ba3e63effeaf2e34acc03d379dd49462e"
+}
