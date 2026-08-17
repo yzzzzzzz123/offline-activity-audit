@@ -1956,6 +1956,216 @@ def _add_display_audit_sheet(
     return ws
 
 
+def _add_human_personnel_sheet(
+    wb: Workbook,
+    result: dict[str, Any],
+    input_manifest: dict[str, Any] | None,
+) -> Any:
+    del input_manifest
+    ws = wb.create_sheet("人员激励核销")
+    summary = result["summary"]
+    sales = result["sales"]
+    settlement = result["settlement"]
+    screenshot_files = sorted(
+        {
+            Path(str(file_name)).name
+            for item in result.get("transfer_evidence") or []
+            for file_name in item.get("source_files") or []
+        }
+    )
+    _style_title(
+        ws,
+        "人员激励核销（简明对比）",
+        6,
+        "销售Excel由代码读取；结算单和转账截图由OCR/AI识别。逐商品比较Excel与结算单，最后比较三方金额。",
+    )
+    headers = [
+        "核验对象",
+        f"销售Excel（代码读取）\n{Path(str(sales['source_file'])).name}",
+        f"结算单（OCR/AI识别）\n{Path(str(settlement['source_file'])).name}",
+        "转账凭证（OCR/AI识别）\n" + "、".join(screenshot_files),
+        "具体对比结果",
+        "结论",
+    ]
+    header_row = 3
+    _header(ws, header_row, headers)
+    row = header_row + 1
+    for item in result["sku_reconciliation"]:
+        quantity_diff = item["quantity_difference"]
+        amount_diff = item["settlement_line_amount_difference"]
+        mapping_verified = str(item["mapping_confidence"]) == "high"
+        conclusion = "匹配" if mapping_verified else "金额匹配，商品身份未验证"
+        values = [
+            f"结算第{item['line_no']}行\n{item['settlement_product_name']}",
+            f"条码：{item['mapped_barcode']}\n数量：{item['excel_quantity']}\n计算奖励：{item['calculated_settlement_reward']}元",
+            f"OCR商品：{item['settlement_product_name']}\n数量：{item['settlement_quantity']}\n行奖励：{item['settlement_reward_amount']}元",
+            "—（转账只核对总额）",
+            f"Excel ↔ 结算单\n数量差：{quantity_diff}\n金额差：{amount_diff}元",
+            conclusion,
+        ]
+        _write_row(ws, row, values, status_columns={6}, height=72)
+        row += 1
+
+    three_way_difference = max(
+        float(summary["calculated_line_reward"]),
+        float(summary["settlement_line_reward"]),
+        float(summary["transfer_total"]),
+    ) - min(
+        float(summary["calculated_line_reward"]),
+        float(summary["settlement_line_reward"]),
+        float(summary["transfer_total"]),
+    )
+    total_row = row
+    _write_row(
+        ws,
+        row,
+        [
+            "合计",
+            f"数量：{summary['excel_mapped_quantity']}\n计算奖励：{summary['calculated_line_reward']}元",
+            f"OCR数量：{summary['settlement_line_quantity']}\n行奖励合计：{summary['settlement_line_reward']}元",
+            f"OCR去重后转账合计：{summary['transfer_total']}元",
+            f"三方金额差：{three_way_difference:g}元",
+            "三方金额匹配" if three_way_difference == 0 else "金额不一致",
+        ],
+        status_columns={6},
+        height=60,
+    )
+    row += 1
+    claim_difference = float(summary["claimed_amount"]) - float(summary["transfer_total"])
+    _write_row(
+        ws,
+        row,
+        [
+            "实际申请金额",
+            "—",
+            f"OCR读取申请：{summary['claimed_amount']}元",
+            f"OCR读取转账：{summary['transfer_total']}元",
+            f"申请金额 - 转账金额：{claim_difference:g}元",
+            "需补证：说明金额差异" if claim_difference else "匹配",
+        ],
+        status_columns={6},
+        height=54,
+    )
+    row += 1
+    _write_row(
+        ws,
+        row,
+        [
+            "收款人与日期",
+            f"Excel读取到{summary['store_count']}家门店",
+            f"OCR读取活动期：{settlement.get('activity_start')} 至 {settlement.get('activity_end')}",
+            "截图金额可识别；门店对应关系和完整交易日期未显示",
+            "Excel门店 ↔ 转账收款人无法逐一确认",
+            "金额匹配，身份与日期未验证",
+        ],
+        status_columns={6},
+        height=60,
+    )
+    for col in range(1, 7):
+        ws.cell(total_row, col).fill = PatternFill("solid", fgColor=BLUE)
+        ws.cell(total_row, col).font = _font(bold=True, color=FORMULA_BLACK)
+    _freeze_filter(ws, header_row, row, 6)
+    _set_widths(ws, {1: 28, 2: 38, 3: 38, 4: 38, 5: 30, 6: 30})
+    ws.sheet_view.zoomScale = 85
+    ws.sheet_properties.tabColor = "70AD47"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.print_title_rows = "1:3"
+    return ws
+
+
+def _add_human_display_sheet(
+    wb: Workbook,
+    result: dict[str, Any],
+    input_manifest: dict[str, Any] | None,
+) -> Any:
+    del input_manifest
+    ws = wb.create_sheet("堆头核销")
+    summary = result["summary"]
+    contract = result["contract"]
+    sales = result["sales"]
+    sales_customers = "、".join(str(value) for value in sales.get("customers") or [])
+    sales_period = "、".join(str(value) for value in sales.get("period_values") or [])
+    _style_title(
+        ws,
+        "堆头陈列核销（简明对比）",
+        6,
+        "合同PDF由OCR/AI识别，销售Excel由代码读取，现场照片由AI/OCR逐张识别；每行直接显示三类材料怎样对比。",
+    )
+    headers = [
+        f"合同PDF（OCR/AI识别）\n{Path(str(contract['source_file'])).name}",
+        f"销售Excel（代码读取）\n{Path(str(sales['source_file'])).name}",
+        "现场照片（AI/OCR识别）\n逐张显示文件名和识别内容",
+        "与合同具体对比结果",
+        "核销金额",
+        "结论 / 需补材料",
+    ]
+    header_row = 3
+    _header(ws, header_row, headers)
+    row = header_row + 1
+    period_labels = {"match": "日期符合", "mismatch": "日期不符", "unverifiable": "日期未识别"}
+    store_labels = {
+        "exact": "地点符合",
+        "compatible": "地点基本符合",
+        "mismatch": "地点不符",
+        "filename_only": "地点仅见文件名",
+    }
+    display_labels = {"pass": "陈列符合", "fail": "陈列不符", "uncertain": "陈列看不清"}
+    duplicate_labels = {
+        "none": "未发现重复",
+        "exact": "照片重复",
+        "possible": "疑似重复",
+        "unverifiable": "重复情况无法判断",
+    }
+    for item in result["store_reconciliation"]:
+        photos = "、".join(Path(str(value)).name for value in item["photo_files"]) or "未提交照片"
+        period = period_labels.get(item["period_match"], str(item["period_match"]))
+        store = store_labels.get(item["store_match"], str(item["store_match"]))
+        display = display_labels.get(item["display_match"], str(item["display_match"]))
+        duplicate = duplicate_labels.get(item["duplicate_check"], str(item["duplicate_check"]))
+        passed = item["status"] == "pass"
+        advice = "；".join(item.get("supplement_advice") or [])
+        values = [
+            f"第{item['store_line_no']}家：{item['contract_store_name']}\n合同要求：{summary['fee_per_store']}元；{contract.get('display_standard')}",
+            f"读取客户：{sales_customers}\n读取期间：{sales_period}\n无门店明细，不能单独证明该店",
+            f"文件：{photos}\n识别日期：{item.get('visible_date') or '未识别'}\n识别地点：{item.get('visible_location') or '未识别'}\n{display}；{duplicate}",
+            f"照片 ↔ 合同门店/期间/陈列\n{period}；{store}；{display}；{duplicate}",
+            f"{item['supported_amount']}元",
+            "通过" if passed else f"需补证：{advice or '补充可核验的现场照片'}",
+        ]
+        _write_row(ws, row, values, status_columns={6}, height=96)
+        row += 1
+
+    total_row = row
+    _write_row(
+        ws,
+        row,
+        [
+            f"合计：合同{summary['contract_store_count']}家\n申报{summary['claimed_amount']}元",
+            f"Excel读取{summary['sales_sku_count']}个SKU\n数量{summary['sales_quantity']}；零售额{summary['sales_retail_amount']}元",
+            f"共识别{summary['photo_count']}张照片",
+            f"{summary['passed_store_count']}家通过；{summary['supplement_store_count']}家需补证",
+            f"建议核销{summary['suggested_approved_amount']}元\n暂缓{summary['temporarily_held_amount']}元",
+            "部分通过" if summary["supplement_store_count"] else "全部通过",
+        ],
+        status_columns={6},
+        height=66,
+    )
+    for col in range(1, 7):
+        ws.cell(total_row, col).fill = PatternFill("solid", fgColor=BLUE)
+        ws.cell(total_row, col).font = _font(bold=True, color=FORMULA_BLACK)
+    _freeze_filter(ws, header_row, row, 6)
+    _set_widths(ws, {1: 42, 2: 38, 3: 58, 4: 42, 5: 22, 6: 48})
+    ws.sheet_view.zoomScale = 75
+    ws.sheet_properties.tabColor = "ED7D31"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.print_title_rows = "1:3"
+    return ws
+
+
 def _create_legacy_combined_report(
     results: list[dict[str, Any]],
     output_path: str | Path,
@@ -2115,10 +2325,10 @@ def create_combined_report(
     workbook.remove(workbook.active)
     expected_sheets: list[str] = []
     if "personnel_incentive" in by_scenario:
-        _add_personnel_audit_sheet(workbook, by_scenario["personnel_incentive"], input_manifest)
+        _add_human_personnel_sheet(workbook, by_scenario["personnel_incentive"], input_manifest)
         expected_sheets.append("人员激励核销")
     if "promotional_display" in by_scenario:
-        _add_display_audit_sheet(workbook, by_scenario["promotional_display"], input_manifest)
+        _add_human_display_sheet(workbook, by_scenario["promotional_display"], input_manifest)
         expected_sheets.append("堆头核销")
     if workbook.sheetnames != expected_sheets:
         raise AuditError(
