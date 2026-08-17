@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "action": "worktree_allocated",
+  "requested_by": "trusted_supervisor",
+  "run_id": "20260817-simple-001",
+  "branch": "run/offline-audit/20260817-simple-001",
+  "path": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001",
+  "snapshot_commit": "e0810933cbb88a38d2ebfbfee2322e22a9c122a9",
+  "snapshot_tree": "c68d1bd3d05b582dc091a4472b0f0af81fb211d9",
+  "preflight_sha256": "24f2f72072ac93196eb3540e80d19ef7da251c602739fcf604e786927791343f",
+  "main_workspace_state_sha256": "2104024cf0d21fd40680a00aa086d61dc4b582dce477f2ae1d412f3858fa4bca"
+}

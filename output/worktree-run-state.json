@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "run_id": "20260817-simple-001",
+  "mode": "batch",
+  "status": "completed",
+  "started_at": "2026-08-17T07:54:31+00:00",
+  "snapshot_commit": "e0810933cbb88a38d2ebfbfee2322e22a9c122a9",
+  "completed_at": "2026-08-17T07:54:36+00:00",
+  "delivery": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001\\output\\delivery.json"
+}

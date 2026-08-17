@@ -1,0 +1,25 @@
+{
+  "batch_id": "offline-audit-simple-v2",
+  "run_id": "20260817-simple-001",
+  "run_dir": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001\\output\\runs\\offline-audit-simple-v2\\20260817-simple-001",
+  "excel_report": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001\\output\\20260817-simple-001-线下活动核销结果.xlsx",
+  "cases": [
+    {
+      "case_id": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
+      "run_dir": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001\\output\\runs\\offline-audit-simple-v2\\20260817-simple-001\\cases\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
+      "result_json": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001\\output\\runs\\offline-audit-simple-v2\\20260817-simple-001\\cases\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive\\result\\audit-result.json"
+    },
+    {
+      "case_id": "SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display",
+      "run_dir": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001\\output\\runs\\offline-audit-simple-v2\\20260817-simple-001\\cases\\SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display",
+      "result_json": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001\\output\\runs\\offline-audit-simple-v2\\20260817-simple-001\\cases\\SQ202603300076-HX202606040013-核销资料-诚成26年4月-堆头20家--promotional-display\\result\\audit-result.json"
+    }
+  ],
+  "workbook_verification": {
+    "formula_count": 0,
+    "locations": [],
+    "static_formula_errors": [],
+    "cached_formula_errors": [],
+    "status": "success"
+  }
+}

@@ -1,0 +1,607 @@
+{
+  "schema_version": "1.0",
+  "scenario": "promotional_display",
+  "contract": {
+    "source_file": "核销资料-诚成26年4月【堆头20家】/诚成4月堆头陈列-经销商签订促销合同.pdf",
+    "customer_name": "东莞市诚成行供应链管理有限公司",
+    "activity_start": "2026-04-01",
+    "activity_end": "2026-04-30",
+    "display_standard": "1平方米堆头或4纵陈列",
+    "fee_per_store": 1000,
+    "claimed_amount": 20000,
+    "seal_visible": true,
+    "stores": [
+      {
+        "line_no": 1,
+        "store_name": "66广场家家欣",
+        "address": null
+      },
+      {
+        "line_no": 2,
+        "store_name": "百佳华松岗店",
+        "address": null
+      },
+      {
+        "line_no": 3,
+        "store_name": "百佳华百货（公明店）",
+        "address": null
+      },
+      {
+        "line_no": 4,
+        "store_name": "百佳华佳漾汇（新桥店）",
+        "address": null
+      },
+      {
+        "line_no": 5,
+        "store_name": "华都超市（东坑大道北店）",
+        "address": null
+      },
+      {
+        "line_no": 6,
+        "store_name": "金大福（东浦金正和总店）",
+        "address": null
+      },
+      {
+        "line_no": 7,
+        "store_name": "古原千禧（U·ONE 优城店）",
+        "address": null
+      },
+      {
+        "line_no": 8,
+        "store_name": "虎门家家欣",
+        "address": null
+      },
+      {
+        "line_no": 9,
+        "store_name": "花都宜多",
+        "address": null
+      },
+      {
+        "line_no": 10,
+        "store_name": "挺拇指生活超市（横沥店）",
+        "address": null
+      },
+      {
+        "line_no": 11,
+        "store_name": "人人购物广场荟和二店",
+        "address": null
+      },
+      {
+        "line_no": 12,
+        "store_name": "三乐购物广场（森扬商业广场店）",
+        "address": null
+      },
+      {
+        "line_no": 13,
+        "store_name": "沙井九龙",
+        "address": null
+      },
+      {
+        "line_no": 14,
+        "store_name": "润家连锁超市（美联购物中心店）",
+        "address": null
+      },
+      {
+        "line_no": 15,
+        "store_name": "百佳华（石岩店）",
+        "address": null
+      },
+      {
+        "line_no": 16,
+        "store_name": "田心金正和",
+        "address": null
+      },
+      {
+        "line_no": 17,
+        "store_name": "荟和超市（莹展荟店）",
+        "address": null
+      },
+      {
+        "line_no": 18,
+        "store_name": "三乐购物广场（坦洲店）",
+        "address": null
+      },
+      {
+        "line_no": 19,
+        "store_name": "大康惠福源商业广场",
+        "address": null
+      },
+      {
+        "line_no": 20,
+        "store_name": "好多宝精选超市（龙眼市场店）",
+        "address": null
+      }
+    ],
+    "notes": [
+      "合同第1页活动预算金额为20000元，执行周期为2026年4月1日至2026年4月30日。",
+      "合同第1页计算规则为“20家店×1平米堆头或4纵陈列×1000元/家”；涉及产品为“参半所有系列”。",
+      "合同第1页仅列门店名称或分店描述，未列门店地址。",
+      "合同第1页核销方式要求活动结束后提供真实有效凭证，如发票、小票、照片、POS数据等，审核无误后核销。",
+      "合同第2页市场费用结算单载明20个地堆、1000元/店/堆头、合计20000元；抬头为“致厦门参半商贸有限公司”，客户名称仍为“东莞市诚成行供应链管理有限公司”。",
+      "合同第1页和结算单第2页可见红色公章；seal_visible仅表示画面可见，不验证印章真伪。"
+    ]
+  },
+  "photo_reviews": [
+    {
+      "store_line_no": 1,
+      "contract_store_name": "66广场家家欣",
+      "photo_files": [
+        "1.厚街汉邦66广场家家欣.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "广东省东莞市厚街镇汉邦广场",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "画面水印独立显示厚街镇汉邦广场；该地点与合同门店名称存在广场名称关联，但合同未提供地址。文件名仅用于候选绑定，不作为独立日期或地点证明。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面完整显示参半商品占据多层、多列的落地堆头，符合可见的多层/4纵陈列特征；未根据照片估算实际平方米数。",
+        "合同名称“66广场家家欣”与水印“汉邦广场”并非文字一致，且未提供权威地址映射。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充66广场家家欣与厚街镇汉邦广场的门店地址、门头照片或官方门店映射。"
+      ]
+    },
+    {
+      "store_line_no": 2,
+      "contract_store_name": "百佳华松岗店",
+      "photo_files": [
+        "2.松岗百佳华.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市·百佳华超市(松岗百佳华商场店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示百佳华超市及松岗分店信息，与合同的百佳华松岗店在品牌和分店区域上相符。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示大型多层、多列参半商品堆头，陈列标准可见。",
+        "合同简称与水印完整店名存在格式差异。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "如需消除简称差异，补充该门店官方名称或地址资料。"
+      ]
+    },
+    {
+      "store_line_no": 3,
+      "contract_store_name": "百佳华百货（公明店）",
+      "photo_files": [
+        "3.公明百佳华.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市·百佳华佳漾汇(公明店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示百佳华佳漾汇公明店，与合同门店具有相同品牌和公明分店标识，但“百货”与“佳漾汇”的业态名称不同。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面完整显示多层参半商品落地陈列，达到可见的4纵/多层陈列要求。",
+        "未提供“百佳华百货（公明店）”与“百佳华佳漾汇(公明店)”的更名或同店证明。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充公明店官方名称、地址或更名/同店证明。"
+      ]
+    },
+    {
+      "store_line_no": 4,
+      "contract_store_name": "百佳华佳漾汇（新桥店）",
+      "photo_files": [
+        "4.新桥百佳华.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市宝安区新桥街道·百佳华佳漾汇(新桥店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示百佳华佳漾汇新桥店，与合同门店名称一致。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示多层、多列参半商品落地陈列。",
+        "图片分辨率为600×800，细节能力低于其余多数照片，但门店水印和陈列主体仍可辨认。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": []
+    },
+    {
+      "store_line_no": 5,
+      "contract_store_name": "华都超市（东坑大道北店）",
+      "photo_files": [
+        "5.华都超市(东坑大道北店).jpg"
+      ],
+      "visible_date": "2026-04-02",
+      "visible_location": "东莞市·华都超市(东坑大道北店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示华都超市东坑大道北店，与合同门店名称一致。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示多层、多列参半商品落地堆头。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": []
+    },
+    {
+      "store_line_no": 6,
+      "contract_store_name": "金大福（东浦金正和总店）",
+      "photo_files": [
+        "6.东浦金正和.jpg"
+      ],
+      "visible_date": null,
+      "visible_location": null,
+      "period_match": "unverifiable",
+      "store_match": "filename_only",
+      "display_match": "uncertain",
+      "duplicate_check": "none",
+      "mapping_basis": "画面没有可见日期或地点/门店水印；仅文件名“东浦金正和”提示与合同门店的候选关系，不能作为独立证明。",
+      "risk_notes": [
+        "无法从画面或EXIF验证拍摄日期是否在活动期内。",
+        "无法从画面或EXIF验证拍摄门店。",
+        "画面仅显示较小的参半主题陈列台和约两层商品，缺乏比例尺或完整全景，无法确认1平方米堆头或4纵陈列。",
+        "文件无可读取EXIF/GPS，且未进行水印真实性或像素级伪造分析。"
+      ],
+      "supplement_advice": [
+        "补充带清晰日期和门店名称/地址水印的原始现场照片。",
+        "补充包含完整堆头全景、层数或尺寸参照的照片，以验证陈列标准。"
+      ]
+    },
+    {
+      "store_line_no": 7,
+      "contract_store_name": "古原千禧（U·ONE 优城店）",
+      "photo_files": [
+        "7.宝安优城店.jpg"
+      ],
+      "visible_date": "2026-04-03",
+      "visible_location": "深圳市·古原千禧(优城店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示古原千禧优城店，与合同品牌及优城分店一致；水印省略了合同中的“U·ONE”。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示多层、多列参半商品落地陈列。",
+        "合同与水印店名存在“U·ONE”前缀差异。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "如需消除名称差异，补充优城店官方名称或地址资料。"
+      ]
+    },
+    {
+      "store_line_no": 8,
+      "contract_store_name": "虎门家家欣",
+      "photo_files": [
+        "8.虎门赤岗家家欣.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·赤岗家家欣商场",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示赤岗家家欣商场，与合同“虎门家家欣”具有相同门店品牌，但区域限定词不同。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示至少五层参半礼盒落地陈列。",
+        "合同“虎门”与水印“赤岗”之间未提供地址归属映射。",
+        "图片分辨率为600×800，但水印及陈列主体可辨认。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充赤岗家家欣属于合同虎门家家欣的地址或官方门店映射。"
+      ]
+    },
+    {
+      "store_line_no": 9,
+      "contract_store_name": "花都宜多",
+      "photo_files": [
+        "9.花都宜多.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "广东省广州市花都区炭步镇·炭步宜多百货",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示广州市花都区炭步镇宜多百货，与合同“花都宜多”在区域和门店品牌上相符。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面完整显示大型多层、多列商品堆头，其中参半产品占据多个可见陈列面。",
+        "合同使用区域简称，水印使用具体镇级门店名称。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "如需严格确认，补充花都宜多与炭步宜多百货的官方地址映射。"
+      ]
+    },
+    {
+      "store_line_no": 10,
+      "contract_store_name": "挺拇指生活超市（横沥店）",
+      "photo_files": [
+        "10-1挺拇指生活超市(横沥店).jpg",
+        "10-2挺拇指生活超市(横沥店).jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·南铭购物乐园",
+      "period_match": "match",
+      "store_match": "mismatch",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "两张照片的画面水印均独立显示“东莞市·南铭购物乐园”，与合同“挺拇指生活超市（横沥店）”名称不一致；文件名不能推翻可见地点冲突。",
+      "risk_notes": [
+        "两张照片的水印日期均位于合同活动期内。",
+        "两张照片从不同角度显示多层、多列参半商品陈列；SHA-256及感知指纹均不同，不是精确或近似重复。",
+        "可见地点指向南铭购物乐园，未提供其与合同门店为同一地址、店中店或更名关系的证明。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充南铭购物乐园与挺拇指生活超市横沥店的权威地址、店中店或更名映射；否则补交合同门店现场照片。"
+      ]
+    },
+    {
+      "store_line_no": 11,
+      "contract_store_name": "人人购物广场荟和二店",
+      "photo_files": [
+        "11.人人购物荟和超市.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市·荟和超市(人人购物同乐店)",
+      "period_match": "match",
+      "store_match": "mismatch",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示荟和超市人人购物同乐店；合同列示人人购物广场荟和二店，分店名称不一致且未提供映射。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面完整显示大型多层、多列参半商品堆头。",
+        "“同乐店”与“荟和二店”可能涉及别名或不同门店，但现有材料不能确认。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充人人购物同乐店与人人购物广场荟和二店的官方地址/别名映射；否则补交合同门店照片。"
+      ]
+    },
+    {
+      "store_line_no": 12,
+      "contract_store_name": "三乐购物广场（森扬商业广场店）",
+      "photo_files": [
+        "12.三乐购物广场(森扬商业广场店).jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·三乐购物广场(森扬商业广场店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示三乐购物广场森扬商业广场店，与合同门店名称一致。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示大型多层、多列参半商品落地陈列。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": []
+    },
+    {
+      "store_line_no": 13,
+      "contract_store_name": "沙井九龙",
+      "photo_files": [
+        "13.沙井九龙.jpg"
+      ],
+      "visible_date": "2026-04-29",
+      "visible_location": "深圳市·九龙购物中心(宝安沙井店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示九龙购物中心宝安沙井店，与合同“沙井九龙”在门店品牌和区域上相符。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示大型多层、多列参半商品落地堆头。",
+        "合同使用简称，水印使用完整购物中心名称。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "如需消除简称差异，补充九龙购物中心宝安沙井店的官方门店资料。"
+      ]
+    },
+    {
+      "store_line_no": 14,
+      "contract_store_name": "润家连锁超市（美联购物中心店）",
+      "photo_files": [
+        "14.润家连锁超市(美联购物中心店).jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市宝安区·深圳紫云快捷宾馆",
+      "period_match": "match",
+      "store_match": "mismatch",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示深圳紫云快捷宾馆，与合同润家连锁超市美联购物中心店不一致；文件名不能作为独立地点证明。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示多层、多列参半商品落地陈列。",
+        "可见地点为宾馆而非合同门店，且未提供商场、店中店或相邻地址映射。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充深圳紫云快捷宾馆位置与润家连锁超市美联购物中心店的权威地址关系；否则补交合同门店现场照片。"
+      ]
+    },
+    {
+      "store_line_no": 15,
+      "contract_store_name": "百佳华（石岩店）",
+      "photo_files": [
+        "15。石岩百佳华.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "广东省深圳市宝安区石岩街道佳华豪苑",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示深圳市宝安区石岩街道佳华豪苑，与合同石岩店的区域相符；水印未直接显示百佳华门店名称，文件名仅作候选线索。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面虽有轻微雾化/反光，但仍可见至少四层参半商品陈列。",
+        "合同未提供地址，无法仅凭现有材料确认佳华豪苑就是百佳华石岩店地址。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充百佳华石岩店位于佳华豪苑的官方地址、门头照片或门店清单映射。"
+      ]
+    },
+    {
+      "store_line_no": 16,
+      "contract_store_name": "田心金正和",
+      "photo_files": [
+        "16.田心金正和.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·金正和百货(田心文化商业广场店)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示金正和百货田心文化商业广场店，与合同“田心金正和”在品牌和区域上相符。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示大型多层、多列参半商品落地堆头。",
+        "合同使用简称，水印使用完整门店名称。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "如需消除简称差异，补充田心金正和的官方门店名称或地址。"
+      ]
+    },
+    {
+      "store_line_no": 17,
+      "contract_store_name": "荟和超市（莹展荟店）",
+      "photo_files": [
+        "17·荟和超市(莹展荟店).jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "深圳市·荟和超市(莹展荟店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示荟和超市莹展荟店，与合同门店名称一致。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示大型多层、多列参半商品落地堆头。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": []
+    },
+    {
+      "store_line_no": 18,
+      "contract_store_name": "三乐购物广场（坦洲店）",
+      "photo_files": [
+        "18.三乐购物广场(坦洲店).jpg"
+      ],
+      "visible_date": "2026-04-06",
+      "visible_location": "中山市·三乐购物广场(坦洲店)",
+      "period_match": "match",
+      "store_match": "exact",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示三乐购物广场坦洲店，与合同门店名称一致。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示至少四层、多列参半商品陈列。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": []
+    },
+    {
+      "store_line_no": 19,
+      "contract_store_name": "大康惠福源商业广场",
+      "photo_files": [
+        "19.福源大康惠.jpg"
+      ],
+      "visible_date": "2026-04-30",
+      "visible_location": "东莞市·福源商业广场",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示福源商业广场，与合同“大康惠福源商业广场”的核心商场名称相符，但水印省略“大康惠”。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示大型、多层、多面商品堆头，参半商品分布在多个陈列层。",
+        "合同与水印名称存在前缀省略，未提供官方简称映射。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充大康惠福源商业广场与福源商业广场的官方名称或地址映射。"
+      ]
+    },
+    {
+      "store_line_no": 20,
+      "contract_store_name": "好多宝精选超市（龙眼市场店）",
+      "photo_files": [
+        "20.好多宝精选超市(龙眼市场店).jpg"
+      ],
+      "visible_date": "2026-04-02",
+      "visible_location": "龙眼市场(龙眼路)",
+      "period_match": "match",
+      "store_match": "compatible",
+      "display_match": "pass",
+      "duplicate_check": "none",
+      "mapping_basis": "水印独立显示龙眼市场及龙眼路，与合同门店的龙眼市场分店标识相符；水印未直接显示好多宝精选超市名称，文件名仅作候选线索。",
+      "risk_notes": [
+        "水印日期位于合同活动期内。",
+        "画面显示至少四层、多列参半商品陈列。",
+        "合同未提供地址，现有水印只确认龙眼市场位置，未直接确认超市品牌。",
+        "照片无可读取EXIF/GPS；水印真实性及像素级伪造未验证。"
+      ],
+      "supplement_advice": [
+        "补充好多宝精选超市龙眼市场店位于龙眼市场（龙眼路）的官方地址或门头照片。"
+      ]
+    }
+  ],
+  "extraction_notes": [
+    "已检查配置中的全部来源：1份4页扫描PDF、1份Excel工作簿及photo_dir内21张JPEG；未修改源证据。",
+    "合同PDF SHA-256：15ac05c881cda510b1d24743a2ae7ef7e19e5e78946b4407e6e57200cbb6a75a。PDF为扫描件，无可用文本层，合同及结算内容依据逐页原图提取。",
+    "销售工作簿“核销资料-诚成26年4月【堆头20家】/2026年4月销售明细20260509164207765.xlsx”SHA-256：0504612568924d6686a2b752f56a5ff102fe727f901fbc631d808bd7cbfc3b48。",
+    "Excel Sheet1第2至37行为36条商品明细，第38行为合计；共36个唯一商品编码、36个唯一条码。明细客户均为东莞市诚成行供应链管理有限公司，期间均为2026-04-01至2026-04-30。",
+    "Excel数量合计为13744，与第38行合计一致；按每行数量乘工作簿缓存零售价复核金额为352032.00，与第38行缓存金额352032一致。部分价格/单位公式引用未提供的外部工作簿“[1]Sheet1”，因此公式来源本身不能独立验证。",
+    "Excel仅为经销商/客户汇总销售数据，没有合同门店字段，不能证明20家门店分别执行陈列；Sheet2为空。第10行客户编码及品牌相关单元格存在空值。",
+    "配置未列出发票、小票、收据、付款或转账凭证；发票存在性、付款真实性及转账重复发生次数均不适用或不可核验。",
+    "21张照片均可读取，共21个唯一SHA-256；精确重复组0组、精确重复额外出现次数0次。最近pHash汉明距离为20，未发现需要标记为possible的近重复候选。",
+    "未提供历史照片指纹库，故跨活动复用不可核验。全部照片无可读取EXIF/GPS或设备信息；SHA-256、pHash及dHash仅用于本批文件重复筛查，不证明拍摄真实性。未执行数字签名验证、可信时间戳验证或像素级伪造分析。",
+    "照片指纹：1.厚街汉邦66广场家家欣.jpg；1279×1706；SHA-256=2bc5b681403c0d0e05ba6394449fd73b18e211370dbdfc3b1e3166678fb33aad；pHash=bc40623f5dbacec0；dHash=579da53634371ff4。",
+    "照片指纹：2.松岗百佳华.jpg；3024×3759；SHA-256=12b86e89b2996c4ee22ce55cfa65249237f10c2651963f0a74d6748f6fbdf29f；pHash=d45ed0c3d0cf9847；dHash=98342424a034c098。",
+    "照片指纹：3.公明百佳华.jpg；1279×1706；SHA-256=334f7fe95b8f70a59cf89c0e2b65a47ba1a19c70d8b1695a51ecd59bdce07463；pHash=d909f0b5cd483c73；dHash=929393f35a2e0194。",
+    "照片指纹：4.新桥百佳华.jpg；600×800；SHA-256=df7c36d02303fc3b8df13e63888d0dcfed56860ca91d2a86501f67168d32c3ff；pHash=d21e05732f4ee5c4；dHash=7cb8b479199d84c6。",
+    "照片指纹：5.华都超市(东坑大道北店).jpg；1081×1440；SHA-256=61e7f18669fe68e0686638d9bf53e6e488e8ce9ccb78192cdb6647915337dad0；pHash=bb17807f857c84c9；dHash=484a6a6c512b2b9b。",
+    "照片指纹：6.东浦金正和.jpg；1080×1920；SHA-256=5443f87d47fe6646e5da357f0e53a41c8934f58255619fe749eae9b7ad9596a0；pHash=dfc1434a3552174f；dHash=e1f1f03c35693133。",
+    "照片指纹：7.宝安优城店.jpg；1081×1440；SHA-256=80ff9c92a5eb1b780e9b0002a5d99c5239d71f592406992133c1e49e77e5834f；pHash=d04ea67a36654e71；dHash=68a8e08498819e9c。",
+    "照片指纹：8.虎门赤岗家家欣.jpg；600×800；SHA-256=a397af48c29cc108f54a66ac21d7aec414e79f20838ee3bb2e4851619d1f9e0a；pHash=8d45457f6421a5bd；dHash=d2f0c6ba371b3ba3。",
+    "照片指纹：9.花都宜多.jpg；1279×1706；SHA-256=37a3bb4647855bff6147f370f02897142fb739c3b1f015546c9701327ca79c87；pHash=c413a95f3c3c3173；dHash=54c0c8a420623397。",
+    "照片指纹：10-1挺拇指生活超市(横沥店).jpg；1279×1706；SHA-256=f12dd735b31b0e3be209767b443a5dde76af047139821839e1c380befa2f17ba；pHash=db04a4716159b5bd；dHash=966d724108181909。",
+    "照片指纹：10-2挺拇指生活超市(横沥店).jpg；1279×1706；SHA-256=1d4f8b92c71131ea2dbe09e06cff7496a82afca0ba4d7fced7ab272948670884；pHash=8ad1fd2b6b28f604；dHash=53d09cd555656b2a。",
+    "照片指纹：11.人人购物荟和超市.jpg；4525×4496；SHA-256=7cf34a44ba05a348179771b0c36be20c19f6a0a76fb0c72fc6742c1070011f87；pHash=df42b870745ec23c；dHash=49e9d1d496663236。",
+    "照片指纹：12.三乐购物广场(森扬商业广场店).jpg；3028×4032；SHA-256=817e1b01120475a5f72ab39bce2334a3f0c5d2d7c66d02b0d02e648e70bca0e9；pHash=874b6c27e560735c；dHash=c361f1c656ddb2b6。",
+    "照片指纹：13.沙井九龙.jpg；4000×3003；SHA-256=bea6157436ef7f0a45babca793b9fc67e06ac2beacd1b9eae36c44097b0e3888；pHash=8ef4e07ec22cd664；dHash=a4a4e071616973d0。",
+    "照片指纹：14.润家连锁超市(美联购物中心店).jpg；1280×1706；SHA-256=0589b66788746499b68c9813b97ef042c2d1a239cd70be63056d57f4a9587fe5；pHash=aecc9d1341633373；dHash=6c271545c55d4565。",
+    "照片指纹：15。石岩百佳华.jpg；1279×1706；SHA-256=9845f5c8c808e139ae93bf4a163372cf5e54e7aeb39a8dfbfa1d0aa47e5dfca8；pHash=d142a7f456b03e2b；dHash=88d8f1f0f0b89e6e。",
+    "照片指纹：16.田心金正和.jpg；1279×1706；SHA-256=f00f97dc46a52568db5b292f7edb26bedfbc0d6f786e746acea6a56940a7c500；pHash=eb89b563d205b296；dHash=d3721965094b6e0c。",
+    "照片指纹：17·荟和超市(莹展荟店).jpg；1080×1920；SHA-256=c6a9ac8b3b620adf996334ec432e725c45b4e302c481354caa4959a97c6f1ef1；pHash=c0357e5c8cec3574；dHash=bac886e3f0d4b3c7。",
+    "照片指纹：18.三乐购物广场(坦洲店).jpg；1281×1706；SHA-256=61f0c8113bfbfafd9cc02a2ae69881cb8cc456e911c32c78ba618ab3467153fe；pHash=ff181159c160e0ff；dHash=187923072233282a。",
+    "照片指纹：19.福源大康惠.jpg；1279×1706；SHA-256=a83b7852588f47ff9fc8c43791eab025aa930eb7efa97d4da13cd54024be754c；pHash=944b3b3cb4a64e65；dHash=3c92e09c94b71e3c。",
+    "照片指纹：20.好多宝精选超市(龙眼市场店).jpg；1200×1600；SHA-256=a2bc6e9f7833a6b2dace149843649c6c2a6b5988e04def5a9bc64d4b2b8740fc；pHash=d58198ddeb4063e3；dHash=32f6ced242482840。"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "case_id": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
+  "scenario": "personnel_incentive",
+  "status": "completed",
+  "started_at": "2026-08-17T07:54:31+00:00",
+  "completed_at": "2026-08-17T07:54:33+00:00",
+  "result_path": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-simple-001\\output\\runs\\offline-audit-simple-v2\\20260817-simple-001\\cases\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive\\result\\audit-result.json",
+  "source_file_count": 4,
+  "model_usage": {
+    "schema_version": "1.0",
+    "provider": "codex_cli",
+    "model": "default",
+    "model_invocation_count": 1,
+    "successful_invocation_count": 1,
+    "failed_invocation_count": 0,
+    "retry_count": 0,
+    "input_tokens": 1450731,
+    "cached_input_tokens": 1339648,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 32644,
+    "reasoning_output_tokens": 16528,
+    "total_tokens": 1483375,
+    "attempts": [
+      {
+        "attempt_no": 1,
+        "status": "success",
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1450731,
+          "cached_input_tokens": 1339648,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 32644,
+          "reasoning_output_tokens": 16528,
+          "total_tokens": 1483375
+        }
+      }
+    ],
+    "case_id": "SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive",
+    "scenario": "personnel_incentive",
+    "source": "reused_frozen_evidence",
+    "source_result": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-full-001\\output\\runs\\offline-audit-20260817-full-001\\20260817-full-001\\cases\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive\\result\\audit-result.json"
+  },
+  "model_usage_source": "C:\\Users\\EDY\\Desktop\\codex\\offline-activity-audit\\worktrees\\20260817-full-001\\output\\runs\\offline-audit-20260817-full-001\\20260817-full-001\\cases\\SQ202604300025-HX202605260014-郑州雨瑶-人员激励-personnel-incentive\\result\\audit-result.json"
+}
