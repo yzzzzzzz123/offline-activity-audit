@@ -1,28 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.local/audit-personnel-incentive/evidence.schema.json",
-  "title": "Personnel incentive extracted evidence",
+  "title": "Personnel incentive visual evidence",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "scenario", "settlement", "transfers", "extraction_notes"],
   "properties": {
-    "schema_version": {"type": "string", "const": "1.0"},
+    "schema_version": {"type": "string", "const": "2.0"},
     "scenario": {"type": "string", "const": "personnel_incentive"},
     "settlement": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "source_file",
-        "customer_name",
-        "activity_start",
-        "activity_end",
-        "claimed_amount",
-        "declared_total_quantity",
-        "declared_total_reward",
-        "seal_visible",
-        "signed_date",
-        "notes",
-        "lines"
+        "source_file", "customer_name", "activity_start", "activity_end",
+        "claimed_amount", "declared_total_quantity", "declared_total_reward",
+        "seal_visible", "signed_date", "notes", "lines"
       ],
       "properties": {
         "source_file": {"type": "string", "minLength": 1},
@@ -42,31 +34,16 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "line_no",
-              "product_name",
-              "quantity",
-              "unit_reward",
-              "reward_amount",
-              "sales_match",
-              "notes"
+              "line_no", "product_name", "barcode_visible", "quantity",
+              "unit_reward", "reward_amount", "notes"
             ],
             "properties": {
               "line_no": {"type": "integer", "minimum": 1},
               "product_name": {"type": "string", "minLength": 1},
+              "barcode_visible": {"type": ["string", "null"]},
               "quantity": {"type": "number", "minimum": 0},
               "unit_reward": {"type": "number", "minimum": 0},
               "reward_amount": {"type": "number", "minimum": 0},
-              "sales_match": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["barcode", "excel_product_name", "basis", "confidence"],
-                "properties": {
-                  "barcode": {"type": ["string", "null"]},
-                  "excel_product_name": {"type": ["string", "null"]},
-                  "basis": {"type": "string", "minLength": 1},
-                  "confidence": {"type": "string", "enum": ["high", "medium", "low", "ambiguous"]}
-                }
-              },
               "notes": {"type": "array", "items": {"type": "string"}}
             }
           }
@@ -79,17 +56,9 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "transfer_id",
-          "amount",
-          "occurrence_count",
-          "identity_visible",
-          "event_date_visible",
-          "store_name",
-          "recipient_name",
-          "transfer_date",
-          "source_files",
-          "dedup_basis",
-          "notes"
+          "transfer_id", "amount", "occurrence_count", "identity_visible",
+          "event_date_visible", "store_name", "recipient_name", "transfer_date",
+          "source_files", "dedup_basis", "notes"
         ],
         "properties": {
           "transfer_id": {"type": "string", "minLength": 1},

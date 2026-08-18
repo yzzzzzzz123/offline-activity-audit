@@ -1,4 +1,4 @@
 interface:
   display_name: "Offline Audit Orchestrator"
-  short_description: "Route two ZIP submissions to the correct audit skill"
-  default_prompt: "Use $orchestrate-offline-audit to process the two ZIP files in input and route each case to the correct child skill."
+  short_description: "Build a fresh deterministic audit workbook from 1-2 ZIPs"
+  default_prompt: "Use $orchestrate-offline-audit to process the one or two ZIP files in input and generate a new verified six-column audit workbook; pass a run-id beginning with the YYYYMMDD business date and the actual executor identity as producer-model so the final filename is date-model.xlsx, with -1.1, -1.2 revisions on repeats."

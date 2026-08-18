@@ -1,32 +1,25 @@
 # ZIP routing rules
 
-## Input contract
+## Accepted combinations
 
-- Read only `.zip` files directly inside the selected input directory.
-- Require exactly two archives.
-- Require one `personnel_incentive` result and one `promotional_display` result.
-- Reject encrypted members, symbolic links, absolute paths, `..` traversal, drive-qualified paths, Windows-invalid names, case-colliding targets, oversized members, excessive file counts, excessive expansion, and suspicious compression ratios.
+Read one or two ZIPs directly from `input/`:
 
-## Personnel incentive route
+- personnel only;
+- display only;
+- one personnel plus one display.
 
-Prefer explicit signals in the archive filename or member names:
+Reject no ZIP, more than two ZIPs, or a repeated scenario. Classification uses material shape first; a suggestive filename never repairs a missing material class.
 
-- `人员激励` is the strongest signal.
-- `结算单` and `红包`/`转账` reinforce the route.
-- A typical package contains exactly one Excel workbook, no PDF, one settlement image, and one or more transfer images.
+## Personnel incentive
 
-After extraction, require exactly one Excel workbook and exactly one image whose name identifies it as the final settlement sheet. Treat every remaining image as transfer evidence. Route the generated case to `audit-personnel-incentive`.
+Require exactly one `.xlsx`/`.xlsm`, no PDF, at least two images, exactly one image whose basename identifies it as `结算单` or `结算表`, and at least one image whose basename identifies transfer/red-packet/payment evidence. Every non-settlement image is routed as a transfer screenshot.
 
-## Promotional display route
+If the package has personnel-like shape but the settlement or transfer role is not unique, report the candidate counts and stop.
 
-Prefer explicit signals in the archive filename or member names:
+## Promotional display
 
-- `堆头` or `陈列` is the strongest signal.
-- `合同` reinforces the route.
-- A typical package contains exactly one PDF contract, exactly one Excel workbook, and multiple display photos.
+Require exactly one `.pdf`, exactly one `.xlsx`/`.xlsm`, and at least one image. Route the PDF as the contract, the Excel as sales support, and every image as a field photo. Nested directories are allowed, but image basenames must remain unique because evidence JSON binds by basename.
 
-After extraction, require exactly one PDF, exactly one Excel workbook, and at least one image. When photos do not share one directory, copy them into a normalized flat photo directory without changing the originals. Route the generated case to `audit-promotional-display`.
+## Safe extraction
 
-## Ambiguity
-
-Fail closed when scores tie, neither score reaches the minimum, both archives resolve to the same scenario, or a required file class has zero or multiple candidates. Report filenames and counts; never select the closest-looking file silently.
+Before writing any member, reject absolute paths, `..`, drive-qualified paths, NUL bytes, Windows-invalid names, symbolic links, encrypted members, duplicate/case-colliding destinations, more than 2,000 members, a member above 250 MiB, total expansion above 1 GiB, or a suspicious compression ratio. Extract into a new run-scoped temporary directory and remove it automatically at the end of the run.

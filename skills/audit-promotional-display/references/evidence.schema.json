@@ -1,27 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.local/audit-promotional-display/evidence.schema.json",
-  "title": "Promotional display extracted evidence",
+  "title": "Promotional display visual evidence",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "scenario", "contract", "photo_reviews", "extraction_notes"],
   "properties": {
-    "schema_version": {"type": "string", "const": "1.0"},
+    "schema_version": {"type": "string", "const": "2.0"},
     "scenario": {"type": "string", "const": "promotional_display"},
     "contract": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "source_file",
-        "customer_name",
-        "activity_start",
-        "activity_end",
-        "display_standard",
-        "fee_per_store",
-        "claimed_amount",
-        "seal_visible",
-        "stores",
-        "notes"
+        "source_file", "customer_name", "activity_start", "activity_end",
+        "display_standard", "fee_per_store", "claimed_amount", "seal_visible",
+        "requires_specific_products", "required_products", "requires_promotion",
+        "required_promotion", "stores", "notes"
       ],
       "properties": {
         "source_file": {"type": "string", "minLength": 1},
@@ -32,6 +26,10 @@
         "fee_per_store": {"type": "number", "minimum": 0},
         "claimed_amount": {"type": "number", "minimum": 0},
         "seal_visible": {"type": ["boolean", "null"]},
+        "requires_specific_products": {"type": "boolean"},
+        "required_products": {"type": "array", "items": {"type": "string"}},
+        "requires_promotion": {"type": "boolean"},
+        "required_promotion": {"type": ["string", "null"]},
         "stores": {
           "type": "array",
           "minItems": 1,
@@ -55,33 +53,69 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "store_line_no",
-          "contract_store_name",
-          "photo_files",
-          "visible_date",
-          "visible_location",
-          "period_match",
-          "store_match",
-          "display_match",
-          "duplicate_check",
-          "mapping_basis",
-          "risk_notes",
-          "supplement_advice"
+          "store_line_no", "contract_store_name", "photo_files", "visible_date",
+          "visible_location", "location_basis",
+          "display_observation", "recognized_products", "promotion_evidence",
+          "risk_notes", "supplement_advice"
         ],
         "properties": {
           "store_line_no": {"type": "integer", "minimum": 1},
           "contract_store_name": {"type": "string", "minLength": 1},
-          "photo_files": {
-            "type": "array",
-            "items": {"type": "string", "minLength": 1}
-          },
+          "photo_files": {"type": "array", "items": {"type": "string", "minLength": 1}},
           "visible_date": {"type": ["string", "null"], "format": "date"},
           "visible_location": {"type": ["string", "null"]},
-          "period_match": {"type": "string", "enum": ["match", "mismatch", "unverifiable"]},
-          "store_match": {"type": "string", "enum": ["exact", "compatible", "mismatch", "filename_only"]},
-          "display_match": {"type": "string", "enum": ["pass", "fail", "uncertain"]},
-          "duplicate_check": {"type": "string", "enum": ["none", "exact", "possible", "unverifiable"]},
-          "mapping_basis": {"type": ["string", "null"]},
+          "location_basis": {"type": "string", "minLength": 1},
+          "display_observation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "standard_evidence", "matched_standard", "description", "limitations"
+            ],
+            "properties": {
+              "standard_evidence": {
+                "type": "string",
+                "enum": ["meets", "does_not_meet", "unclear"]
+              },
+              "matched_standard": {
+                "type": "string",
+                "enum": ["stack_1sqm", "four_vertical", "both", "none", "unclear"]
+              },
+              "description": {"type": "string", "minLength": 1},
+              "limitations": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "recognized_products": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "promotion_evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["signals", "visible_prices", "limitations"],
+            "properties": {
+              "signals": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "text"],
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "special_price", "old_new_price", "discount", "gift",
+                        "multi_buy", "bundle_1_plus_1", "bundle_3_plus_2", "value_pack"
+                      ]
+                    },
+                    "text": {"type": "string", "minLength": 1}
+                  }
+                }
+              },
+              "visible_prices": {"type": "array", "items": {"type": "string"}},
+              "limitations": {"type": "array", "items": {"type": "string"}}
+            }
+          },
           "risk_notes": {"type": "array", "items": {"type": "string"}},
           "supplement_advice": {"type": "array", "items": {"type": "string"}}
         }

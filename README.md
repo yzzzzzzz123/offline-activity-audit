@@ -1,110 +1,62 @@
 # 线下活动核销
 
-项目提供一个主编排 Skill、两个业务子 Skill、一个主程序入口和统一输出机制：
+本项目把一至两份活动材料 ZIP 从零生成一份简明的核销 Excel。支持两类材料：
 
-- `orchestrate-offline-audit`：读取 `input/` 中的两个 ZIP，安全解压并按场景调用子 Skill；
-- `audit-personnel-incentive`：人员激励，强制按结算单 SKU 与销售 Excel 数量逐项核对；
-- `audit-promotional-display`：堆头活动，按合同门店逐店检查照片、日期、地点、陈列和销售支撑；
-- `main.py`：可信主入口，负责分配 Git linked worktree、调用 Skill、校验结果并导出交付物。
+- 人员激励：销售 Excel、结算单图片、转账或红包截图；
+- 堆头陈列：销售 Excel、合同 PDF、现场照片。
 
-## 正式运行
+可以只提交其中一类，也可以两类各提交一份。同类重复、类型不明、材料缺失或 ZIP 不安全时，程序会停止并给出明确原因。
 
-标准入口只需要把一个人员激励 ZIP 和一个堆头 ZIP 放进 [input](input/README.md)，然后运行：
+## 使用方法
 
-```powershell
-py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id 20260814-001
-```
-
-等价的主程序命令：
+1. 把一至两个原始 ZIP 直接放入 [`input/`](input/README.md)，不要手工解压。
+2. 在项目根目录运行唯一正式入口：
 
 ```powershell
-py -3 main.py input --run-id 20260814-001
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id 20260817-simple-001 --producer-model codex
 ```
 
-默认从 `<project>/input` 读取，默认导出到项目同级的 `audit-output/<run-id>`。主 Skill 自动调用 Codex 提取证据并路由两个子 Skill；外部目录最终只有一份合并 Excel。
+视觉提取默认固定使用 `gpt-5.6-sol`，并隔离本机 Codex 的插件、Hook 和其他个人配置，避免正式运行受本机配置漂移影响。Windows 会优先使用当前 Codex 桌面版自带的 CLI，并为每次运行加载该 CLI 的临时内置模型目录，避免全局 CLI、在线刷新和本机模型缓存之间的版本冲突。可通过 `OFFLINE_AUDIT_MODEL` 替换为当前 CLI 内置的其他模型，或通过 `OFFLINE_AUDIT_CODEX` 显式指定 CLI 文件。
 
-只检查、解压和生成路由配置，不启动 Codex 或 worktree：
-
-```powershell
-py -3 main.py input --run-id 20260814-check --prepare-only
-```
-
-以下接口保留给已经准备好 case/evidence JSON 的高级调用。
-
-人员激励或单个堆头案件：
-
-```powershell
-py -3 main.py run `
-  --case C:\audit-input\case.json `
-  --evidence C:\audit-input\evidence.json `
-  --output-dir C:\audit-deliveries `
-  --run-id 20260814-001
-```
-
-没有预提取的 evidence JSON 时，可使用 `--agent` 让 Codex 按对应 Skill 提取证据：
-
-```powershell
-py -3 main.py run --case C:\audit-input\case.json --agent `
-  --output-dir C:\audit-deliveries --run-id 20260814-001
-```
-
-批量核销：
-
-```powershell
-py -3 main.py batch `
-  --batch C:\audit-input\batch.json `
-  --output-dir C:\audit-deliveries `
-  --run-id 20260814-batch-001
-```
-
-`--output-dir` 必须位于项目 Git 仓库之外，且 `<output-dir>/<run-id>` 不得预先存在。
-
-## Worktree 生命周期
-
-每次运行固定绑定：
-
-- worktree：`worktrees/<run-id>`；
-- 分支：`run/offline-audit/<run-id>`；
-- 代码快照：由隔离 Git index 生成，不修改、不 stash、不覆盖主工作区；
-- 正式产物：先写入 worktree 的 `output/`，成功或失败后均形成 Git checkpoint；
-- 外部交付：checkpoint 成功后只复制合并 Excel 到 `<output-dir>/<run-id>`。
-
-主入口会拒绝重复 run-id、残留分支、残留 worktree、危险未跟踪文件以及运行过程中发生的主工作区漂移。
-
-查看运行：
-
-```powershell
-py -3 main.py worktree list
-py -3 main.py worktree status --run-id 20260814-001
-```
-
-删除已导出且 Git 状态干净的运行：
-
-```powershell
-py -3 main.py worktree remove `
-  --run-id 20260814-001 `
-  --confirm-run-id 20260814-001
-```
-
-删除会移除该 linked worktree 和专属运行分支；外部导出目录不会被自动删除。
-
-## 输出结构
+成功后文件直接生成在：
 
 ```text
-output/
-├── worktree-preflight.json
-├── worktree-allocation.json
-├── worktree-run-state.json
-├── input-archive-manifest.json       # 主 Skill 的 ZIP 哈希、解压清单与路由
-├── skill-routing.json                # 主 Skill → 两个子 Skill 的调用关系
-├── delivery.json
-├── <核销报告>.xlsx
-├── workbook-verification.json        # 批量运行
-└── runs/                              # 冻结输入、结构化证据、结果、重试与模型用量统计
+worktrees/<YYYYMMDD>-<producer-model>.xlsx
 ```
 
-项目不保存 stdout/stderr、模型事件流或其他运行日志。模型提取失败时最多自动尝试 3 次，只在结构化状态和 Excel 中记录调用次数、失败次数、重试次数和 Token 用量。
+`--producer-model` 标注实际执行本次任务的模型：Codex 使用 `codex`，其他模型使用如
+`qwen3.7` 的明确标签。`--run-id` 必须以有效的 `YYYYMMDD` 业务日期开头；后面的
+追踪标识不会进入最终文件名。首次 Codex 结果例如 `20260818-codex.xlsx`。同日期、
+同模型再次生成（包括同一输入重跑）时不会覆盖，而会依次生成
+`20260818-codex-1.1.xlsx`、`20260818-codex-1.2.xlsx`。不同模型分别计数。
 
-合并 Excel 固定为“一个核销方式一个 Sheet”：`人员激励核销` 与 `堆头核销`。每个 Sheet 从上到下完整包含金额结论、核销步骤、原始文件读取清单、核心逐项对比、底层来源、真实性风险检查、方案 1.4.1 七维分析、异常补证以及模型调用/重试用量；不再把同一核销方式拆成多个明细页。
+## 处理边界
 
-证据 JSON 的字段合同位于两个 Skill 的 `references/evidence.schema.json`；最终结果统一通过 `contracts/audit-result.schema.json` 校验。
+AI 只负责读取视觉材料中的可见事实：
+
+- 人员激励读取结算单和转账截图；
+- 堆头陈列读取合同和现场照片。
+
+销售 Excel 不提供给 AI。Excel 单元格读取、商品映射、数量汇总、金额复算、日期/地点/重复检查、核销结论和工作簿生成均由确定性 Python 完成。
+
+每次运行只使用本次 ZIP。程序不会读取历史结果、缓存或验收工作簿，也不会留下解压目录或中间运行目录。
+
+## 输出内容
+
+- 单场景只生成对应工作表；
+- 双场景固定按 `人员激励核销`、`堆头核销` 排列；
+- 每张表只有六个可见列，并保留固定标题、颜色、换行、列宽、行高、冻结窗格、筛选和汇总行；
+- 工作簿不含公式；
+- 人员激励按结算商品逐行比较销售数量、结算数量、奖励和转账；
+- 堆头陈列按合同门店逐行比较期间、地点、`1平米堆头/4纵陈列`、跨门店照片复用、产品促销信息和支持金额；陈列标准与照片复用分开显示。
+
+## 安装与验证
+
+Python 要求 `>=3.11`。项目依赖声明在 `pyproject.toml` 中。
+
+```powershell
+py -3 -m pip install -e .
+py -3 -B -m unittest discover -s tests -v
+```
+
+验收用工作簿仅用于测试比对，正式运行路径和模型均不得读取它。

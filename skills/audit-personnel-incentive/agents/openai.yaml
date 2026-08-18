@@ -1,4 +1,4 @@
 interface:
   display_name: "Personnel Incentive Audit"
-  short_description: "Reconcile SKU quantities, rewards, stores, and transfers"
-  default_prompt: "Use $audit-personnel-incentive to audit this personnel incentive claim in an isolated Git worktree."
+  short_description: "Extract visual facts and deterministically reconcile incentives"
+  default_prompt: "Use $audit-personnel-incentive to extract settlement and transfer facts, then let deterministic code reconcile the sales Excel and generate the personnel worksheet."

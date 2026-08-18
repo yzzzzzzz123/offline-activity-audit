@@ -1,16 +1,58 @@
 # Offline activity audit project
 
-Keep extraction and judgment separate. Model or vision steps may only extract source facts into schema-validated JSON. Deterministic Python must read Excel files, aggregate rows, calculate differences and supported amounts, validate final results, hash evidence, and generate reports.
+## Fixed scope
 
-The public orchestration entry is fixed:
+This repository audits two offline-activity scenarios only:
 
-- `orchestrate-offline-audit` accepts exactly two ZIP files from `input/`, routes one case to each child Skill, and owns worktree allocation plus combined delivery.
+- `personnel_incentive` through `skills/audit-personnel-incentive`;
+- `promotional_display` through `skills/audit-promotional-display`.
 
-The supported child scenarios are fixed:
+The only formal command is:
 
-- `personnel_incentive` routes to `skills/audit-personnel-incentive`.
-- `promotional_display` routes to `skills/audit-promotional-display`.
+```powershell
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model>
+```
 
-Formal runs must start from the primary Git worktree through `main.py`. The trusted main entry creates one run-specific branch and linked worktree, executes inside that snapshot, checkpoints `output/`, and only then exports a copy. Do not run formal audits directly in the primary workspace or overwrite source evidence.
+`input/` must contain one or two ZIP files. Each supported scenario may appear at most once. Reject unknown, ambiguous, duplicate-type, missing-material, or unsafe archives with a specific error.
 
-Never approve an amount solely because aggregate totals match. Preserve raw source paths, Excel row numbers, contract or settlement line numbers, explicit limitations, source hashes, run identity, snapshot commit, and checkpoint commit.
+## Trust boundary
+
+Keep extraction and judgment separate. AI or vision steps may only extract visible facts into schema-validated JSON:
+
+- personnel: settlement image and transfer/red-packet screenshots;
+- display: contract PDF and field photos.
+
+Never give the model a sales Excel or access to repository inputs, prior results, caches, history, or the acceptance workbook. AI must not calculate amounts, select Excel product names, or make reimbursement decisions.
+
+Deterministic Python must safely unpack and route ZIPs, read Excel cells, preserve original source names and rows, aggregate quantities, map products, calculate differences and supported amounts, detect duplicate images, validate results, and generate the workbook.
+
+Never approve an amount only because totals match. Preserve source archive hashes, raw paths, Excel rows, contract or settlement lines, visible limitations, and per-item/per-store evidence.
+
+## Output contract
+
+Create every result from an empty workbook and write it directly to:
+
+`worktrees/<YYYYMMDD>-<producer-model>.xlsx`
+
+`producer-model` 必须由实际执行本次任务的模型明确传入：Codex 使用 `codex`，其他模型
+使用可识别的安全标签，例如 `qwen3.7`。`run-id` 必须以有效的 `YYYYMMDD` 业务日期
+开头，后续追踪标识不进入最终文件名。首次 Codex 结果例如 `20260818-codex.xlsx`；
+同日期、同模型再次生成（包括同一输入重跑）时依次使用
+`20260818-codex-1.1.xlsx`、`20260818-codex-1.2.xlsx`。
+
+Never overwrite an existing result. Keep a separate revision sequence for every date and producer model. Do not create persistent run directories, Git run branches, repository snapshots, caches, or separate delivery locations.
+
+The workbook has one six-column sheet per submitted scenario. With both scenarios, sheet order is `人员激励核销`, then `堆头核销`. It must contain no formulas or formula-error values.
+
+The workbook under `worktrees/` whose name includes `已追加产品促销` is acceptance-only. Runtime code and model prompts must never open, copy, or depend on it.
+
+## Change verification
+
+Run at least:
+
+```powershell
+py -3 -B -m unittest discover -s tests -v
+py -3 -B -m compileall -q audit_core skills
+```
+
+Also validate all JSON files and Skill frontmatter, run the formal command against the retained real ZIP inputs when the execution path changes, verify the generated workbook, and finish with `git diff --check` and `git status --short`.

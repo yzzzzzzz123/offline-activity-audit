@@ -1,61 +1,59 @@
 ---
 name: audit-personnel-incentive
-description: Audit offline personnel-incentive reimbursement cases from sales Excel files, settlement sheets, and transfer screenshots. Use when a claim must reconcile every settlement product to exactly one sales SKU/barcode, trace quantities back to store-level Excel rows, verify reward calculations and transfer evidence, detect duplicate screenshot views, and produce a structured personnel-incentive audit result.
+description: Audit personnel-incentive claims from one sales Excel, one settlement image, and transfer/red-packet screenshots. Use whenever each settlement product must be deterministically mapped to an Excel barcode, quantities and rewards reconciled line by line, transfer views deduplicated, claim totals compared, and identity/date limitations shown in the fixed personnel audit worksheet.
 ---
 
 # Audit Personnel Incentive
 
-Build an auditable chain from raw sales rows to settlement lines, payment evidence, and the claimed amount. Treat quantity reconciliation as the primary control; an amount-only match is insufficient.
+Build the chain `Excel sales rows → settlement lines → transfer events → claimed amount`. Amount agreement alone does not validate product identity, recipient identity, store correspondence, or transfer date.
 
-## Required workflow
+## AI extraction
 
-1. Inventory every submitted file and identify the sales workbook, final settlement sheet, and all transfer screenshots.
-2. Read the complete sales workbook. Preserve the Excel row number, store, barcode, product name, quantity, unit price, and activity-period text for every detail row. Ignore subtotal, total, and blank rows.
-3. Extract every settlement line from the final settlement sheet, including product name, sales quantity, reward unit price, reward amount, declared totals, actual claimed amount, activity period, customer, seal, and signing date.
-4. Map each settlement line to exactly one Excel SKU, preferably by barcode. When the settlement sheet has no barcode, use the full product identity and record the selected Excel barcode, basis, and confidence. Never map two settlement lines to the same barcode or silently merge products.
-5. Reconcile each mapped line independently:
-   - Sum all store-level Excel rows for the mapped barcode.
-   - Compare that sum with the settlement sales quantity.
-   - Recalculate `quantity × reward unit price`.
-   - Compare the recalculated amount with the settlement reward amount.
-   - Retain the exact Excel source-row numbers and per-store quantities.
-6. Reconcile the totals only after all individual lines pass or are explicitly marked as exceptions.
-7. Calculate SHA-256 and pHash for the settlement/transfer images, then deduplicate mirrored sender/receiver views of the same transfer by visible business evidence. Keep the visible occurrence count and deduplication basis; a pHash near-match is only a review lead. Do not infer a store identity from amount alone.
-8. Compare the multiset of store-level expected reward amounts with deduplicated transfers. If recipient/store identity or transfer date is not visible, report an identity limitation even when the amount multiset matches.
-9. Compare the evidence-supported amount, settlement line total, transfer total, and actual claimed amount. Explain every difference, including underclaims and rounding/manual adjustments.
-10. Return evidence JSON that conforms to [evidence.schema.json](references/evidence.schema.json). Then run `scripts/run_audit.py` through the project orchestrator to produce a result validated against `contracts/audit-result.schema.json`.
-11. Return to the parent Skill for the complete 1.4.1 analysis. For personnel materials, distinguish the proven SKU/quantity/payment facts from unverified authenticity controls; missing EXIF/GPS, digital signatures, budget, invoice, contract, recipient identity, or transfer date must be shown explicitly rather than inferred from an amount match.
+Read [evidence.schema.json](references/evidence.schema.json) and [audit-rules.md](references/audit-rules.md) before extracting.
 
-## Fail-closed rules
+Give the AI only the settlement image and transfer screenshots. It must return schema version `2.0` and may extract only visible facts:
 
-- Mark an unmatched or ambiguous settlement line for human review; do not choose the closest product silently.
-- Treat missing quantity, unit price, or line amount as missing evidence.
-- Treat a settlement total match as insufficient if any SKU line is unmatched or quantity-mismatched.
-- Treat screenshot bubbles with the same amount as separate transfers unless the evidence supports pairing them as mirrored views.
-- Treat amount-only transfer-to-store matching as identity-unverified.
-- Preserve source values and distinguish extracted facts from calculated conclusions.
-- Do not describe SHA-256, amount agreement, or screenshot deduplication as proof that a source file was never altered or that a transfer recipient/date is authentic.
+- settlement customer, activity dates, declared totals, actual claim, seal/date visibility, and every product line in printed order;
+- `barcode_visible` only when the settlement itself visibly prints a legible barcode;
+- each distinct transfer event once, with amount, source files, occurrence count, visible recipient/store/date fields, and the basis for pairing mirrored chat bubbles;
+- limitations and uncertain text.
 
-## Output requirements
+The AI must not receive or read the sales Excel, infer a barcode from product/quantity, calculate approval, or mark the case passed.
 
-Include all of the following in the final audit:
+## Deterministic audit
 
-- One row per settlement SKU with the mapped barcode, Excel quantity, settlement quantity, difference, source rows, reward calculation, and status.
-- One row per raw store/SKU sales record so reviewers can trace the SKU totals.
-- One row per store with expected reward, matched transfer evidence, amount difference, and identity status.
-- Declared and recalculated totals, actual claimed amount, supported amount, suggested approval amount, exceptions, and supplement requests.
-- A conclusion of `pass`, `conditional_pass`, `partial_pass`, or `human_review` based on the documented evidence, not on narrative plausibility.
+Python reads every valid sales-Excel detail row and preserves source row, period, store, barcode, original product name, quantity, unit price, and amount cell.
 
-Read [audit-rules.md](references/audit-rules.md) when deciding mappings, severity, supported amount, or conclusion.
+For every settlement line in order:
 
-## Formal execution
+1. Use a settlement-visible barcode as a high-confidence direct mapping only when it exists in the code-read Excel.
+2. Otherwise compare normalized product identity and quantity against unused Excel SKUs under a one-line/one-barcode constraint. A deterministic text/quantity match remains medium confidence because the source settlement did not show the barcode.
+3. Sum all Excel rows for the selected barcode and keep per-store quantities/source rows.
+4. Compare Excel quantity with settlement quantity.
+5. Calculate `settlement quantity × reward unit price` and compare it with the settlement line reward.
+6. Calculate the supported line amount from the lower nonnegative quantity only for a valid mapping.
 
-In the standard two-ZIP workflow, accept routing from the parent [orchestrate-offline-audit](../orchestrate-offline-audit/SKILL.md) Skill only after it has classified the package as `personnel_incentive` and frozen the case config.
+After all lines, compare calculated reward, settlement line total, declared total, deduplicated transfer total, and actual claim. Deduplicate only when visible evidence supports two views of one business transfer; repeated equal amounts remain separate events unless pairing evidence exists.
 
-Start formal work only through the project main entry so the trusted supervisor binds the run to a Git snapshot, dedicated branch, and linked worktree:
+Recipient/store/date rules are independent:
+
+- a visible chat contact is not automatically a store mapping;
+- an amount-only multiset match verifies amounts only;
+- a weekday or clock is not a complete transaction date;
+- do not write identity/date verified unless recipient, store correspondence, and complete date are all visible for every required transfer.
+
+## Worksheet contract
+
+Generate one product row per settlement line, then `合计`, `实际申请金额`, and `收款人与日期` rows. Preserve settlement order regardless of Excel order.
+
+- Show code-read barcode, Excel quantity, calculated reward, vision-AI product/quantity/reward, and both differences.
+- If quantity and line amount match but confidence is below high, column F must be exactly `金额匹配，商品身份未验证`.
+- Use a concrete supplement statement for an unmapped product, quantity/reward difference, claim difference, missing recipient/store mapping, or incomplete date.
+- Calculate every amount in Python and write values only; never use workbook formulas.
+- Freeze only the two title rows and row 3 header (`A4`); product and reconciliation rows must remain scrollable.
+
+Formal runs occur only through the parent command:
 
 ```powershell
-py -3 main.py run --case <case.json> --evidence <evidence.json> --output-dir <external-output-dir> --run-id <unique-run-id>
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model>
 ```
-
-Use `--agent` instead of `--evidence` only when Codex must extract the evidence first. The main entry executes this Skill inside `worktrees/<run-id>`, checkpoints the authoritative `output/` tree to `run/offline-audit/<run-id>`, and exports a hash-listed copy. Use `scripts/run_audit.py` directly only for isolated Skill development, never for a formal reimbursement decision.

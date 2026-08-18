@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -12,302 +14,586 @@ from .common import (
     money,
     normalize_text,
     now_utc,
-    resolve_case_file,
     unique_by,
 )
-from .excel_sources import image_inventory, pdf_inventory, read_display_sales
+from .excel_sources import image_file_inventory, pdf_inventory, read_display_sales
 
 
 PASS_STORE_MATCHES = {"exact", "compatible"}
+PASS_DISPLAY_STANDARDS = {"stack_1sqm", "four_vertical", "both"}
+NUMBERED_STORE_PATTERN = re.compile(r"(?P<number>\d{1,3}|[一二三四五六七八九十]{1,3})店")
+GENERIC_LOCATION_BIGRAMS = {
+    "超市", "商场", "购物", "广场", "生活", "连锁", "百货", "中心",
+    "广东", "东莞", "深圳", "门店", "精选",
+}
 
 
-def _photo_path(photo_dir: Path, value: str) -> Path:
-    candidate = Path(value)
-    if candidate.is_absolute():
-        return candidate.resolve()
+def _display_control(observation: dict[str, Any]) -> tuple[str, str]:
+    evidence_level = str(observation.get("standard_evidence") or "unclear")
+    matched_standard = str(observation.get("matched_standard") or "unclear")
+    expected = {
+        "meets": PASS_DISPLAY_STANDARDS,
+        "does_not_meet": {"none"},
+        "unclear": {"unclear"},
+    }
+    if evidence_level not in expected or matched_standard not in expected[evidence_level]:
+        raise AuditError(
+            "现场照片的陈列结论与命中标准不一致："
+            f"standard_evidence={evidence_level}, matched_standard={matched_standard}"
+        )
+    return {
+        "meets": "pass",
+        "does_not_meet": "fail",
+        "unclear": "uncertain",
+    }[evidence_level], matched_standard
 
-    direct = (photo_dir / candidate).resolve()
-    if direct.is_file():
-        return direct
 
-    # Codex can preserve a ZIP-relative prefix even though photo_dir already
-    # points at that archive folder.  The inventory is flat, so fall back to
-    # the unique file name instead of duplicating the prefix and reporting a
-    # present photo as missing.
-    by_name = (photo_dir / candidate.name).resolve()
-    if by_name.is_file():
-        return by_name
-    return direct
+def _store_number(value: str) -> int | None:
+    if value.isdigit():
+        return int(value)
+    digits = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if value == "十":
+        return 10
+    if "十" in value:
+        tens, ones = value.split("十", 1)
+        tens_value = digits.get(tens, 1) if tens else 1
+        ones_value = digits.get(ones, 0) if ones else 0
+        return tens_value * 10 + ones_value
+    return digits.get(value)
 
 
-def audit_display_case(
-    case_path: str | Path,
-    case: dict[str, Any],
-    evidence: dict[str, Any],
+def _numbered_store_conflict(contract_name: str, visible_location: str | None) -> bool:
+    expected = {
+        number
+        for match in NUMBERED_STORE_PATTERN.finditer(unicodedata.normalize("NFKC", contract_name))
+        if (number := _store_number(match.group("number"))) is not None
+    }
+    if not expected:
+        return False
+    observed = {
+        number
+        for match in NUMBERED_STORE_PATTERN.finditer(
+            unicodedata.normalize("NFKC", str(visible_location or ""))
+        )
+        if (number := _store_number(match.group("number"))) is not None
+    }
+    return not expected.issubset(observed)
+
+
+def _location_bigrams(value: str) -> set[str]:
+    text = _canonical_location(value)
+    return {
+        text[index : index + 2]
+        for index in range(max(0, len(text) - 1))
+        if text[index : index + 2] not in GENERIC_LOCATION_BIGRAMS
+    }
+
+
+def _corroborated_location_bridge(
+    contract_name: str,
+    visible_location: str | None,
+    photo_files: list[str],
+) -> bool:
+    """Use a filename only as a bridge between two independently present names."""
+    if not visible_location:
+        return False
+    contract_grams = _location_bigrams(contract_name)
+    visible_grams = _location_bigrams(visible_location)
+    if not contract_grams or not visible_grams:
+        return False
+    for name in photo_files:
+        filename_grams = _location_bigrams(Path(name).stem)
+        contract_coverage = len(contract_grams & filename_grams) / len(contract_grams)
+        visible_overlap = len(visible_grams & filename_grams)
+        if contract_coverage >= 0.6 and visible_overlap >= 2:
+            return True
+    return False
+
+
+def _canonical_location(value: str) -> str:
+    text = unicodedata.normalize("NFKC", value).lower()
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", text)
+
+
+def _determine_store_match(
+    contract_name: str,
+    visible_location: str | None,
+    photo_files: list[str],
+) -> tuple[str, str]:
+    if not visible_location:
+        return "filename_only", "现场未识别到独立地点，文件名不能单独证明门店"
+    if _numbered_store_conflict(contract_name, visible_location):
+        return "mismatch", "合同为编号门店，现场地点未显示相同门店编号"
+
+    contract_text = _canonical_location(contract_name)
+    visible_text = _canonical_location(visible_location)
+    if contract_text in visible_text or visible_text in contract_text:
+        return "exact", "可见地点包含合同门店名称"
+
+    contract_grams = _location_bigrams(contract_name)
+    visible_grams = _location_bigrams(visible_location)
+    direct_similarity = (
+        len(contract_grams & visible_grams) / min(len(contract_grams), len(visible_grams))
+        if contract_grams and visible_grams
+        else 0.0
+    )
+    if direct_similarity >= 0.4:
+        return "compatible", "可见地点与合同门店的有效名称片段一致"
+    if _corroborated_location_bridge(contract_name, visible_location, photo_files):
+        return "compatible", "可见地点与合同门店名称由同一原始文件名双向印证"
+    return "mismatch", "可见地点与合同门店缺少可验证的名称对应关系"
+
+
+def _canonical_product(value: Any) -> str:
+    text = unicodedata.normalize("NFKC", str(value or "")).lower()
+    text = text.replace("參半", "参半")
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff+%]+", "", text)
+
+
+def _product_grams(value: Any) -> set[str]:
+    text = _canonical_product(value)
+    for token in ("参半", "oralshark", "牙膏", "组合装", "超值装", "特享装", "量贩装"):
+        text = text.replace(token, "")
+    if len(text) < 2:
+        return {text} if text else set()
+    return {text[index : index + 2] for index in range(len(text) - 1)}
+
+
+def _similarity(left: Any, right: Any) -> float:
+    left_grams = _product_grams(left)
+    right_grams = _product_grams(right)
+    if not left_grams or not right_grams:
+        return 0.0
+    return len(left_grams & right_grams) / len(left_grams | right_grams)
+
+
+def _select_names(
+    records: list[dict[str, Any]],
+    predicate: Any,
+) -> list[str]:
+    return [str(item["product_name"]) for item in records if predicate(_canonical_product(item["product_name"]))]
+
+
+def sales_product_correspondence(
+    recognized_products: list[str],
+    sales_records: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    sales_path = resolve_case_file(case_path, case, "sales_excel")
-    photo_dir = resolve_case_file(case_path, case, "photo_dir")
-    contract_path = resolve_case_file(case_path, case, "contract_pdf")
-    if sales_path is None or photo_dir is None or contract_path is None:
-        raise AuditError("Promotional display case requires sales_excel, photo_dir, and contract_pdf")
+    """Return only source-cell names, never model-provided Excel wording."""
+
+    selected: set[str] = set()
+    bases: list[str] = []
+    literal_exact = False
+    candidate_only = False
+    expanded_products = [
+        part.strip()
+        for value in recognized_products
+        for part in re.split(r"[；;、]", str(value))
+        if part.strip()
+    ]
+    for product in expanded_products:
+        text = _canonical_product(product)
+        matches: list[str] = []
+        reasons: list[str] = []
+        is_3_plus_2_bundle = "3+2" in text
+        is_1_plus_1_alias = "1+1" in text or "减少软垢" in text or "双重因子" in text
+
+        if is_3_plus_2_bundle:
+            values = _select_names(sales_records, lambda name: "3+2" in name)
+            matches.extend(values)
+            if len(values) == 1:
+                literal_exact = True
+            reasons.append("可见包装含3+2，与Excel中的同组合标识比对")
+        if is_1_plus_1_alias:
+            values = _select_names(
+                sales_records,
+                lambda name: "倍养护牙膏100g" in name or "专研清新美白牙膏100g" in name,
+            )
+            matches.extend(values)
+            candidate_only = True
+            reasons.append("可见SP-1/SE-1或1+1包装，按维护的产品别名规则列为候选")
+        if any(token in text for token in ("绿茶清泡", "焕亮美白", "极光白", "光白酵素")):
+            matches.extend(_select_names(sales_records, lambda name: "极光白酵素" in name))
+            candidate_only = True
+            reasons.append("可见极光白/绿茶组合包装，按产品别名规则列为候选")
+
+        if not is_3_plus_2_bundle and not is_1_plus_1_alias and re.search(r"sp0?1", text):
+            if any(token in text for token in ("科研", "洁白", "3重")):
+                values = _select_names(sales_records, lambda name: "sp1" in name and "科研白" in name)
+            elif "5重" in text:
+                values = _select_names(sales_records, lambda name: "sp1" in name)
+            else:
+                values = _select_names(sales_records, lambda name: "sp1" in name)
+            matches.extend(values)
+            candidate_only = True
+            reasons.append("可见SP-1系列标识，按系列与可见功效词筛选候选")
+        if not is_3_plus_2_bundle and re.search(r"sp0?2", text):
+            values: list[str] = []
+            if "植萃" in text:
+                values.extend(_select_names(sales_records, lambda name: "sp2" in name))
+            if any(token in text for token in ("氨基酸", "温和护龈")):
+                values.extend(_select_names(sales_records, lambda name: "sp2" in name and "氨基酸" in name))
+            if any(token in text for token in ("益清新", "沁爽", "十里晚香")):
+                values.extend(_select_names(sales_records, lambda name: "sp2" in name and "益清新" in name))
+            if not values:
+                values = _select_names(sales_records, lambda name: "sp2" in name)
+            matches.extend(values)
+            candidate_only = True
+            reasons.append("可见SP-2系列标识，按系列与可见功效词筛选候选")
+        if not is_3_plus_2_bundle and re.search(r"sp0?3", text):
+            matches.extend(_select_names(sales_records, lambda name: "sp3" in name))
+            candidate_only = True
+            reasons.append("可见SP-3系列标识")
+        if not is_3_plus_2_bundle and re.search(r"sp0?4", text):
+            if any(token in text for token in ("清新", "薄荷", "全天")):
+                values = _select_names(sales_records, lambda name: "sp4" in name and "清新" in name)
+            elif any(token in text for token in ("美白", "皓齿")):
+                values = _select_names(sales_records, lambda name: "sp4" in name and "美白" in name)
+            else:
+                values = _select_names(sales_records, lambda name: "sp4" in name)
+            matches.extend(values)
+            candidate_only = True
+            reasons.append("可见SP-4系列标识，按可见功效词筛选候选")
+
+        if not matches:
+            scored = sorted(
+                (
+                    (_similarity(product, item["product_name"]), str(item["product_name"]))
+                    for item in sales_records
+                ),
+                reverse=True,
+            )
+            if scored and scored[0][0] >= 0.28:
+                top = scored[0][0]
+                matches.extend(name for score, name in scored if score >= max(0.28, top - 0.06))
+                candidate_only = True
+                reasons.append(f"可见包装文字与Excel原始商品名字符相似度最高为{top:.3f}")
+
+        selected.update(matches)
+        bases.extend(reasons)
+
+    ordered = [
+        str(item["product_name"])
+        for item in sales_records
+        if str(item["product_name"]) in selected
+    ]
+    if not ordered:
+        status = "unmatched"
+        basis = "代码未从现场可见包装中找到可支持的Excel原始商品名。"
+    elif literal_exact and not candidate_only and len(ordered) == 1:
+        status = "exact"
+        basis = "；".join(dict.fromkeys(bases)) + "；唯一支持1个Excel原始商品名。"
+    else:
+        status = "candidate"
+        basis = "；".join(dict.fromkeys(bases)) + "；可见信息不足以把所有候选收敛为唯一SKU。"
+    return {"names": ordered, "status": status, "basis": basis}
+
+
+def build_promotion_summary(review: dict[str, Any]) -> tuple[str, bool]:
+    promotion = review.get("promotion_evidence") or {}
+    signals = [
+        str(item.get("text") or "").strip()
+        for item in promotion.get("signals") or []
+        if str(item.get("text") or "").strip()
+    ]
+    product_text = "；".join(str(value) for value in review.get("recognized_products") or [])
+    canonical = _canonical_product(product_text)
+    if "3+2" in canonical and not any("3+2" in value for value in signals):
+        signals.append("3+2组合装")
+    if "1+1" in canonical and not any("1+1" in value for value in signals):
+        signals.append("1+1组合装")
+    if any(token in canonical for token in ("超值装", "特享装", "量贩装")) and not signals:
+        signals.append("包装标示超值/特享/量贩装")
+    signals = list(dict.fromkeys(signals))
+    prices = [str(value).strip() for value in promotion.get("visible_prices") or [] if str(value).strip()]
+    limitations = [str(value).strip() for value in promotion.get("limitations") or [] if str(value).strip()]
+    if signals:
+        summary = "有促销：" + "；".join(signals)
+        if prices:
+            summary += "；可见" + "、".join(prices) + "价签"
+        return summary, True
+    if prices:
+        return "未识别到明确促销词或组合装；仅见商品陈列及" + "、".join(prices) + "售价", False
+    if limitations:
+        return "无法判断：" + "；".join(limitations), False
+    return "未识别到明确促销词或组合装", False
+
+
+def _period_label(visible_date: Any, start: date, end: date) -> tuple[str, bool]:
+    if not visible_date:
+        return "unverifiable", False
+    try:
+        value = date.fromisoformat(str(visible_date))
+    except ValueError:
+        return "unverifiable", False
+    return ("match", True) if start <= value <= end else ("mismatch", False)
+
+
+def _photo_path(images_by_name: dict[str, Path], value: Any) -> Path | None:
+    return images_by_name.get(Path(str(value)).name.casefold())
+
+
+def _duplicate_maps(
+    photo_inventory: dict[str, Any],
+    review_lines_by_file: dict[str, set[int]],
+) -> tuple[set[str], set[str], list[dict[str, Any]]]:
+    exact = {
+        name.casefold()
+        for group in photo_inventory.get("exact_duplicate_groups") or []
+        for name in group
+    }
+    possible: set[str] = set()
+    cross_store_pairs: list[dict[str, Any]] = []
+    for pair in photo_inventory.get("phash_candidate_pairs") or []:
+        names = [str(value) for value in pair.get("files") or []]
+        lines: set[int] = set()
+        for name in names:
+            lines.update(review_lines_by_file.get(name.casefold(), set()))
+        if len(lines) > 1:
+            possible.update(name.casefold() for name in names)
+            cross_store_pairs.append(pair)
+    return exact, possible, cross_store_pairs
+
+
+def _default_review(line_no: int, store_name: str) -> dict[str, Any]:
+    return {
+        "store_line_no": line_no,
+        "contract_store_name": store_name,
+        "photo_files": [],
+        "visible_date": None,
+        "visible_location": None,
+        "location_basis": "未提交该合同门店的结构化照片核验结果",
+        "display_observation": {
+            "standard_evidence": "unclear",
+            "matched_standard": "unclear",
+            "description": "未提交照片",
+            "limitations": ["未提交照片"],
+        },
+        "recognized_products": ["未能可靠识别具体产品"],
+        "promotion_evidence": {"signals": [], "visible_prices": [], "limitations": ["未提交照片"]},
+        "risk_notes": ["未提交该合同门店的照片"],
+        "supplement_advice": ["补充带门头、完整日期地点水印和完整陈列的原始照片。"],
+    }
+
+
+def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
+    sales_path = Path(case["sales_excel"]).resolve()
+    contract_path = Path(case["contract_pdf"]).resolve()
+    photo_paths = [Path(value).resolve() for value in case["photo_files"]]
     sales = read_display_sales(sales_path)
-    photos = image_inventory(photo_dir)
+    photos = image_file_inventory(photo_paths, directory=case.get("source_root"))
     pdf = pdf_inventory(contract_path)
     contract = evidence["contract"]
-    contract_stores = sorted(contract["stores"], key=lambda item: int(item["line_no"]))
-    review_rows = evidence["photo_reviews"]
-    store_map = unique_by(contract_stores, "line_no", "contract store line number")
-    review_map = unique_by(review_rows, "store_line_no", "photo review store line number")
+    stores = sorted(contract["stores"], key=lambda item: int(item["line_no"]))
+    store_map = unique_by(stores, "line_no", "contract store line number")
+    review_map = unique_by(evidence.get("photo_reviews") or [], "store_line_no", "photo review store line number")
+    images_by_name = {path.name.casefold(): path for path in photo_paths}
     review_lines_by_file: dict[str, set[int]] = {}
-    for review in review_rows:
-        line_no = int(review["store_line_no"])
-        for value in review.get("photo_files") or []:
-            review_lines_by_file.setdefault(Path(value).name, set()).add(line_no)
-    exact_duplicate_names = {
-        name for group in photos["exact_duplicate_groups"] for name in group
-    }
-    possible_cross_store_names: set[str] = set()
-    cross_store_candidate_pairs: list[dict[str, Any]] = []
-    for pair in photos.get("phash_candidate_pairs") or []:
-        names = [str(value) for value in pair.get("files") or []]
-        bound_lines = set().union(*(review_lines_by_file.get(name, set()) for name in names))
-        if len(bound_lines) > 1:
-            possible_cross_store_names.update(names)
-            cross_store_candidate_pairs.append(pair)
-    exceptions: list[dict[str, Any]] = []
+    for review in evidence.get("photo_reviews") or []:
+        for name in review.get("photo_files") or []:
+            review_lines_by_file.setdefault(Path(name).name.casefold(), set()).add(int(review["store_line_no"]))
+    exact_names, possible_names, cross_store_pairs = _duplicate_maps(photos, review_lines_by_file)
+
     fee = money(contract["fee_per_store"], label="fee per store")
     claimed = money(contract["claimed_amount"], label="claimed amount")
     start = date.fromisoformat(contract["activity_start"])
     end = date.fromisoformat(contract["activity_end"])
-    inventory_names = {item["file_name"] for item in photos["files"]}
-    store_results: list[dict[str, Any]] = []
-    referenced_files: list[str] = []
+    exceptions: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    referenced: set[str] = set()
 
     for line_no, store in store_map.items():
-        review = review_map.get(line_no)
-        if review is None:
-            review = {
-                "store_line_no": line_no,
-                "contract_store_name": store["store_name"],
-                "photo_files": [],
-                "visible_date": None,
-                "visible_location": None,
-                "period_match": "unverifiable",
-                "store_match": "filename_only",
-                "display_match": "uncertain",
-                "duplicate_check": "unverifiable",
-                "mapping_basis": None,
-                "risk_notes": ["未提交该合同门店的结构化照片核验结果"],
-                "supplement_advice": ["补充带门头、日期地点水印和完整陈列的照片"],
-            }
-        contract_name_match = normalize_text(review["contract_store_name"]) == normalize_text(store["store_name"])
-        if not contract_name_match:
+        review = review_map.get(line_no) or _default_review(int(line_no), str(store["store_name"]))
+        if normalize_text(review["contract_store_name"]) != normalize_text(store["store_name"]):
             exceptions.append(
                 exception(
                     "high",
                     "PHOTO_REVIEW_CONTRACT_STORE_CONFLICT",
-                    f"合同第{line_no}家门店名称与照片核验行中的合同门店名称不一致。",
+                    f"合同第{line_no}家门店与照片核验行名称不一致。",
                     "照片可能绑定到错误门店。",
-                    "按合同原始序号重新绑定照片。",
-                    source=f"contract store line {line_no}",
+                    "按合同序号重新绑定照片。",
                 )
             )
+        photo_files = [Path(str(value)).name for value in review.get("photo_files") or []]
+        referenced.update(name.casefold() for name in photo_files)
+        missing = [name for name in photo_files if _photo_path(images_by_name, name) is None]
+        file_pass = bool(photo_files) and not missing
+        period_match, period_pass = _period_label(review.get("visible_date"), start, end)
+        store_match, deterministic_location_basis = _determine_store_match(
+            str(store["store_name"]),
+            review.get("visible_location"),
+            photo_files,
+        )
+        store_match_basis = (
+            str(review.get("location_basis") or "") + "；" + deterministic_location_basis
+        ).lstrip("；")
+        store_pass = store_match in PASS_STORE_MATCHES
+        observation = review.get("display_observation") or {}
+        display_match, display_standard_basis = _display_control(observation)
+        display_pass = display_match == "pass"
 
-        photo_files = list(review.get("photo_files") or [])
-        referenced_files.extend(photo_files)
-        missing_files: list[str] = []
-        for value in photo_files:
-            path = _photo_path(photo_dir, value)
-            if path.name not in inventory_names or not path.exists():
-                missing_files.append(value)
-        visible_date = review.get("visible_date")
-        date_inside = False
-        if visible_date:
-            try:
-                date_inside = start <= date.fromisoformat(visible_date) <= end
-            except ValueError:
-                date_inside = False
-        period_pass = review.get("period_match") == "match" and date_inside
-        store_pass = review.get("store_match") in PASS_STORE_MATCHES
-        display_pass = review.get("display_match") == "pass"
-        bound_names = {Path(value).name for value in photo_files}
-        duplicate_check = review.get("duplicate_check")
-        if bound_names & exact_duplicate_names:
+        bound = {name.casefold() for name in photo_files}
+        if not photo_files:
+            duplicate_check = "unverifiable"
+        elif bound & exact_names:
             duplicate_check = "exact"
-        elif bound_names & possible_cross_store_names:
+        elif bound & possible_names:
             duplicate_check = "possible"
+        else:
+            duplicate_check = "none"
         duplicate_pass = duplicate_check == "none"
-        file_pass = bool(photo_files) and not missing_files
-        passed = all([file_pass, period_pass, store_pass, display_pass, duplicate_pass])
-        status = "pass" if passed else "supplement"
+
+        recognized = [str(value) for value in review.get("recognized_products") or []]
+        correspondence = sales_product_correspondence(recognized, sales["records"])
+        promotion_summary, promotion_present = build_promotion_summary(review)
+        product_pass = True
+        if contract.get("requires_specific_products"):
+            visible_text = normalize_text(" ".join(recognized))
+            product_pass = all(
+                normalize_text(required) in visible_text
+                for required in contract.get("required_products") or []
+            )
+        promotion_pass = not contract.get("requires_promotion") or promotion_present
+        passed = all(
+            [file_pass, period_pass, store_pass, display_pass, duplicate_pass, product_pass, promotion_pass]
+        )
+
+        risks = list(review.get("risk_notes") or [])
+        advice = list(review.get("supplement_advice") or [])
+        if missing:
+            risks.append("核验引用了不存在的照片：" + "、".join(missing))
+            advice.append("补齐缺失的原始现场照片。")
+        if not period_pass:
+            advice.append("补充活动期内且完整日期可见的原始现场照片。")
+        if not store_pass:
+            advice.append("补充可见合同门店名称/地址的照片或权威门店映射。")
+        if not display_pass:
+            advice.append("补充能看清完整堆头面积或纵向陈列数量的全景照片。")
+        if duplicate_check in {"exact", "possible"}:
+            advice.append("提供该门店独立原始照片并说明跨门店复用或近似照片的原因。")
+        if not product_pass:
+            advice.append("补充合同指定产品清晰可见的现场照片。")
+        if not promotion_pass:
+            advice.append("补充合同指定促销形式清晰可见的现场照片。")
+        advice = list(dict.fromkeys(advice))
         supported = fee if passed else Decimal("0")
-        risk_notes = list(review.get("risk_notes") or [])
-        supplement = list(review.get("supplement_advice") or [])
-        if missing_files:
-            risk_notes.append("结构化核验引用了不存在的照片文件：" + "、".join(missing_files))
-            supplement.append("补齐缺失原始照片文件")
-        if duplicate_check == "exact":
-            risk_notes.append("确定存在SHA-256完全重复照片。")
-            supplement.append("说明重复文件用途，并提供对应门店的独立原始照片。")
-        elif duplicate_check == "possible":
-            risk_notes.append("pHash发现跨门店近似重复候选，需人工查看原图。")
-            supplement.append("核对近似照片是否跨门店复用，并提供独立原始照片或拍摄证明。")
-        store_results.append(
+        results.append(
             {
-                "store_line_no": line_no,
+                "store_line_no": int(line_no),
                 "contract_store_name": store["store_name"],
                 "photo_files": photo_files,
                 "photo_count": len(photo_files),
-                "visible_date": visible_date,
+                "visible_date": review.get("visible_date"),
                 "visible_location": review.get("visible_location"),
-                "period_match": review.get("period_match"),
-                "store_match": review.get("store_match"),
-                "display_match": review.get("display_match"),
+                "period_match": period_match,
+                "store_match": store_match,
+                "store_match_basis": store_match_basis,
+                "display_match": display_match,
+                "display_standard_basis": display_standard_basis,
+                "display_description": observation.get("description"),
                 "duplicate_check": duplicate_check,
-                "mapping_basis": review.get("mapping_basis"),
-                "status": status,
+                "recognized_products": recognized or ["未能可靠识别具体产品"],
+                "promotion_summary": promotion_summary,
+                "promotion_present": promotion_present,
+                "sales_product_names": correspondence["names"],
+                "sales_product_match": correspondence["status"],
+                "sales_product_match_basis": correspondence["basis"],
+                "status": "pass" if passed else "supplement",
                 "supported_amount": json_number(supported),
-                "risk_notes": risk_notes,
-                "supplement_advice": supplement,
+                "risk_notes": risks,
+                "supplement_advice": advice,
             }
         )
         if not passed:
-            failed_controls: list[str] = []
-            if not file_pass:
-                failed_controls.append("照片缺失")
-            if not period_pass:
-                failed_controls.append("期间未通过")
-            if not store_pass:
-                failed_controls.append("门店未匹配")
-            if not display_pass:
-                failed_controls.append("陈列标准未通过")
-            if not duplicate_pass:
-                failed_controls.append("重复检查未通过")
             exceptions.append(
                 exception(
                     "high",
                     "STORE_DISPLAY_EVIDENCE_INCOMPLETE",
-                    f"合同第{line_no}家“{store['store_name']}”未通过：{'、'.join(failed_controls)}。",
-                    f"暂不支持该店{fee}元费用。",
-                    "；".join(supplement) or "补充满足合同标准的完整证据。",
+                    f"合同第{line_no}家“{store['store_name']}”存在未通过的强制条件。",
+                    f"暂不支持该店{json_number(fee)}元。",
+                    "；".join(advice),
                     source="、".join(photo_files) or f"contract store line {line_no}",
                 )
             )
 
-    unknown_reviews = sorted(set(review_map) - set(store_map))
-    if unknown_reviews:
+    unknown_lines = sorted(set(review_map) - set(store_map))
+    if unknown_lines:
         exceptions.append(
             exception(
-                "high",
-                "PHOTO_REVIEW_UNKNOWN_CONTRACT_LINE",
-                f"照片核验包含合同不存在的门店序号：{unknown_reviews}。",
-                "可能存在错绑或多报门店。",
-                "按合同门店清单重新编号。",
+                "high", "PHOTO_REVIEW_UNKNOWN_CONTRACT_LINE",
+                f"照片核验包含合同不存在的门店序号：{unknown_lines}。",
+                "可能存在错绑或多报。", "按合同原始门店序号重新提交。"
             )
         )
-
-    unreferenced_photos = sorted(inventory_names - {Path(value).name for value in referenced_files})
-    if unreferenced_photos:
+    unreferenced = sorted(path.name for path in photo_paths if path.name.casefold() not in referenced)
+    if unreferenced:
         exceptions.append(
             exception(
-                "medium",
-                "UNREFERENCED_PHOTO_FILES",
-                f"有{len(unreferenced_photos)}张照片未绑定到任何合同门店。",
-                "材料可能遗漏核验或重复提交。",
-                "确认照片用途并绑定合同门店或从核销包中移除。",
-                source="、".join(unreferenced_photos),
+                "medium", "UNREFERENCED_PHOTO_FILES",
+                f"有{len(unreferenced)}张照片未绑定合同门店。",
+                "材料可能遗漏核验。", "确认照片用途并绑定或移出材料包。",
+                source="、".join(unreferenced),
             )
         )
-    if photos["exact_duplicate_groups"]:
+    if photos.get("exact_duplicate_groups"):
         exceptions.append(
             exception(
-                "high",
-                "EXACT_DUPLICATE_PHOTOS",
-                f"发现{len(photos['exact_duplicate_groups'])}组SHA-256完全重复照片。",
-                "可能存在重复核销或跨门店复用。",
-                "核对重复照片对应的门店与原始文件。",
-                source=str(photos["exact_duplicate_groups"]),
+                "high", "EXACT_DUPLICATE_PHOTOS", "发现SHA-256完全重复照片。",
+                "可能存在重复核销。", "补交对应门店的独立原始照片。"
             )
         )
-    if cross_store_candidate_pairs:
+    if cross_store_pairs:
         exceptions.append(
             exception(
-                "high",
-                "POSSIBLE_CROSS_STORE_PHOTO_REUSE",
-                f"pHash发现{len(cross_store_candidate_pairs)}组跨门店近似重复候选。",
-                "可能存在同一现场照片跨门店复用。",
-                "人工并排核对候选原图；无法排除复用时补充独立原始照片。",
-                source=str(cross_store_candidate_pairs),
+                "high", "POSSIBLE_CROSS_STORE_PHOTO_REUSE", "发现跨门店pHash近似重复候选。",
+                "可能存在跨店复用。", "人工并排复核并补交独立原图。"
             )
         )
     if photos["files_with_exif_datetime"] == 0 or photos["files_with_gps"] == 0:
         exceptions.append(
             exception(
-                "medium",
-                "PHOTO_ORIGINAL_METADATA_ABSENT",
-                "照片缺少可用的EXIF拍摄时间或GPS，主要依赖画面水印。",
-                "无法从原始文件元数据独立验证拍摄时空。",
-                "保留原始拍摄文件，或补充平台定位/签到记录。",
+                "medium", "PHOTO_ORIGINAL_METADATA_ABSENT",
+                "照片缺少可用EXIF拍摄时间或GPS。", "无法用原始元数据独立验证时空。",
+                "保留原始拍摄文件或补充平台定位记录。"
             )
         )
     if not sales["store_level_available"]:
         exceptions.append(
             exception(
-                "medium",
-                "SALES_DATA_NOT_STORE_LEVEL",
-                "销售Excel为经销商汇总，不能拆分到合同中的各门店。",
-                "销售数据只能证明活动期总体销售，不能独立证明逐店执行。",
-                "如政策要求逐店销售佐证，补交门店级POS或出库明细。",
-                source=sales["source_file"],
-            )
-        )
-    if sales["external_formula_cells"]:
-        exceptions.append(
-            exception(
-                "medium",
-                "SALES_EXCEL_EXTERNAL_LINKS",
-                f"销售Excel有{len(sales['external_formula_cells'])}个公式引用缺失的外部工作簿。",
-                "部分单位或零售价无法在当前文件内独立重算。",
-                "补交被引用主数据或将外链转为可追溯静态值。",
-                source=",".join(sales["external_formula_cells"][:20]),
+                "medium", "SALES_DATA_NOT_STORE_LEVEL",
+                "销售Excel为客户汇总，不能拆分到合同门店。",
+                "只能佐证期间总体销售，不能单独证明某店。",
+                "如政策要求，补交门店级POS或出库明细。",
             )
         )
 
-    supported = sum((money(item["supported_amount"]) for item in store_results), Decimal("0"))
+    supported = sum((money(item["supported_amount"]) for item in results), Decimal("0"))
     suggested = min(claimed, supported)
-    passed_count = sum(item["status"] == "pass" for item in store_results)
-    supplement_count = len(store_results) - passed_count
-    if not store_results:
-        conclusion = "human_review"
-    elif supplement_count:
-        conclusion = "partial_pass" if passed_count else "human_review"
-    else:
-        conclusion = "pass"
-    high_count = sum(item["severity"] == "high" for item in exceptions)
-    medium_count = sum(item["severity"] == "medium" for item in exceptions)
-    expected_claim = fee * Decimal(len(contract_stores))
+    passed_count = sum(item["status"] == "pass" for item in results)
+    supplement_count = len(results) - passed_count
+    expected_claim = fee * len(stores)
     if claimed != expected_claim:
         exceptions.append(
             exception(
-                "high",
-                "CONTRACT_CLAIM_CALCULATION_MISMATCH",
-                f"申报金额{claimed}不等于{len(contract_stores)}家×{fee}元={expected_claim}元。",
-                "合同门店数、单店标准或申报金额至少一项不一致。",
-                "更正合同/申报明细。",
+                "high", "CONTRACT_CLAIM_CALCULATION_MISMATCH",
+                f"申报金额{claimed}不等于{len(stores)}家×{fee}元={expected_claim}元。",
+                "合同门店数、单店金额或申报金额不一致。", "更正合同或申报明细。"
             )
         )
-        high_count += 1
-
+    conclusion = (
+        "pass" if results and not supplement_count
+        else "partial_pass" if passed_count
+        else "human_review"
+    )
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "generated_at": now_utc(),
         "scenario": "promotional_display",
-        "case_id": str(case.get("case_id") or "promotional-display"),
+        "case_id": str(case.get("case_id") or Path(case["source_archive"]).stem),
         "case_name": str(case.get("case_name") or contract.get("customer_name") or "堆头核销"),
         "summary": {
             "conclusion": conclusion,
             "claimed_amount": json_number(claimed),
-            "contract_store_count": len(contract_stores),
+            "contract_store_count": len(stores),
             "fee_per_store": json_number(fee),
             "expected_contract_amount": json_number(expected_claim),
             "passed_store_count": passed_count,
@@ -319,14 +605,14 @@ def audit_display_case(
             "sales_sku_count": sales["sku_count"],
             "sales_quantity": sales["total_quantity"],
             "sales_retail_amount": sales["retail_amount"],
-            "high_exception_count": high_count,
-            "medium_exception_count": medium_count,
+            "high_exception_count": sum(item["severity"] == "high" for item in exceptions),
+            "medium_exception_count": sum(item["severity"] == "medium" for item in exceptions),
         },
         "contract": contract,
         "contract_pdf": pdf,
         "sales": sales,
         "photo_inventory": photos,
-        "store_reconciliation": store_results,
-        "unreferenced_photos": unreferenced_photos,
+        "store_reconciliation": results,
+        "unreferenced_photos": unreferenced,
         "exceptions": exceptions,
     }

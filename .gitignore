@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .audit-tmp/
+/docs/.docx-build/
 /worktrees/
 /input/*
 !/input/README.md

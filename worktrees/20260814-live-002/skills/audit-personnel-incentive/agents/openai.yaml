@@ -1,4 +1,0 @@
-interface:
-  display_name: "Personnel Incentive Audit"
-  short_description: "Reconcile SKU quantities, rewards, stores, and transfers"
-  default_prompt: "Use $audit-personnel-incentive to audit this personnel incentive claim in an isolated Git worktree."

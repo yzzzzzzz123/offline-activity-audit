@@ -1,54 +1,83 @@
 ---
 name: audit-promotional-display
-description: Audit offline promotional display and stack-display reimbursement cases from contracts, store lists, sales Excel files, and现场/陈列 photos. Use when each contracted store must be checked for activity period, visible date and location, store-name mapping, display standard, photo completeness and duplication, sales-data limitations, and store-by-store supported reimbursement.
+description: Audit promotional/stack-display claims from a contract PDF, distributor sales Excel, and field photos. Use whenever every contract store must receive a deterministic date/location/display/duplicate decision, visible packaging must be conservatively matched to exact source-cell Excel product names, ordinary prices must be separated from real promotion evidence, and a fixed store-by-store display worksheet must be produced.
 ---
 
 # Audit Promotional Display
 
-Build a store-by-store evidence chain from the contract to submitted photos and sales support. A filename or aggregate amount alone never proves execution at a contracted store.
+Build one evidence row per contract store. A filename, distributor total, or product-family resemblance never proves that a particular store performed the contracted display.
 
-## Required workflow
+## AI extraction
 
-1. Inventory the contract/PDF, settlement pages, sales workbook, and every submitted display photo.
-2. Extract the contract customer, activity dates, display standard, fee per store, claimed amount, and the complete numbered store list.
-3. Inspect every photo at original resolution. Record its filename, visible date, visible location/store watermark, scene completeness, product/display evidence, and any quality limitation.
-4. Bind photos to contract stores by contract line number and store identity. A filename is only a lead; it is not independent location or date evidence.
-5. For every contracted store, decide each control separately:
-   - photo present;
-   - activity-period match;
-   - contract-store match (`exact`, `compatible`, `mismatch`, or `filename_only`);
-   - display-standard match (`pass`, `fail`, or `uncertain`);
-   - exact/possible duplicate status.
-6. Hash all files with SHA-256 and calculate pHash (with dHash as an auxiliary fingerprint). Record exact duplicates separately from pHash near-duplicate candidates. Compare against a historical fingerprint library only when one is actually supplied; otherwise report cross-activity reuse as unverified.
-7. Read the sales workbook directly and verify customer, period, SKU count, quantity, and amount. State whether sales data is store-level or only distributor-level.
-8. Award the per-store supported amount only when every mandatory store control passes. Otherwise set that store to supplement/review and state the exact missing evidence.
-9. Return evidence JSON that conforms to [evidence.schema.json](references/evidence.schema.json). Then run `scripts/run_audit.py` through the project orchestrator; validate the result against `contracts/audit-result.schema.json`.
-10. Return to the parent Skill for the complete 1.4.1 analysis. Report EXIF/GPS, visible watermark, image fingerprints, file readability, budget/contract comparison, invoice presence, and contract terms as separate controls with explicit capability limits.
+Read [evidence.schema.json](references/evidence.schema.json) and [audit-rules.md](references/audit-rules.md) completely.
 
-## Fail-closed rules
+Give the vision AI only the contract PDF and field photos. For a scanned PDF, expose every page as a lossless full-resolution page image. Read and validate the contract first; then use that frozen contract result to review the field photos. It must return schema version `2.0` with:
 
-- Do not infer date or GPS from a filename.
-- Do not call a store matched when the visible location conflicts with the contract unless an explicit address/rename mapping is supplied.
-- Do not call a display compliant when the required area, facings, layers, or other contract standard is not visible.
-- Do not use distributor-level sales totals as proof that each individual store executed the display.
-- Do not pass a missing contracted store merely because the overall photo count equals the store count.
-- Keep `unverifiable` distinct from `mismatch` and explain the supplement needed for either result.
-- Treat SHA-256/dHash as duplicate-screening evidence only. If the run has no trusted EXIF/GPS, device information, digital signature, pixel-level forgery analysis, or historical fingerprint library, state those gaps and do not claim full authenticity verification.
+- contract customer, dates, display standard, per-store fee, claimed amount, explicit product/promotion requirements, and the complete ordered store list;
+- one review per contract store, with an empty `photo_files` array when that store lacks a photo;
+- visible complete date/location with its visual basis;
+- a structured display observation that separately records whether the photo proves
+  `1平米堆头`, `4纵陈列`, both, neither, or cannot be judged, plus the concrete visible basis;
+- target-brand products supported by visible packaging only;
+- explicit promotion signals separated from ordinary visible prices;
+- source basenames, risks, and suggested supplemental evidence.
 
-## Output requirements
+Only explicit core contract terms create mandatory controls. A generic whole-brand scope such as `参半所有系列` is not a narrow required-product subset. Product/sales tables appended after the contract do not create a promotion requirement unless the contract text explicitly says so.
 
-Include one row per contract store with its photo files, visible date/location, period result, store mapping, display result, duplicate result, supported amount, risk, and supplement request. Also include sales-workbook checks, file hashes, aggregate counts, claimed amount, supported amount, and a conclusion of `pass`, `partial_pass`, or `human_review`.
+The AI must not receive/read sales Excel, copy an Excel name into a photo product, calculate supported amount, hash photos, or make the final pass decision. Filenames are leads only.
 
-Read [audit-rules.md](references/audit-rules.md) when determining mandatory controls, store-name compatibility, severity, supported amount, or conclusion.
+## Deterministic audit
 
-## Formal execution
+Python must:
 
-In the standard two-ZIP workflow, accept routing from the parent [orchestrate-offline-audit](../orchestrate-offline-audit/SKILL.md) Skill only after it has classified the package as `promotional_display` and frozen the case config.
+1. Read the sales Excel directly, preserving every original `product_name` cell, customer, period, quantity, amount, and source row.
+2. Validate all AI-returned photo basenames against the extracted source set.
+3. Determine activity-period result from the visible ISO date and contract dates.
+4. Calculate the store relation from the contract name, independently visible location, original source filename, and numbered-branch conflicts; the AI does not decide `exact`, `compatible`, or `mismatch`.
+5. Translate the display observation into the mandatory display control. `meets` is valid only when `matched_standard` is `stack_1sqm`, `four_vertical`, or `both`; `does_not_meet` pairs only with `none`; `unclear` pairs only with `unclear`.
+6. Independently calculate SHA-256, dHash, and pHash for cross-store photo-reuse screening. Exact reuse fails; cross-store near-duplicate candidates remain unresolved until reviewed. This is not a display-standard judgment.
+7. Match each visible product to the code-read names. Output only exact source-cell strings and classify `exact`, `candidate`, or `unmatched`; translate them in Excel to `明确对应`, `候选对应`, or `未匹配`.
+8. Build promotion text deterministically. An ordinary price list without an explicit signal must never produce `有促销`.
+9. Award the per-store fee only when photo, full date, location, display, and photo-reuse controls pass. Apply product/promotion controls only if the contract explicitly makes them mandatory.
+10. Sum supported amounts and write values, never formulas.
 
-Start formal work only through the project main entry so the trusted supervisor binds the run to a Git snapshot, dedicated branch, and linked worktree:
+## Display standard and photo reuse
+
+The contracted display standard is an OR condition: clearly prove at least one of
+`1平米堆头` or `4纵陈列`. Do not output only `陈列符合`. The visual description must say
+which branch is met and what is visible. If area cannot be established and four vertical
+facings/columns cannot be counted, return `unclear` and request a wider or clearer photo.
+
+Photo reuse is a separate anti-fraud control across contract stores. Never call it
+`陈列重复`, and never use a no-reuse result as evidence that the display itself is compliant.
+
+## Product correspondence
+
+- `exact`: visible packaging/bundle/specification uniquely supports one code-read Excel row. In the maintained campaign mapping, a legible `3+2` bundle that selects the unique `3+2` Excel item qualifies.
+- `candidate`: visible series/packaging narrows the code-read names but cannot establish one exact SKU, including maintained SP-1/SE-1/SP-2/SP-4 aliases.
+- `unmatched`: no source-cell Excel name is supported.
+
+Do not silently rewrite spelling, brand, size, flavor, or bundle notation. Candidate output may list several original Excel names, in source-row order.
+
+## Promotion
+
+`有促销` requires visible special-price wording, old/new price, discount, gift, multi-buy, `1+1`, `3+2`, or `超值装/特享装/量贩装`. A lone `19.90元` or other ordinary tag is only a price. When quality prevents a decision, write `无法判断` with the limitation.
+
+Product and promotion fields are auxiliary by default. They must not override date, location, display, or duplicate failures unless the contract explicitly requires the product/promotion.
+
+## Worksheet contract
+
+For every contract store write:
+
+- A: store, per-store fee, display standard;
+- B: code-read customer/period, exact Excel names, correspondence label, and `无门店明细，不能单独证明该店` when applicable;
+- C in strict order: `文件`, `识别日期`, `识别地点`, `陈列标准核验`, `视觉依据`, `照片复用检查`, `识别产品`, `促销信息`;
+- D: date/location/display-standard/photo-reuse comparison with the contract, keeping the last two controls on separate lines;
+- E: deterministic supported amount;
+- F: `通过` or specific supplemental evidence.
+
+Formal runs occur only through:
 
 ```powershell
-py -3 main.py run --case <case.json> --evidence <evidence.json> --output-dir <external-output-dir> --run-id <unique-run-id>
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model>
 ```
-
-Use `--agent` instead of `--evidence` only when Codex must extract the evidence first. The main entry executes this Skill inside `worktrees/<run-id>`, checkpoints the authoritative `output/` tree to `run/offline-audit/<run-id>`, and exports a hash-listed copy. Use `scripts/run_audit.py` directly only for isolated Skill development, never for a formal reimbursement decision.

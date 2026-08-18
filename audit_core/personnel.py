@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import re
 from collections import defaultdict
 from datetime import date
@@ -16,8 +15,6 @@ from .common import (
     money,
     normalize_text,
     now_utc,
-    resolve_case_file,
-    resolve_case_files,
     unique_by,
 )
 from .excel_sources import image_file_inventory, read_personnel_sales
@@ -39,84 +36,112 @@ def _period_matches(period_values: list[str], start_text: str, end_text: str) ->
     return False
 
 
-def _complete_residual_sales_matches(
+def _product_identity(value: Any) -> str:
+    text = normalize_text(value)
+    for token in ("参半", "oralshark", "牙膏", "套盒", "特享装", "超值装", "量贩装"):
+        text = text.replace(token, "")
+    return re.sub(r"\d+(?:g|ml)", "", text)
+
+
+def _product_similarity(left: Any, right: Any) -> float:
+    left_text = _product_identity(left)
+    right_text = _product_identity(right)
+    if not left_text or not right_text:
+        return 0.0
+    if left_text in right_text or right_text in left_text:
+        return 1.0
+
+    def grams(value: str) -> set[str]:
+        if len(value) == 1:
+            return {value}
+        return {value[index : index + 2] for index in range(len(value) - 1)}
+
+    left_grams = grams(left_text)
+    right_grams = grams(right_text)
+    overlap = len(left_grams & right_grams)
+    return overlap / max(1, len(left_grams | right_grams))
+
+
+def _map_settlement_lines(
     lines: list[dict[str, Any]],
     sales_skus: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Complete cautious model mappings with an auditable one-to-one rule.
+    """Map visual settlement lines to code-read sales SKUs without AI Excel access."""
 
-    Settlement images sometimes use an internal alias such as ``SP-4`` while the
-    sales workbook only carries the consumer-facing product name and barcode.
-    A missing barcode is filled only when all three controls agree:
-
-    * the remaining settlement product core is contained in the Excel name;
-    * the settlement quantity equals the deterministic Excel SKU aggregate; and
-    * the candidate barcode is unique across all unresolved settlement lines.
-
-    The completed mapping remains medium-confidence because the source settlement
-    still does not print the barcode.  This lets the report perform the requested
-    line-by-line quantity comparison without hiding the identity limitation.
-    """
-
-    completed = deepcopy(lines)
+    completed = [
+        {
+            **line,
+            "notes": list(line.get("notes") or []),
+        }
+        for line in lines
+    ]
     sku_by_barcode = {str(item["barcode"]): item for item in sales_skus}
-    already_used = {
-        str((line.get("sales_match") or {}).get("barcode"))
-        for line in completed
-        if (line.get("sales_match") or {}).get("barcode")
-        and str((line.get("sales_match") or {}).get("barcode")) in sku_by_barcode
-    }
-    proposals: list[tuple[dict[str, Any], dict[str, Any], str]] = []
-    candidate_frequency: dict[str, int] = defaultdict(int)
-
+    used: set[str] = set()
     for line in completed:
-        match = line.setdefault("sales_match", {})
-        if str(match.get("barcode") or "").strip():
-            continue
-        normalized_name = normalize_text(line.get("product_name"))
-        product_core = re.sub(r"^sp\d+", "", normalized_name)
-        if len(product_core) < 4 or product_core in {"牙膏", "商品", "产品"}:
-            continue
-        settlement_quantity = decimal_value(
-            line.get("quantity"), label=f"settlement line {line.get('line_no')} quantity"
-        )
-        candidates = [
-            sku
-            for barcode, sku in sku_by_barcode.items()
-            if barcode not in already_used
-            and product_core in normalize_text(sku.get("product_name"))
-            and decimal_value(sku.get("quantity"), label=f"Excel SKU {barcode} quantity")
-            == settlement_quantity
-        ]
-        if len(candidates) != 1:
-            continue
-        candidate = candidates[0]
-        barcode = str(candidate["barcode"])
-        candidate_frequency[barcode] += 1
-        proposals.append((line, candidate, product_core))
-
-    for line, candidate, product_core in proposals:
-        barcode = str(candidate["barcode"])
-        if candidate_frequency[barcode] != 1:
-            continue
-        match = line["sales_match"]
-        quantity = candidate["quantity"]
-        match.update(
-            {
-                "barcode": barcode,
-                "excel_product_name": candidate["product_name"],
-                "confidence": "medium",
-                "basis": (
-                    f"确定性补全：去除结算别名后商品核心词“{product_core}”包含于销售Excel商品名；"
-                    f"结算数量与该条码Excel逐行汇总数量均为{quantity}；且在剩余结算行与剩余销售SKU中"
-                    "满足一行一条码唯一约束。结算单未印条码，因此身份置信度保留为中等。"
-                ),
+        visible_barcode = str(line.get("barcode_visible") or "").strip()
+        if visible_barcode:
+            sku = sku_by_barcode.get(visible_barcode)
+            line["sales_match"] = {
+                "barcode": visible_barcode,
+                "excel_product_name": sku["product_name"] if sku else None,
+                "confidence": "high" if sku else "ambiguous",
+                "basis": "结算单可见条码与代码读取的销售Excel条码直接对应。",
             }
+            if sku:
+                used.add(visible_barcode)
+            continue
+
+        quantity = decimal_value(
+            line["quantity"], label=f"settlement line {line.get('line_no')} quantity"
         )
-        line.setdefault("notes", []).append(
-            f"系统按商品核心词、数量相等和剩余一对一唯一性补全条码{barcode}；原始结算单未印条码。"
+        available = [sku for sku in sales_skus if str(sku["barcode"]) not in used]
+        scored = sorted(
+            (
+                (
+                    _product_similarity(line["product_name"], sku["product_name"]),
+                    decimal_value(sku["quantity"], label="Excel SKU quantity") == quantity,
+                    sku,
+                )
+                for sku in available
+            ),
+            key=lambda item: (item[1], item[0]),
+            reverse=True,
         )
-        already_used.add(barcode)
+        quantity_candidates = [item for item in scored if item[1] and item[0] >= 0.08]
+        candidate: dict[str, Any] | None = None
+        score = 0.0
+        if len(quantity_candidates) == 1:
+            score, _, candidate = quantity_candidates[0]
+        elif scored:
+            best = scored[0]
+            runner_up = scored[1][0] if len(scored) > 1 else 0.0
+            if best[0] >= 0.35 and best[0] - runner_up >= 0.08:
+                score, _, candidate = best
+
+        if candidate is None:
+            line["sales_match"] = {
+                "barcode": None,
+                "excel_product_name": None,
+                "confidence": "ambiguous",
+                "basis": "代码未找到同时满足商品文字相似、一行一条码唯一性的可靠销售SKU。",
+            }
+            continue
+        barcode = str(candidate["barcode"])
+        used.add(barcode)
+        line["sales_match"] = {
+            "barcode": barcode,
+            "excel_product_name": candidate["product_name"],
+            "confidence": "medium",
+            "basis": (
+                "确定性映射：结算商品文字与代码读取的Excel商品文字相似，"
+                f"相似度={score:.3f}；结算数量与Excel汇总数量"
+                f"{'一致' if decimal_value(candidate['quantity'], label='Excel quantity') == quantity else '不一致'}；"
+                "且满足剩余一行一条码唯一约束。因结算单未显示条码，商品身份不标记为已验证。"
+            ),
+        }
+        line["notes"].append(
+            f"代码映射到Excel条码{barcode}；原始结算单未显示该条码。"
+        )
 
     return completed
 
@@ -393,24 +418,20 @@ def _transfer_reconciliation(
 
 
 def audit_personnel_case(
-    case_path: str | Path,
     case: dict[str, Any],
     evidence: dict[str, Any],
 ) -> dict[str, Any]:
-    sales_path = resolve_case_file(case_path, case, "sales_excel")
-    if sales_path is None:
-        raise AuditError("Personnel case requires a sales Excel file")
+    sales_path = Path(case["sales_excel"]).resolve()
     sales = read_personnel_sales(sales_path)
-    source_images: list[Path] = []
-    settlement_image = resolve_case_file(case_path, case, "settlement_image", required=False)
-    if settlement_image is not None:
-        source_images.append(settlement_image)
-    source_images.extend(resolve_case_files(case_path, case, "transfer_images"))
+    source_images = [
+        Path(case["settlement_image"]).resolve(),
+        *[Path(value).resolve() for value in case["transfer_images"]],
+    ]
     image_files = image_file_inventory(source_images) if source_images else None
     settlement = evidence["settlement"]
     lines = sorted(settlement["lines"], key=lambda item: int(item["line_no"]))
     unique_by(lines, "line_no", "settlement line number")
-    lines = _complete_residual_sales_matches(lines, sales["skus"])
+    lines = _map_settlement_lines(lines, sales["skus"])
     sku_map = {item["barcode"]: item for item in sales["skus"]}
     exceptions: list[dict[str, Any]] = []
     used_barcodes: set[str] = set()
@@ -538,10 +559,10 @@ def audit_personnel_case(
         )
 
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "generated_at": now_utc(),
         "scenario": "personnel_incentive",
-        "case_id": str(case.get("case_id") or "personnel-incentive"),
+        "case_id": str(case.get("case_id") or Path(case["source_archive"]).stem),
         "case_name": str(case.get("case_name") or settlement.get("customer_name") or "人员激励"),
         "summary": {
             "conclusion": conclusion,

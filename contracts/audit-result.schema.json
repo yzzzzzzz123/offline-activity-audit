@@ -1,19 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.local/offline-activity-audit/audit-result.schema.json",
-  "title": "Offline activity audit result",
+  "title": "Deterministic offline activity audit result",
   "type": "object",
   "required": [
-    "schema_version",
-    "generated_at",
-    "scenario",
-    "case_id",
-    "case_name",
-    "summary",
-    "exceptions"
+    "schema_version", "generated_at", "scenario", "case_id", "case_name",
+    "summary", "exceptions"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"const": "2.0"},
     "generated_at": {"type": "string", "format": "date-time"},
     "scenario": {"enum": ["personnel_incentive", "promotional_display"]},
     "case_id": {"type": "string", "minLength": 1},
@@ -21,17 +16,11 @@
     "summary": {
       "type": "object",
       "required": [
-        "conclusion",
-        "claimed_amount",
-        "suggested_approved_amount",
-        "temporarily_held_amount",
-        "high_exception_count",
-        "medium_exception_count"
+        "conclusion", "claimed_amount", "suggested_approved_amount",
+        "temporarily_held_amount", "high_exception_count", "medium_exception_count"
       ],
       "properties": {
-        "conclusion": {
-          "enum": ["pass", "conditional_pass", "partial_pass", "human_review"]
-        },
+        "conclusion": {"enum": ["pass", "conditional_pass", "partial_pass", "human_review"]},
         "claimed_amount": {"type": "number", "minimum": 0},
         "suggested_approved_amount": {"type": "number", "minimum": 0},
         "temporarily_held_amount": {"type": "number", "minimum": 0},
@@ -60,30 +49,32 @@
       "if": {"properties": {"scenario": {"const": "personnel_incentive"}}},
       "then": {
         "required": [
-          "settlement",
-          "sales",
-          "sku_reconciliation",
-          "sales_trace",
-          "store_transfer_reconciliation",
-          "transfer_evidence"
+          "settlement", "sales", "sku_reconciliation", "sales_trace",
+          "store_transfer_reconciliation", "transfer_evidence"
         ],
         "properties": {
           "summary": {
             "required": [
-              "settlement_line_quantity",
-              "excel_mapped_quantity",
-              "quantity_difference",
-              "settlement_line_reward",
-              "transfer_total",
-              "quantity_supported_reward",
-              "settlement_line_count",
-              "matched_sku_count",
-              "quantity_match_count",
-              "excel_detail_row_count",
-              "store_count"
+              "settlement_line_quantity", "excel_mapped_quantity", "quantity_difference",
+              "settlement_line_reward", "calculated_line_reward", "transfer_total",
+              "quantity_supported_reward", "settlement_line_count", "matched_sku_count",
+              "quantity_match_count", "excel_detail_row_count", "store_count"
             ]
           },
-          "sku_reconciliation": {"type": "array", "minItems": 1},
+          "sku_reconciliation": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "line_no", "settlement_product_name", "mapped_barcode",
+                "mapping_confidence", "excel_quantity", "settlement_quantity",
+                "quantity_difference", "calculated_settlement_reward",
+                "settlement_reward_amount", "settlement_line_amount_difference",
+                "mapping_status", "quantity_status"
+              ]
+            }
+          },
           "sales_trace": {"type": "array", "minItems": 1},
           "store_transfer_reconciliation": {"type": "array", "minItems": 1},
           "transfer_evidence": {"type": "array"}
@@ -93,28 +84,42 @@
     {
       "if": {"properties": {"scenario": {"const": "promotional_display"}}},
       "then": {
-        "required": [
-          "contract",
-          "contract_pdf",
-          "sales",
-          "photo_inventory",
-          "store_reconciliation"
-        ],
+        "required": ["contract", "contract_pdf", "sales", "photo_inventory", "store_reconciliation"],
         "properties": {
           "summary": {
             "required": [
-              "contract_store_count",
-              "fee_per_store",
-              "expected_contract_amount",
-              "passed_store_count",
-              "supplement_store_count",
-              "supported_amount",
-              "photo_count",
-              "sales_sku_count",
-              "sales_quantity"
+              "contract_store_count", "fee_per_store", "expected_contract_amount",
+              "passed_store_count", "supplement_store_count", "supported_amount",
+              "photo_count", "sales_sku_count", "sales_quantity"
             ]
           },
-          "store_reconciliation": {"type": "array", "minItems": 1}
+          "store_reconciliation": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "store_line_no", "contract_store_name", "photo_files", "visible_date",
+                "visible_location", "period_match", "store_match", "display_match",
+                "display_standard_basis", "display_description", "duplicate_check",
+                "recognized_products", "promotion_summary",
+                "sales_product_names", "sales_product_match", "supported_amount",
+                "status", "supplement_advice"
+              ],
+              "properties": {
+                "display_match": {"enum": ["pass", "fail", "uncertain"]},
+                "display_standard_basis": {
+                  "enum": ["stack_1sqm", "four_vertical", "both", "none", "unclear"]
+                },
+                "display_description": {"type": "string", "minLength": 1},
+                "duplicate_check": {"enum": ["none", "exact", "possible", "unverifiable"]},
+                "sales_product_match": {"enum": ["exact", "candidate", "unmatched"]},
+                "status": {"enum": ["pass", "supplement"]},
+                "sales_product_names": {"type": "array", "items": {"type": "string"}},
+                "supported_amount": {"type": "number", "minimum": 0}
+              }
+            }
+          }
         }
       }
     }
