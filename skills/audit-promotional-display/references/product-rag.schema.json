@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/audit-promotional-display/product-rag.schema.json",
+  "title": "Promotional display product visual RAG catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "products"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "2.0"},
+    "products": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "product_id", "brand", "product_name", "product_code", "barcode_69",
+          "specification", "variant", "match_policy", "identity_anchors", "non_identity_fields", "views"
+        ],
+        "properties": {
+          "product_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,79}$"},
+          "brand": {"type": "string", "minLength": 1},
+          "product_name": {"type": "string", "minLength": 1},
+          "product_code": {
+            "type": "string",
+            "pattern": "^(未标注|[A-Za-z0-9][A-Za-z0-9._-]{0,63})$"
+          },
+          "barcode_69": {"type": "string", "pattern": "^69[0-9]{11}$"},
+          "specification": {"type": "string", "minLength": 1},
+          "variant": {"type": ["string", "null"]},
+          "aliases": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "variant_aliases": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "specification_aliases": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "product_code_aliases": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+            }
+          },
+          "match_policy": {
+            "type": "string",
+            "enum": ["exact_or_candidate", "candidate_only"]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source_id", "collection", "source_folder",
+                "observed_product_name", "observed_specification", "observed_variant"
+              ],
+              "properties": {
+                "source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,79}$"},
+                "collection": {"type": "string", "minLength": 1},
+                "source_folder": {"type": "string", "minLength": 1},
+                "observed_product_name": {"type": "string", "minLength": 1},
+                "observed_specification": {"type": "string", "minLength": 1},
+                "observed_variant": {"type": ["string", "null"]}
+              }
+            }
+          },
+          "identity_anchors": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["strong", "supporting"],
+            "properties": {
+              "strong": {
+                "type": "array",
+                "minItems": 2,
+                "items": {"type": "string", "minLength": 1}
+              },
+              "supporting": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "non_identity_fields": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "views": {
+            "type": "array",
+            "minItems": 0,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "view_id", "face", "image_file", "source_original_name", "sha256",
+                "width", "height", "identity_strength", "visible_anchors", "limitations"
+              ],
+              "properties": {
+                "view_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"},
+                "face": {
+                  "type": "string",
+                  "enum": [
+                    "large_panel_a", "large_panel_b", "regulatory_panel",
+                    "benefits_panel", "qr_end", "brand_end",
+                    "front", "back", "side", "top", "bottom", "barcode",
+                    "regulatory", "detail", "unclassified"
+                  ]
+                },
+                "image_file": {"type": "string", "minLength": 1},
+                "source_original_name": {"type": "string", "minLength": 1},
+                "source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,79}$"},
+                "source_collection": {"type": "string", "minLength": 1},
+                "source_folder": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "width": {"type": "integer", "minimum": 1},
+                "height": {"type": "integer", "minimum": 1},
+                "identity_strength": {
+                  "type": "string",
+                  "enum": ["strong", "supporting", "weak", "unreviewed"]
+                },
+                "visible_anchors": {
+                  "type": "array",
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "limitations": {
+                  "type": "array",
+                  "items": {"type": "string", "minLength": 1}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -20,7 +20,13 @@ py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --produc
 Keep extraction and judgment separate. AI or vision steps may only extract visible facts into schema-validated JSON:
 
 - personnel: settlement image and transfer/red-packet screenshots;
-- display: contract PDF and field photos.
+- display: contract PDF and field photos; the field-photo pass may additionally receive the
+  repository-owned, hash-validated product-reference views under
+  `skills/audit-promotional-display`, solely to retrieve and compare product identity.
+
+Product-reference views are not field evidence. They may resolve a catalog product name,
+product code, and 69 code, but must never establish a store, date, display, promotion, price,
+photo uniqueness, or reimbursement decision and must never be returned as submitted photo files.
 
 Never give the model a sales Excel or access to repository inputs, prior results, caches, history, or the acceptance workbook. AI must not calculate amounts, select Excel product names, or make reimbursement decisions.
 

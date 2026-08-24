@@ -185,7 +185,7 @@ def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             f"三方金额差：{_number(three_way_difference)}元",
             "三方金额匹配" if three_way_difference == 0 else "需补证：三方金额不一致",
         ],
-        height=60,
+        height=72,
         total=True,
     )
     row += 1
@@ -201,7 +201,7 @@ def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             f"申请金额 - 转账金额：{_number(claim_difference)}元",
             "匹配" if claim_difference == 0 else "需补证：说明金额差异",
         ],
-        height=54,
+        height=60,
     )
     row += 1
 
@@ -239,16 +239,16 @@ def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             comparison,
             "身份与日期已验证" if identity_verified else f"{amount_prefix}，身份与日期未验证",
         ],
-        height=60,
+        height=72,
     )
 
     # Freeze only the two title rows and the header. Freezing product rows makes
     # the lower reconciliation rows effectively unreachable on shorter screens.
     ws.freeze_panes = "A4"
     ws.auto_filter.ref = f"A3:F{row}"
-    ws.column_dimensions["A"].width = 28
-    ws.column_dimensions["B"].width = 38
-    ws.column_dimensions["E"].width = 30
+    widths = {"A": 28, "B": 38, "C": 28, "D": 28, "E": 30, "F": 30}
+    for column, width in widths.items():
+        ws.column_dimensions[column].width = width
     _sheet_base(ws, zoom=85, tab_color="70AD47")
     return ws
 

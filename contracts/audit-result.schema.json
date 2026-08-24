@@ -102,7 +102,7 @@
                 "store_line_no", "contract_store_name", "photo_files", "visible_date",
                 "visible_location", "period_match", "store_match", "display_match",
                 "display_standard_basis", "display_description", "duplicate_check",
-                "recognized_products", "promotion_summary",
+                "recognized_products", "product_reference_hits", "promotion_summary",
                 "sales_product_names", "sales_product_match", "supported_amount",
                 "status", "supplement_advice"
               ],
@@ -116,6 +116,35 @@
                 "sales_product_match": {"enum": ["exact", "candidate", "unmatched"]},
                 "status": {"enum": ["pass", "supplement"]},
                 "sales_product_names": {"type": "array", "items": {"type": "string"}},
+                "product_reference_hits": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "reference_product_id", "product_name", "product_code", "barcode_69",
+                      "confidence", "matched_view_ids", "visible_basis"
+                    ],
+                    "properties": {
+                      "reference_product_id": {"type": "string", "minLength": 1},
+                      "product_name": {"type": "string", "minLength": 1},
+                      "product_code": {"type": "string", "minLength": 1},
+                      "product_code_aliases": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1}
+                      },
+                      "barcode_69": {"type": "string", "pattern": "^69[0-9]{11}$"},
+                      "confidence": {"enum": ["exact", "candidate"]},
+                      "matched_view_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1}
+                      },
+                      "visible_basis": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1}
+                      }
+                    }
+                  }
+                },
                 "supported_amount": {"type": "number", "minimum": 0}
               }
             }

@@ -1,4 +1,4 @@
 interface:
   display_name: "Promotional Display Audit"
-  short_description: "Extract contract/photo facts for deterministic store auditing"
-  default_prompt: "Use $audit-promotional-display to extract only contract and photo facts; deterministic code will read Excel names, judge every store, calculate support, and build the worksheet."
+  short_description: "Audit contract/photos with multi-view product retrieval"
+  default_prompt: "Use $audit-promotional-display to extract contract and field-photo facts, compare visible packaging with the validated multi-view product RAG, and leave Excel reading, store judgment, amount calculation, and worksheet generation to deterministic code."

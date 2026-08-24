@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/audit-promotional-display/product-compare.schema.json",
+  "title": "Single field photo to six-view product comparison",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "query_file",
+    "candidate_product_id",
+    "decision",
+    "matched_view_ids",
+    "visible_query_identifiers",
+    "comparison_basis",
+    "conflicts",
+    "limitations"
+  ],
+  "properties": {
+    "query_file": {"type": "string", "minLength": 1},
+    "candidate_product_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,79}$"
+    },
+    "decision": {"type": "string", "enum": ["exact", "candidate", "no_match"]},
+    "matched_view_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"}
+    },
+    "visible_query_identifiers": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "comparison_basis": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/audit-promotional-display/product-query.schema.json",
+  "title": "Bounded product-reference query extracted from field photos",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "photo_queries", "extraction_notes"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "photo_queries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "photo_file", "visible_product_names", "visible_product_codes",
+          "visible_barcodes_69", "visible_text", "packaging_terms", "limitations"
+        ],
+        "properties": {
+          "photo_file": {"type": "string", "minLength": 1},
+          "visible_product_names": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "visible_product_codes": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "visible_barcodes_69": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^69[0-9]{11}$"}
+          },
+          "visible_text": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "packaging_terms": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "limitations": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "extraction_notes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

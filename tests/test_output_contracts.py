@@ -102,6 +102,7 @@ def _display_result() -> dict:
                 "display_description": "画面中可清楚数出4列纵向陈列。",
                 "duplicate_check": "none",
                 "recognized_products": ["示例产品"],
+                "product_reference_hits": [],
                 "promotion_summary": "未识别到明确促销词或组合装",
                 "sales_product_names": ["示例商品原名"],
                 "sales_product_match": "candidate",
@@ -176,6 +177,14 @@ class DisplayContractTests(unittest.TestCase):
             try:
                 self.assertEqual(str(workbook["人员激励核销"].freeze_panes), "A4")
                 self.assertEqual(str(workbook["堆头核销"].freeze_panes), "A4")
+                personnel_sheet = workbook["人员激励核销"]
+                for column in ("C", "D", "F"):
+                    self.assertGreaterEqual(
+                        float(personnel_sheet.column_dimensions[column].width or 0),
+                        28,
+                    )
+                self.assertGreaterEqual(float(personnel_sheet.row_dimensions[5].height or 0), 72)
+                self.assertGreaterEqual(float(personnel_sheet.row_dimensions[7].height or 0), 72)
                 photo_text = str(workbook["堆头核销"]["C4"].value)
                 comparison_text = str(workbook["堆头核销"]["D4"].value)
                 self.assertIn("陈列标准核验：符合（达到4纵陈列）", photo_text)

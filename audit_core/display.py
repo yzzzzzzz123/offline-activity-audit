@@ -17,6 +17,11 @@ from .common import (
     unique_by,
 )
 from .excel_sources import image_file_inventory, pdf_inventory, read_display_sales
+from .product_rag import (
+    load_product_rag,
+    product_reference_label,
+    resolve_product_reference_hits,
+)
 
 
 PASS_STORE_MATCHES = {"exact", "compatible"}
@@ -26,6 +31,7 @@ GENERIC_LOCATION_BIGRAMS = {
     "超市", "商场", "购物", "广场", "生活", "连锁", "百货", "中心",
     "广东", "东莞", "深圳", "门店", "精选",
 }
+DISPLAY_SKILL_DIR = Path(__file__).resolve().parents[1] / "skills" / "audit-promotional-display"
 
 
 def _display_control(observation: dict[str, Any]) -> tuple[str, str]:
@@ -177,13 +183,97 @@ def _select_names(
 def sales_product_correspondence(
     recognized_products: list[str],
     sales_records: list[dict[str, Any]],
+    product_reference_hits: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return only source-cell names, never model-provided Excel wording."""
 
     selected: set[str] = set()
+    exact_identifier_names: set[str] = set()
+    exact_reference_products: list[str] = []
     bases: list[str] = []
     literal_exact = False
     candidate_only = False
+    for hit in product_reference_hits or []:
+        barcode = str(hit.get("barcode_69") or "").strip()
+        primary_code = _canonical_product(hit.get("product_code"))
+        if primary_code == _canonical_product("未标注"):
+            primary_code = ""
+        alias_codes = {
+            _canonical_product(value)
+            for value in hit.get("product_code_aliases") or []
+            if _canonical_product(value)
+        }
+        primary_code_matches = [
+            str(item["product_name"])
+            for item in sales_records
+            if primary_code
+            and _canonical_product(item.get("product_code")) == primary_code
+        ]
+        exact_name_matches = [
+            str(item["product_name"])
+            for item in sales_records
+            if _canonical_product(item.get("product_name"))
+            == _canonical_product(hit.get("product_name"))
+        ]
+        barcode_matches = [
+            str(item["product_name"])
+            for item in sales_records
+            if str(item.get("barcode") or "").strip() == barcode
+        ]
+        alias_code_matches = [
+            str(item["product_name"])
+            for item in sales_records
+            if _canonical_product(item.get("product_code")) in alias_codes
+        ]
+        matches: list[str] = []
+        if len(primary_code_matches) == 1:
+            matches = primary_code_matches
+            matched_record = next(
+                item
+                for item in sales_records
+                if str(item["product_name"]) == matches[0]
+            )
+            excel_barcode = str(matched_record.get("barcode") or "").strip()
+            basis = f"视觉RAG命中唯一产品编码{hit.get('product_code')}，与Excel原始产品编码比对"
+            if barcode and excel_barcode and barcode != excel_barcode:
+                basis += (
+                    f"；现场69码{barcode}与Excel记录{excel_barcode}不同，"
+                    "保留现场照片条码并记录差异"
+                )
+            bases.append(basis)
+        elif len(exact_name_matches) == 1:
+            matches = exact_name_matches
+            bases.append("视觉RAG唯一产品名称与Excel原始商品名称精确比对")
+        elif len(barcode_matches) == 1:
+            matches = barcode_matches
+            bases.append(f"视觉RAG命中69码{barcode}，且Excel仅有一条同码记录")
+        elif len(alias_code_matches) == 1:
+            matches = alias_code_matches
+            matched_code = next(
+                str(item.get("product_code"))
+                for item in sales_records
+                if str(item["product_name"]) == matches[0]
+            )
+            bases.append(
+                f"视觉RAG命中产品编码别名{matched_code}，与Excel原始产品编码比对"
+            )
+        elif barcode_matches:
+            matches = barcode_matches
+            candidate_only = True
+            bases.append(
+                f"视觉RAG命中69码{barcode}，但Excel存在{len(barcode_matches)}条同码商品；"
+                "69码不能单独确定唯一产品"
+            )
+        elif len(primary_code_matches) > 1 or len(exact_name_matches) > 1 or len(alias_code_matches) > 1:
+            candidate_only = True
+            bases.append("视觉RAG标识在Excel中命中多行，无法收敛为唯一商品")
+        selected.update(matches)
+        if str(hit.get("confidence")) == "exact" and matches:
+            exact_identifier_names.update(matches)
+            exact_reference_products.append(str(hit.get("product_name") or ""))
+        elif matches:
+            candidate_only = True
+
     expanded_products = [
         part.strip()
         for value in recognized_products
@@ -192,6 +282,15 @@ def sales_product_correspondence(
     ]
     for product in expanded_products:
         text = _canonical_product(product)
+        if any(
+            reference
+            and (
+                _canonical_product(reference) in text
+                or _similarity(product, reference) >= 0.8
+            )
+            for reference in exact_reference_products
+        ):
+            continue
         matches: list[str] = []
         reasons: list[str] = []
         is_3_plus_2_bundle = "3+2" in text
@@ -279,6 +378,16 @@ def sales_product_correspondence(
     if not ordered:
         status = "unmatched"
         basis = "代码未从现场可见包装中找到可支持的Excel原始商品名。"
+    elif (
+        len(ordered) == 1
+        and ordered[0] in exact_identifier_names
+        and not any(
+            str(hit.get("confidence")) == "candidate"
+            for hit in product_reference_hits or []
+        )
+    ):
+        status = "exact"
+        basis = "；".join(dict.fromkeys(bases)) + "；唯一支持1个Excel原始商品名。"
     elif literal_exact and not candidate_only and len(ordered) == 1:
         status = "exact"
         basis = "；".join(dict.fromkeys(bases)) + "；唯一支持1个Excel原始商品名。"
@@ -369,6 +478,7 @@ def _default_review(line_no: int, store_name: str) -> dict[str, Any]:
             "limitations": ["未提交照片"],
         },
         "recognized_products": ["未能可靠识别具体产品"],
+        "product_reference_hits": [],
         "promotion_evidence": {"signals": [], "visible_prices": [], "limitations": ["未提交照片"]},
         "risk_notes": ["未提交该合同门店的照片"],
         "supplement_advice": ["补充带门头、完整日期地点水印和完整陈列的原始照片。"],
@@ -400,6 +510,7 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
     exceptions: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
     referenced: set[str] = set()
+    product_rag: dict[str, Any] | None = None
 
     for line_no, store in store_map.items():
         review = review_map.get(line_no) or _default_review(int(line_no), str(store["store_name"]))
@@ -442,12 +553,36 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
             duplicate_check = "none"
         duplicate_pass = duplicate_check == "none"
 
-        recognized = [str(value) for value in review.get("recognized_products") or []]
-        correspondence = sales_product_correspondence(recognized, sales["records"])
+        recognized_visible = [str(value) for value in review.get("recognized_products") or []]
+        raw_reference_hits = list(review.get("product_reference_hits") or [])
+        if raw_reference_hits and product_rag is None:
+            product_rag = load_product_rag(DISPLAY_SKILL_DIR)
+        reference_hits = resolve_product_reference_hits(
+            raw_reference_hits,
+            product_rag or {"products": []},
+        )
+        reference_labels = [product_reference_label(item) for item in reference_hits]
+        recognized = reference_labels or recognized_visible
+        correspondence = sales_product_correspondence(
+            recognized_visible,
+            sales["records"],
+            reference_hits,
+        )
         promotion_summary, promotion_present = build_promotion_summary(review)
         product_pass = True
         if contract.get("requires_specific_products"):
-            visible_text = normalize_text(" ".join(recognized))
+            visible_text = normalize_text(
+                " ".join(
+                    [
+                        *recognized_visible,
+                        *(
+                            f"{item['product_name']} {item['product_code']} "
+                            f"{item['barcode_69']} {item['specification']}"
+                            for item in reference_hits
+                        ),
+                    ]
+                )
+            )
             product_pass = all(
                 normalize_text(required) in visible_text
                 for required in contract.get("required_products") or []
@@ -492,6 +627,7 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
                 "display_description": observation.get("description"),
                 "duplicate_check": duplicate_check,
                 "recognized_products": recognized or ["未能可靠识别具体产品"],
+                "product_reference_hits": reference_hits,
                 "promotion_summary": promotion_summary,
                 "promotion_present": promotion_present,
                 "sales_product_names": correspondence["names"],

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "scenario", "contract", "photo_reviews", "extraction_notes"],
   "properties": {
-    "schema_version": {"type": "string", "const": "2.0"},
+    "schema_version": {"type": "string", "const": "2.1"},
     "scenario": {"type": "string", "const": "promotional_display"},
     "contract": {
       "type": "object",
@@ -55,7 +55,7 @@
         "required": [
           "store_line_no", "contract_store_name", "photo_files", "visible_date",
           "visible_location", "location_basis",
-          "display_observation", "recognized_products", "promotion_evidence",
+          "display_observation", "recognized_products", "product_reference_hits", "promotion_evidence",
           "risk_notes", "supplement_advice"
         ],
         "properties": {
@@ -88,6 +88,38 @@
             "type": "array",
             "minItems": 1,
             "items": {"type": "string", "minLength": 1}
+          },
+          "product_reference_hits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "reference_product_id", "confidence", "matched_view_ids",
+                "visible_basis", "limitations"
+              ],
+              "properties": {
+                "reference_product_id": {"type": "string", "minLength": 1},
+                "confidence": {
+                  "type": "string",
+                  "enum": ["exact", "candidate"]
+                },
+                "matched_view_ids": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "visible_basis": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "limitations": {
+                  "type": "array",
+                  "items": {"type": "string", "minLength": 1}
+                }
+              }
+            }
           },
           "promotion_evidence": {
             "type": "object",

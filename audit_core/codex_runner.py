@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -11,6 +12,12 @@ from typing import Any, Callable
 from pypdf import PdfReader
 
 from .common import AuditError, validate_json
+from .product_rag import (
+    ean13_is_valid,
+    load_product_rag,
+    product_reference_images,
+    resolve_product_reference_hits,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +26,9 @@ SKILL_BY_SCENARIO = {
     "promotional_display": PROJECT_ROOT / "skills" / "audit-promotional-display",
 }
 DEFAULT_MAX_ATTEMPTS = 3
+MAX_PRODUCT_REFERENCE_CANDIDATES = 8
+MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO = 3
+MAX_PRODUCT_REFERENCE_VIEWS = 4
 DEFAULT_MODEL = "gpt-5.6-sol"
 DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 1200
 
@@ -102,6 +112,205 @@ def _copy_images(sources: list[Path], destination: Path) -> list[Path]:
     for source, target in zip(sources, copied, strict=True):
         shutil.copy2(source, target)
     return copied
+
+
+def _copy_product_reference_images(
+    skill_dir: Path,
+    destination: Path,
+    catalog: dict[str, Any],
+    *,
+    max_views_per_product: int = MAX_PRODUCT_REFERENCE_VIEWS,
+) -> list[dict[str, Any]]:
+    references = product_reference_images(skill_dir, catalog)
+    copied: list[dict[str, Any]] = []
+    strength_order = {"strong": 0, "supporting": 1, "unreviewed": 2, "weak": 3}
+    for product in catalog.get("products") or []:
+        product_id = str(product["product_id"])
+        available = [
+            (view, source)
+            for item_product, view, source in references
+            if str(item_product["product_id"]) == product_id
+        ]
+        available.sort(
+            key=lambda item: (
+                strength_order.get(str(item[0].get("identity_strength")), 9),
+                str(item[0].get("view_id")),
+            )
+        )
+        selected: list[tuple[dict[str, Any], Path]] = []
+        selected_ids: set[str] = set()
+        seen_sources: set[str] = set()
+        for view, source in available:
+            source_id = str(view.get("source_id") or view.get("view_id"))
+            if source_id in seen_sources:
+                continue
+            selected.append((view, source))
+            selected_ids.add(str(view["view_id"]))
+            seen_sources.add(source_id)
+            if len(selected) >= max_views_per_product:
+                break
+        if len(selected) < max_views_per_product:
+            for view, source in available:
+                view_id = str(view["view_id"])
+                if view_id in selected_ids:
+                    continue
+                selected.append((view, source))
+                selected_ids.add(view_id)
+                if len(selected) >= max_views_per_product:
+                    break
+
+        for view, source in selected:
+            suffix = source.suffix.lower() or ".img"
+            attached_name = f"rag-reference--{product_id}--{view['view_id']}{suffix}"
+            target = destination / attached_name
+            shutil.copy2(source, target)
+            copied.append(
+                {
+                    "reference_product_id": product_id,
+                    "product_name": str(product["product_name"]),
+                    "product_code": str(product["product_code"]),
+                    "product_code_aliases": [
+                        str(value) for value in product.get("product_code_aliases") or []
+                    ],
+                    "barcode_69": str(product["barcode_69"]),
+                    "view_id": str(view["view_id"]),
+                    "face": str(view["face"]),
+                    "identity_strength": str(view["identity_strength"]),
+                    "visible_anchors": list(view.get("visible_anchors") or []),
+                    "attached_file": attached_name,
+                    "path": target,
+                }
+            )
+    return copied
+
+
+def _normalize_product_lookup_text(value: Any) -> str:
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", str(value).casefold())
+
+
+def _product_candidate_score(product: dict[str, Any], query: dict[str, Any]) -> int:
+    if not product.get("views"):
+        return 0
+    barcode = str(product["barcode_69"])
+    visible_barcodes = {
+        str(value)
+        for value in query.get("visible_barcodes_69") or []
+        if ean13_is_valid(str(value))
+    }
+    visible_names = [
+        _normalize_product_lookup_text(value)
+        for value in query.get("visible_product_names") or []
+    ]
+    visible_codes = {
+        _normalize_product_lookup_text(value)
+        for value in query.get("visible_product_codes") or []
+    }
+    visible_text = _normalize_product_lookup_text(
+        " ".join(str(value) for value in query.get("visible_text") or [])
+    )
+
+    barcode_matched = barcode in visible_barcodes or barcode in visible_text
+    score = 1000 if barcode_matched else 0
+
+    product_codes = {
+        _normalize_product_lookup_text(value)
+        for value in (
+            product.get("product_code"),
+            *(product.get("product_code_aliases") or []),
+        )
+        if value and _normalize_product_lookup_text(value) != _normalize_product_lookup_text("未标注")
+    }
+    code_matched = any(
+        code in visible_codes or code in visible_text for code in product_codes
+    )
+    if code_matched:
+        score = max(score, 700)
+        if barcode_matched:
+            score += 700
+
+    catalog_names = [
+        _normalize_product_lookup_text(product.get("product_name") or ""),
+        *(
+            _normalize_product_lookup_text(value)
+            for value in product.get("aliases") or []
+        ),
+    ]
+    query_name_candidates = [*visible_names]
+    if visible_text:
+        query_name_candidates.append(visible_text)
+    name_match_score = 0
+    for catalog_name in catalog_names:
+        for visible_name in query_name_candidates:
+            if min(len(catalog_name), len(visible_name)) < 4:
+                continue
+            if catalog_name in visible_name or visible_name in catalog_name:
+                name_match_score = max(
+                    name_match_score,
+                    400 + min(len(catalog_name), len(visible_name)),
+                )
+
+    if name_match_score:
+        if score:
+            score += name_match_score
+        else:
+            score = name_match_score
+
+    if score == 0:
+        return 0
+
+    supporting = [
+        product.get("specification"),
+        product.get("variant"),
+        *(product.get("specification_aliases") or []),
+        *(product.get("variant_aliases") or []),
+    ]
+    for value in supporting:
+        normalized = _normalize_product_lookup_text(value or "")
+        if len(normalized) >= 2 and normalized in visible_text:
+            score += 25
+    return score
+
+
+def _select_product_rag_candidates(
+    catalog: dict[str, Any],
+    query_result: dict[str, Any],
+    *,
+    max_products: int = MAX_PRODUCT_REFERENCE_CANDIDATES,
+) -> dict[str, Any]:
+    products = list(catalog.get("products") or [])
+    ranked_per_photo: list[list[tuple[int, str]]] = []
+    by_id = {str(product["product_id"]): product for product in products}
+    for query in query_result.get("photo_queries") or []:
+        ranked = sorted(
+            (
+                (score, str(product["product_id"]))
+                for product in products
+                if (score := _product_candidate_score(product, query)) > 0
+            ),
+            key=lambda item: (-item[0], item[1]),
+        )
+        ranked_per_photo.append(ranked[:MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO])
+
+    selected_ids: list[str] = []
+    selected_set: set[str] = set()
+    for rank in range(MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO):
+        for ranked in ranked_per_photo:
+            if rank >= len(ranked):
+                continue
+            product_id = ranked[rank][1]
+            if product_id in selected_set:
+                continue
+            selected_set.add(product_id)
+            selected_ids.append(product_id)
+            if len(selected_ids) >= max_products:
+                return {
+                    "schema_version": catalog["schema_version"],
+                    "products": [by_id[item] for item in selected_ids],
+                }
+    return {
+        "schema_version": catalog["schema_version"],
+        "products": [by_id[item] for item in selected_ids],
+    }
 
 
 def _extract_scanned_pdf_pages(source: Path, destination: Path) -> list[Path]:
@@ -189,19 +398,88 @@ Use only explicit core contract terms for dates, stores, display standard, fee, 
 """
 
 
+def _product_query_prompt(skill_dir: Path, images: list[Path], schema: Path) -> str:
+    names = "\n".join(f"- `{path.name}`" for path in images)
+    return f"""Read `{skill_dir / 'SKILL.md'}` completely and then its linked audit rules. This is a bounded product-query pass, not a reimbursement or display decision. Use `{schema}`.
+
+Inspect each attached field photo at original resolution and return exactly one `photo_queries` item for every file below, preserving each basename exactly:
+
+{names}
+
+Record only identifiers truly visible in that same photo: a product name or distinctive name fragment, an explicit product code such as SP-1/CB-3, a complete 13-digit 69 barcode, and short supporting text. A barcode must start with 69, contain exactly 13 digits, and be fully legible; otherwise omit it. A QR code, anti-counterfeit code, batch/date printing, color, box shape, generic words such as `牙膏` or the brand alone are not product identity. Do not infer hidden text, do not combine separate photos into a stronger observation, do not consult Excel, and do not decide store, date, display, promotion, amount, duplicate-photo status, or catalog match. Use empty arrays and a limitation instead of guessing.
+"""
+
+
+def _validate_product_query_result(images: list[Path], result: dict[str, Any]) -> None:
+    expected = [path.name for path in images]
+    returned = [str(item["photo_file"]) for item in result.get("photo_queries") or []]
+    if len(returned) != len(set(returned)):
+        raise AuditError("商品候选预检重复返回同一现场照片")
+    if len(returned) != len(expected) or set(returned) != set(expected):
+        missing = sorted(set(expected) - set(returned))
+        unknown = sorted(set(returned) - set(expected))
+        raise AuditError(
+            "商品候选预检必须逐张覆盖现场照片："
+            f"missing={missing}，unknown={unknown}"
+        )
+    for item in result.get("photo_queries") or []:
+        for barcode in item.get("visible_barcodes_69") or []:
+            if not ean13_is_valid(str(barcode)):
+                raise AuditError(
+                    f"商品候选预检返回了无效EAN-13：{item['photo_file']}={barcode}"
+                )
+
+
 def _photo_prompt(
     skill_dir: Path,
     images: list[Path],
     schema: Path,
     contract_result: dict[str, Any],
+    product_rag: dict[str, Any],
+    product_reference_files: list[dict[str, Any]],
 ) -> str:
     names = "\n".join(f"- `{path.name}`" for path in images)
     contract_json = json.dumps(contract_result["contract"], ensure_ascii=False, indent=2)
-    return f"""Read `{skill_dir / 'SKILL.md'}` completely and then its linked audit rules. This is a focused field-photo pass; use the focused output schema `{schema}` instead of the full evidence schema.
+    product_lines: list[str] = []
+    products = {
+        str(item["product_id"]): item for item in product_rag.get("products") or []
+    }
+    for product_id, product in products.items():
+        policy = (
+            "仅候选，禁止 exact"
+            if product.get("match_policy") == "candidate_only"
+            else "可按证据返回 exact 或 candidate"
+        )
+        aliases = "、".join(str(value) for value in product.get("aliases") or []) or "无"
+        code_aliases = (
+            "、".join(str(value) for value in product.get("product_code_aliases") or [])
+            or "无"
+        )
+        product_lines.append(
+            f"- `{product_id}`：产品名称 `{product['product_name']}`；"
+            f"产品编码 `{product['product_code']}`；69码 `{product['barcode_69']}`；"
+            f"规格 `{product['specification']}`；款式/香型 `{product.get('variant')}`；"
+            f"名称别名 `{aliases}`；产品编码别名 `{code_aliases}`；命中策略 `{policy}`"
+        )
+        for item in product_reference_files:
+            if item["reference_product_id"] != product_id:
+                continue
+            anchors = "、".join(str(value) for value in item["visible_anchors"])
+            product_lines.append(
+                f"  - `{item['attached_file']}` → view_id `{item['view_id']}`，"
+                f"物理面 `{item['face']}`，参考强度 `{item['identity_strength']}`，"
+                f"可见锚点：{anchors}"
+            )
+    product_context = "\n".join(product_lines) or "本次预检没有形成可靠候选；不得返回 product_reference_hits。"
+    return f"""Read `{skill_dir / 'SKILL.md'}` completely and then its linked audit rules and `{skill_dir / 'references' / 'product-rag.md'}`. This is a focused field-photo pass; use the focused output schema `{schema}` instead of the full evidence schema.
 
 Inspect every attached field photo at original resolution:
 
 {names}
+
+The following separately attached images are repository-owned product-reference views, not field evidence. Use them only to retrieve and compare product identity. Never put a `rag-reference--...` filename in `photo_files`, and never use a reference image to infer a store, date, display, promotion, price, or photo uniqueness:
+
+{product_context}
 
 The following already-validated contract JSON is authoritative only for contract store order, activity dates, display standard, product scope, and promotion requirements. Do not rewrite it and do not use it to invent facts that are not visible in a photo:
 
@@ -209,7 +487,9 @@ The following already-validated contract JSON is authoritative only for contract
 {contract_json}
 ```
 
-Return exactly one photo-review row for every contract store line, in contract order, including an empty `photo_files` list when no photo can be assigned. Preserve attached photo basenames exactly. `recognized_products` may contain only products visibly supported by packaging; never use an Excel-derived name. Extract ordinary visible prices separately from explicit promotion signals. A normal price tag alone is not a promotion. An explicit promotion signal requires visible special-price wording, old/new price, discount, gift, multi-buy, 1+1, 3+2, or value-pack wording. Filenames are routing leads only and cannot independently prove date, location, product, promotion, or display compliance. Use null, `unclear`, or a limitation note instead of guessing.
+Return exactly one photo-review row for every contract store line, in contract order, including an empty `photo_files` list when no field photo can be assigned. Preserve field-photo basenames exactly. `recognized_products` may contain only products supported by visible field packaging or a grounded product-reference comparison; never use an Excel-derived name. For `product_reference_hits`, return only the listed `reference_product_id` and `view_id` values. Use `exact` only when the field photo shows a complete valid 69 code, or a product code/name plus an independent compatible anchor, or at least two independent identity anchors with a uniquely compatible reference view. Brand, red/silver color, box shape, generic whitening text, a QR code, batch/date printing, or background alone cannot produce `exact`. Use `candidate` when the field packaging is compatible but not unique, and use an empty array when there is no reliable catalog match. Every `visible_basis` item must describe something actually visible in a field photo; reference-only content is not a field observation. A row with no field photo must have an empty `product_reference_hits` array.
+
+Extract ordinary visible prices separately from explicit promotion signals. A normal price tag alone is not a promotion. An explicit promotion signal requires visible special-price wording, old/new price, discount, gift, multi-buy, 1+1, 3+2, or value-pack wording. Field filenames are routing leads only and cannot independently prove date, location, product, promotion, or display compliance. Use null, `unclear`, an empty reference-hit array, or a limitation note instead of guessing.
 
 The mandatory display standard has two independent ways to pass: a clearly supported `1平米堆头`, or a clearly countable `4纵陈列`. For every `display_observation`, set `matched_standard` to exactly one of `stack_1sqm`, `four_vertical`, `both`, `none`, or `unclear`. Use `standard_evidence=meets` only with `stack_1sqm`, `four_vertical`, or `both`; use `does_not_meet` only with `none`; and use `unclear` only with `unclear`. The `description` must state the visible basis and which alternative is met; never write only a generic phrase such as `陈列符合`. If the photo cannot establish one-square-metre area and cannot clearly count four vertical facings/columns, return `unclear`. Do not decide whether photos are duplicated or reused across stores; deterministic code performs that separate anti-fraud check.
 """
@@ -250,6 +530,7 @@ def _validate_photo_result(
     case: dict[str, Any],
     contract_result: dict[str, Any],
     evidence: dict[str, Any],
+    product_rag: dict[str, Any] | None = None,
 ) -> None:
     allowed = {Path(path).name for path in case["photo_files"]}
     reviews = evidence.get("photo_reviews") or []
@@ -278,6 +559,11 @@ def _validate_photo_result(
         line_no = int(review["store_line_no"])
         if str(review["contract_store_name"]).strip() != expected_names[line_no]:
             raise AuditError(f"合同第 {line_no} 家门店名称被现场照片核对改写")
+        raw_hits = list(review.get("product_reference_hits") or [])
+        if not review.get("photo_files") and raw_hits:
+            raise AuditError(f"合同第 {line_no} 家门店没有现场照片却返回了商品视觉RAG命中")
+        if product_rag is not None:
+            resolve_product_reference_hits(raw_hits, product_rag)
         observation = review.get("display_observation") or {}
         evidence_level = str(observation.get("standard_evidence") or "")
         matched_standard = str(observation.get("matched_standard") or "")
@@ -301,7 +587,11 @@ def _validate_photo_result(
             )
 
 
-def _validate_source_names(case: dict[str, Any], evidence: dict[str, Any]) -> None:
+def _validate_source_names(
+    case: dict[str, Any],
+    evidence: dict[str, Any],
+    product_rag: dict[str, Any] | None = None,
+) -> None:
     if str(case["scenario"]) == "personnel_incentive":
         _validate_personnel_sources(case, evidence)
         return
@@ -310,6 +600,7 @@ def _validate_source_names(case: dict[str, Any], evidence: dict[str, Any]) -> No
         case,
         {"contract": evidence["contract"]},
         {"photo_reviews": evidence.get("photo_reviews") or []},
+        product_rag,
     )
 
 
@@ -496,6 +787,29 @@ def extract_with_codex(
     photo_root.mkdir(parents=True, exist_ok=False)
     photo_sources = [Path(value) for value in case["photo_files"]]
     photo_images = _copy_images(photo_sources, photo_root)
+    full_product_rag = load_product_rag(skill_dir)
+    query_schema = skill_dir / "references" / "product-query.schema.json"
+    query_result = _run_codex_json(
+        codex=codex,
+        model_root=photo_root,
+        skill_dir=skill_dir,
+        schema=query_schema,
+        raw_output=photo_root / "product-query.json",
+        prompt=_product_query_prompt(skill_dir, photo_images, query_schema),
+        images=photo_images,
+        selected_model=selected_model,
+        model_catalog=model_catalog,
+        label="堆头商品候选预检",
+        max_attempts=max_attempts,
+        attempt_timeout_seconds=attempt_timeout_seconds,
+        post_validate=lambda value: _validate_product_query_result(photo_images, value),
+    )
+    product_rag = _select_product_rag_candidates(full_product_rag, query_result)
+    product_reference_files = _copy_product_reference_images(
+        skill_dir,
+        photo_root,
+        product_rag,
+    )
     photo_schema = _write_subset_schema(
         full_schema,
         photo_root / "photo-evidence.schema.json",
@@ -508,26 +822,42 @@ def extract_with_codex(
         skill_dir=skill_dir,
         schema=photo_schema,
         raw_output=photo_root / "photo-evidence.json",
-        prompt=_photo_prompt(skill_dir, photo_images, photo_schema, contract_result),
-        images=photo_images,
+        prompt=_photo_prompt(
+            skill_dir,
+            photo_images,
+            photo_schema,
+            contract_result,
+            product_rag,
+            product_reference_files,
+        ),
+        images=[
+            *photo_images,
+            *(item["path"] for item in product_reference_files),
+        ],
         selected_model=selected_model,
         model_catalog=model_catalog,
         label="堆头现场照片",
         max_attempts=max_attempts,
         attempt_timeout_seconds=attempt_timeout_seconds,
-        post_validate=lambda value: _validate_photo_result(case, contract_result, value),
+        post_validate=lambda value: _validate_photo_result(
+            case,
+            contract_result,
+            value,
+            product_rag,
+        ),
     )
 
     merged = {
-        "schema_version": "2.0",
+        "schema_version": "2.1",
         "scenario": "promotional_display",
         "contract": contract_result["contract"],
         "photo_reviews": photo_result["photo_reviews"],
         "extraction_notes": [
             *contract_result.get("extraction_notes", []),
+            *query_result.get("extraction_notes", []),
             *photo_result.get("extraction_notes", []),
         ],
     }
     validate_json(merged, full_schema)
-    _validate_source_names(case, merged)
+    _validate_source_names(case, merged, product_rag)
     return merged

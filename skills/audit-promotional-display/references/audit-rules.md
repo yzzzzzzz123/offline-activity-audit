@@ -41,6 +41,9 @@ Missing, filename-only, mismatch, unclear, failed, exact-duplicate, and possible
 ## Excel and products
 
 - Read every sales name from the raw source cell. AI JSON contains no Excel name field.
+- Resolve a `product_reference_hits` ID only through the validated visual-RAG catalog. The catalog owns product name, product code, and 69 code; model text never overrides them.
+- For an exact catalog hit, compare sales rows by 69 code first and product code second. A candidate catalog hit stays candidate even if its catalog identifiers exist in Excel.
+- A complete 13-digit 69 code must pass EAN-13 validation. Brand, red/silver color, box shape, QR code, batch/date printing, or one generic claim cannot uniquely identify a SKU.
 - Preserve code-read names byte-for-text; never invent a normalized display name.
 - Use exact only for a unique high-signal package/SKU/specification correspondence.
 - Use candidate for maintained alias/series rules or several plausible source names.
