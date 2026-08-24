@@ -6,8 +6,13 @@ from pathlib import Path
 
 from audit_core.common import AuditError
 from audit_core.codex_runner import (
+    DEFAULT_REASONING_EFFORT,
+    MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO,
+    PRODUCT_QUERY_REASONING_EFFORT,
     _copy_product_reference_images,
+    _is_non_retryable_codex_error,
     _select_product_rag_candidates,
+    _validate_photo_result,
 )
 from audit_core.display import sales_product_correspondence
 from audit_core.product_rag import (
@@ -269,6 +274,119 @@ class ProductRagTests(unittest.TestCase):
             )
             self.assertLessEqual(len(copied), 4)
             self.assertTrue(all(item["path"].is_file() for item in copied))
+
+    def test_candidate_retrieval_honors_two_per_photo_contract(self) -> None:
+        products = [
+            {
+                "product_id": f"product-{index}",
+                "barcode_69": f"unreadable-{index}",
+                "product_name": f"参半清新牙膏{index}",
+                "product_code": "未标注",
+                "product_code_aliases": [],
+                "aliases": [],
+                "specification": "",
+                "specification_aliases": [],
+                "variant": "",
+                "variant_aliases": [],
+                "views": [{}],
+            }
+            for index in range(1, 4)
+        ]
+        selected = _select_product_rag_candidates(
+            {"schema_version": "test", "products": products},
+            {
+                "photo_queries": [
+                    {
+                        "visible_barcodes_69": [],
+                        "visible_product_names": ["参半清新牙膏"],
+                        "visible_product_codes": [],
+                        "visible_text": [],
+                    }
+                ]
+            },
+        )
+        self.assertEqual(MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO, 2)
+        self.assertEqual(
+            [product["product_id"] for product in selected["products"]],
+            ["product-1", "product-2"],
+        )
+
+    def test_reasoning_policy_keeps_final_judgment_high(self) -> None:
+        self.assertEqual(PRODUCT_QUERY_REASONING_EFFORT, "medium")
+        self.assertEqual(DEFAULT_REASONING_EFFORT, "high")
+
+    def test_invalid_codex_request_configuration_is_not_retried(self) -> None:
+        self.assertTrue(
+            _is_non_retryable_codex_error(
+                "invalid_json_schema: uniqueItems is not permitted"
+            )
+        )
+        self.assertTrue(_is_non_retryable_codex_error("invalid_request_error"))
+        self.assertFalse(_is_non_retryable_codex_error("request timed out"))
+
+    def test_four_vertical_requires_matching_left_to_right_facing_evidence(self) -> None:
+        case = {"photo_files": ["store.jpg"]}
+        contract = {
+            "contract": {
+                "stores": [{"line_no": 1, "store_name": "示例门店"}],
+            }
+        }
+
+        def evidence(count: int, basis: list[str]) -> dict:
+            return {
+                "photo_reviews": [
+                    {
+                        "store_line_no": 1,
+                        "contract_store_name": "示例门店",
+                        "photo_files": ["store.jpg"],
+                        "product_reference_hits": [],
+                        "display_observation": {
+                            "standard_evidence": "meets",
+                            "matched_standard": "four_vertical",
+                            "vertical_facing_count": count,
+                            "vertical_facing_basis": basis,
+                            "stack_1sqm_basis": None,
+                            "description": "同一展示面从左到右可数出4个纵向陈列列",
+                        },
+                    }
+                ]
+            }
+
+        _validate_photo_result(
+            case,
+            contract,
+            evidence(4, ["左一绿盒", "左二红盒", "右一白紫盒", "右二窄白盒"]),
+        )
+        with self.assertRaisesRegex(AuditError, "逐列依据数量不一致"):
+            _validate_photo_result(
+                case,
+                contract,
+                evidence(4, ["左一绿盒", "左二红盒", "右一白紫盒"]),
+            )
+        with self.assertRaisesRegex(AuditError, "至少4个可见纵列"):
+            _validate_photo_result(
+                case,
+                contract,
+                evidence(3, ["左一绿盒", "左二红盒", "右一白紫盒"]),
+            )
+        with self.assertRaisesRegex(AuditError, "逐列依据存在重复"):
+            _validate_photo_result(
+                case,
+                contract,
+                evidence(4, ["左一绿盒", "左二红盒", "右一白紫盒", "右一白紫盒"]),
+            )
+        with self.assertRaisesRegex(AuditError, "逐列依据存在重复"):
+            _validate_photo_result(
+                case,
+                contract,
+                evidence(4, ["左一绿盒", "左二红盒", "右一白紫盒", " 右一白紫盒 "]),
+            )
+        with self.assertRaisesRegex(AuditError, "逐列依据包含空白项"):
+            _validate_photo_result(
+                case,
+                contract,
+                evidence(4, ["左一绿盒", "左二红盒", "右一白紫盒", "   "]),
+            )
 
 
 if __name__ == "__main__":

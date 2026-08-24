@@ -24,9 +24,12 @@ Missing, filename-only, mismatch, unclear, failed, exact-duplicate, and possible
 - `standard_evidence=meets` pairs only with `matched_standard=stack_1sqm`,
   `four_vertical`, or `both`; `does_not_meet` pairs only with `none`; `unclear` pairs only
   with `unclear`.
-- A generic statement such as `陈列符合` is not evidence. State the visible area/arrangement
-  or the countable vertical facings. When neither can be established from the submitted
-  view, use `unclear` and request a full-view photo.
+- A generic statement such as `陈列符合` is not evidence. For `4纵陈列`, record the exact
+  integer and the same number of distinct, simultaneously visible columns from left to right;
+  boxes stacked vertically and columns from different shelf levels or viewing angles cannot be
+  added together. For `1平米堆头`, provide visible scale, dimensions, or a complete-footprint
+  basis. When neither branch can be established from the submitted view, use `unclear` and
+  request a full-view photo.
 - Photo reuse is a separate cross-store anti-fraud control. SHA-256 identifies byte-exact
   reuse; perceptual hashes flag visually near-identical cross-store candidates. It must be
   shown as `照片复用检查`, never as `陈列重复`, and cannot prove display compliance.

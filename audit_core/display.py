@@ -474,6 +474,9 @@ def _default_review(line_no: int, store_name: str) -> dict[str, Any]:
         "display_observation": {
             "standard_evidence": "unclear",
             "matched_standard": "unclear",
+            "vertical_facing_count": None,
+            "vertical_facing_basis": [],
+            "stack_1sqm_basis": None,
             "description": "未提交照片",
             "limitations": ["未提交照片"],
         },
@@ -625,6 +628,11 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
                 "display_match": display_match,
                 "display_standard_basis": display_standard_basis,
                 "display_description": observation.get("description"),
+                "display_vertical_facing_count": observation.get("vertical_facing_count"),
+                "display_vertical_facing_basis": list(
+                    observation.get("vertical_facing_basis") or []
+                ),
+                "display_stack_1sqm_basis": observation.get("stack_1sqm_basis"),
                 "duplicate_check": duplicate_check,
                 "recognized_products": recognized or ["未能可靠识别具体产品"],
                 "product_reference_hits": reference_hits,

@@ -325,6 +325,21 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             str(item.get("display_standard_basis") or "未提供陈列标准依据"),
         )
         display_description = str(item.get("display_description") or "未提供可见陈列依据").strip()
+        vertical_count = item.get("display_vertical_facing_count")
+        vertical_count_text = "无法可靠计数" if vertical_count is None else str(vertical_count)
+        vertical_basis = "；".join(
+            str(value).strip()
+            for value in item.get("display_vertical_facing_basis") or []
+            if str(value).strip()
+        ) or "未形成可靠逐列依据"
+        stack_basis = str(item.get("display_stack_1sqm_basis") or "").strip()
+        stack_basis = stack_basis or "未形成可验证的1平米依据"
+        structured_display_description = (
+            f"{display_description}\n"
+            f"可见纵列数：{vertical_count_text}\n"
+            f"逐列依据（左到右）：{vertical_basis}\n"
+            f"1平米依据：{stack_basis}"
+        )
         duplicate = duplicate_labels.get(item["duplicate_check"], str(item["duplicate_check"]))
         match = product_match_labels.get(item["sales_product_match"], str(item["sales_product_match"]))
         advice = "；".join(item.get("supplement_advice") or [])
@@ -335,12 +350,12 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             [
                 f"第{item['store_line_no']}家：{item['contract_store_name']}\n合同要求：{_number(summary['fee_per_store'])}元；{contract['display_standard']}",
                 f"读取客户：{customers}\n读取期间：{periods}\nExcel对应产品：{sales_text}\n对应判断：{match}{warning}",
-                f"文件：{photo_names}\n识别日期：{item.get('visible_date') or '未识别'}\n识别地点：{item.get('visible_location') or '未识别'}\n陈列标准核验：{display}（{display_basis}）\n视觉依据：{display_description}\n照片复用检查：{duplicate}\n识别产品：{products}\n促销信息：{item['promotion_summary']}",
+                f"文件：{photo_names}\n识别日期：{item.get('visible_date') or '未识别'}\n识别地点：{item.get('visible_location') or '未识别'}\n陈列标准核验：{display}（{display_basis}）\n视觉依据：{structured_display_description}\n照片复用检查：{duplicate}\n识别产品：{products}\n促销信息：{item['promotion_summary']}",
                 f"照片 ↔ 合同日期/门店/陈列标准/照片复用\n{period}；{store}\n陈列标准：{display}（{display_basis}）\n照片复用：{duplicate}",
                 f"{_number(item['supported_amount'])}元",
                 "通过" if item["status"] == "pass" else f"需补证：{advice or '补充可核验的现场照片。'}",
             ],
-            height=_display_row_height(sales_names, display_description),
+            height=_display_row_height(sales_names, structured_display_description),
         )
         row += 1
 

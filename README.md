@@ -16,7 +16,7 @@
 py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id 20260817-simple-001 --producer-model codex
 ```
 
-视觉提取默认固定使用 `gpt-5.6-sol`，并隔离本机 Codex 的插件、Hook 和其他个人配置，避免正式运行受本机配置漂移影响。Windows 会优先使用当前 Codex 桌面版自带的 CLI，并为每次运行加载该 CLI 的临时内置模型目录，避免全局 CLI、在线刷新和本机模型缓存之间的版本冲突。可通过 `OFFLINE_AUDIT_MODEL` 替换为当前 CLI 内置的其他模型，或通过 `OFFLINE_AUDIT_CODEX` 显式指定 CLI 文件。
+视觉提取默认固定使用 `gpt-5.6-sol`，并隔离本机 Codex 的插件、Hook 和其他个人配置，避免正式运行受本机配置漂移影响。Windows 会优先使用当前 Codex 桌面版自带的 CLI，并为每次运行加载该 CLI 的临时内置模型目录，避免全局 CLI、在线刷新和本机模型缓存之间的版本冲突。可通过 `OFFLINE_AUDIT_MODEL` 替换为当前 CLI 内置的其他模型，或通过 `OFFLINE_AUDIT_CODEX` 显式指定 CLI 文件。商品候选预检只提取现场可见锚点，固定使用 `medium` 推理；合同、人员材料和最终现场图—参考图联合判断继续使用 `high` 推理。正式入口会逐阶段打印实际耗时；超时和传输类失败可按上限重试，非法 Schema、无效请求、认证/权限或模型配置错误立即失败关闭，不重复提交同一无效请求。
 
 成功后文件直接生成在：
 
@@ -59,7 +59,12 @@ AI 只负责读取视觉材料中的可见事实：
 
 Python 要求 `>=3.11`。项目依赖声明在 `pyproject.toml` 中。
 
+商品参考图和权威样品 Excel 通过 Git LFS 交付。首次克隆或切换到包含知识库的版本后，必须先取得真实 LFS 对象；只有指针文件时，RAG 图片 SHA-256 校验会按设计失败关闭。
+
 ```powershell
+git lfs install
+git lfs pull
+git lfs fsck
 py -3 -m pip install -e .
 py -3 -B -m unittest discover -s tests -v
 ```

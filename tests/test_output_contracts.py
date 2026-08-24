@@ -100,6 +100,14 @@ def _display_result() -> dict:
                 "display_match": "pass",
                 "display_standard_basis": "four_vertical",
                 "display_description": "画面中可清楚数出4列纵向陈列。",
+                "display_vertical_facing_count": 4,
+                "display_vertical_facing_basis": [
+                    "左一绿色产品列",
+                    "左二红色产品列",
+                    "右一白紫色产品列",
+                    "右二窄白色产品列",
+                ],
+                "display_stack_1sqm_basis": None,
                 "duplicate_check": "none",
                 "recognized_products": ["示例产品"],
                 "product_reference_hits": [],
@@ -189,6 +197,13 @@ class DisplayContractTests(unittest.TestCase):
                 comparison_text = str(workbook["堆头核销"]["D4"].value)
                 self.assertIn("陈列标准核验：符合（达到4纵陈列）", photo_text)
                 self.assertIn("视觉依据：画面中可清楚数出4列纵向陈列。", photo_text)
+                self.assertIn("可见纵列数：4", photo_text)
+                self.assertIn(
+                    "逐列依据（左到右）：左一绿色产品列；左二红色产品列；"
+                    "右一白紫色产品列；右二窄白色产品列",
+                    photo_text,
+                )
+                self.assertIn("1平米依据：未形成可验证的1平米依据", photo_text)
                 self.assertIn("照片复用检查：未发现跨门店照片复用", photo_text)
                 self.assertIn("陈列标准：符合（达到4纵陈列）", comparison_text)
                 self.assertIn("照片复用：未发现跨门店照片复用", comparison_text)

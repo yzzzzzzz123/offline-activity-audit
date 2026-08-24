@@ -11,13 +11,14 @@ Build one evidence row per contract store. A filename, distributor total, or pro
 
 Read [evidence.schema.json](references/evidence.schema.json) and [audit-rules.md](references/audit-rules.md) completely. For field-photo product identity, also read [product-rag.md](references/product-rag.md); the runtime validates [product-rag.json](references/product-rag.json) and attaches its indexed multi-view images separately from field evidence.
 
-Give the vision AI only the contract PDF, field photos, and repository-owned product-reference views. Product-reference views may establish product identity only; they cannot establish a field store, date, display, promotion, price, or photo uniqueness and must never be returned as `photo_files`. For a scanned PDF, expose every page as a lossless full-resolution page image. Read and validate the contract first; then use that frozen contract result to review the field photos. It must return schema version `2.1` with:
+Give the vision AI only the contract PDF, field photos, and repository-owned product-reference views. Product-reference views may establish product identity only; they cannot establish a field store, date, display, promotion, price, or photo uniqueness and must never be returned as `photo_files`. For a scanned PDF, expose every page as a lossless full-resolution page image. Read and validate the contract first; then use that frozen contract result to review the field photos. It must return schema version `2.2` with:
 
 - contract customer, dates, display standard, per-store fee, claimed amount, explicit product/promotion requirements, and the complete ordered store list;
 - one review per contract store, with an empty `photo_files` array when that store lacks a photo;
 - visible complete date/location with its visual basis;
 - a structured display observation that separately records whether the photo proves
-  `1平米堆头`, `4纵陈列`, both, neither, or cannot be judged, plus the concrete visible basis;
+  `1平米堆头`, `4纵陈列`, both, neither, or cannot be judged, plus a left-to-right count and
+  description of every visible vertical facing and an independent one-square-metre basis;
 - target-brand products supported by visible packaging only;
 - grounded `product_reference_hits` using only catalog product/view IDs, with `exact` reserved for a valid visible 69 code or multiple independent identity anchors and `candidate` used for non-unique partial packaging;
 - explicit promotion signals separated from ordinary visible prices;
@@ -48,6 +49,10 @@ The contracted display standard is an OR condition: clearly prove at least one o
 `1平米堆头` or `4纵陈列`. Do not output only `陈列符合`. The visual description must say
 which branch is met and what is visible. If area cannot be established and four vertical
 facings/columns cannot be counted, return `unclear` and request a wider or clearer photo.
+For `4纵陈列`, record the exact count and list the same number of distinct, simultaneously
+visible columns from left to right; never add boxes stacked vertically or columns from different
+shelf levels/angles. For `1平米堆头`, provide visible scale, dimensions, or complete-footprint
+evidence rather than inferring area from a close-up.
 
 Photo reuse is a separate anti-fraud control across contract stores. Never call it
 `陈列重复`, and never use a no-reuse result as evidence that the display itself is compliant.

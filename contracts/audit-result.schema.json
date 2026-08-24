@@ -101,7 +101,9 @@
               "required": [
                 "store_line_no", "contract_store_name", "photo_files", "visible_date",
                 "visible_location", "period_match", "store_match", "display_match",
-                "display_standard_basis", "display_description", "duplicate_check",
+                "display_standard_basis", "display_description",
+                "display_vertical_facing_count", "display_vertical_facing_basis",
+                "display_stack_1sqm_basis", "duplicate_check",
                 "recognized_products", "product_reference_hits", "promotion_summary",
                 "sales_product_names", "sales_product_match", "supported_amount",
                 "status", "supplement_advice"
@@ -112,6 +114,15 @@
                   "enum": ["stack_1sqm", "four_vertical", "both", "none", "unclear"]
                 },
                 "display_description": {"type": "string", "minLength": 1},
+                "display_vertical_facing_count": {
+                  "type": ["integer", "null"],
+                  "minimum": 0
+                },
+                "display_vertical_facing_basis": {
+                  "type": "array",
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "display_stack_1sqm_basis": {"type": ["string", "null"], "minLength": 1},
                 "duplicate_check": {"enum": ["none", "exact", "possible", "unverifiable"]},
                 "sales_product_match": {"enum": ["exact", "candidate", "unmatched"]},
                 "status": {"enum": ["pass", "supplement"]},

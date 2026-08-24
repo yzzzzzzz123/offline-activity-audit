@@ -27,14 +27,35 @@ SKILL_BY_SCENARIO = {
 }
 DEFAULT_MAX_ATTEMPTS = 3
 MAX_PRODUCT_REFERENCE_CANDIDATES = 8
-MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO = 3
+MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO = 2
 MAX_PRODUCT_REFERENCE_VIEWS = 4
 DEFAULT_MODEL = "gpt-5.6-sol"
 DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 1200
+DEFAULT_REASONING_EFFORT = "high"
+PRODUCT_QUERY_REASONING_EFFORT = "medium"
+ALLOWED_REASONING_EFFORTS = frozenset({"low", "medium", "high", "xhigh"})
 
 
 class CodexExtractionError(AuditError):
     """Raised when visual extraction fails after all attempts."""
+
+
+class CodexRequestConfigurationError(CodexExtractionError):
+    """Raised when retrying the same Codex request cannot repair its configuration."""
+
+
+NON_RETRYABLE_CODEX_ERROR_MARKERS = (
+    "invalid_json_schema",
+    "invalid_request_error",
+    "authentication_error",
+    "permission_error",
+    "model_not_found",
+)
+
+
+def _is_non_retryable_codex_error(detail: str) -> bool:
+    normalized = detail.casefold()
+    return any(marker in normalized for marker in NON_RETRYABLE_CODEX_ERROR_MARKERS)
 
 
 def _find_codex() -> str:
@@ -491,7 +512,9 @@ Return exactly one photo-review row for every contract store line, in contract o
 
 Extract ordinary visible prices separately from explicit promotion signals. A normal price tag alone is not a promotion. An explicit promotion signal requires visible special-price wording, old/new price, discount, gift, multi-buy, 1+1, 3+2, or value-pack wording. Field filenames are routing leads only and cannot independently prove date, location, product, promotion, or display compliance. Use null, `unclear`, an empty reference-hit array, or a limitation note instead of guessing.
 
-The mandatory display standard has two independent ways to pass: a clearly supported `1平米堆头`, or a clearly countable `4纵陈列`. For every `display_observation`, set `matched_standard` to exactly one of `stack_1sqm`, `four_vertical`, `both`, `none`, or `unclear`. Use `standard_evidence=meets` only with `stack_1sqm`, `four_vertical`, or `both`; use `does_not_meet` only with `none`; and use `unclear` only with `unclear`. The `description` must state the visible basis and which alternative is met; never write only a generic phrase such as `陈列符合`. If the photo cannot establish one-square-metre area and cannot clearly count four vertical facings/columns, return `unclear`. Do not decide whether photos are duplicated or reused across stores; deterministic code performs that separate anti-fraud check.
+The mandatory display standard has two independent ways to pass: a clearly supported `1平米堆头`, or a clearly countable `4纵陈列`. For every `display_observation`, set `matched_standard` to exactly one of `stack_1sqm`, `four_vertical`, `both`, `none`, or `unclear`. Use `standard_evidence=meets` only with `stack_1sqm`, `four_vertical`, or `both`; use `does_not_meet` only with `none`; and use `unclear` only with `unclear`.
+
+Count vertical facings conservatively from left to right. Count only simultaneously visible, distinct vertical product columns on the same display plane; do not add boxes stacked vertically, columns from different shelf levels or viewing angles, or hidden/inferred columns. Put the exact integer in `vertical_facing_count` and one short left-to-right description per counted column in `vertical_facing_basis`; the integer and array length must match. Use null plus an empty array when a reliable count is impossible. `four_vertical` or `both` requires at least four listed columns. Set `stack_1sqm_basis` only when visible scale, dimensions, or a complete footprint proves at least one square metre; otherwise use null. The `description` must summarize these structured facts and the matched alternative, never only a generic phrase such as `陈列符合`. If neither branch is proved, return `unclear`. Do not decide whether photos are duplicated or reused across stores; deterministic code performs that separate anti-fraud check.
 """
 
 
@@ -585,6 +608,48 @@ def _validate_photo_result(
             raise AuditError(
                 f"合同第 {line_no} 家门店的陈列依据过于笼统，必须说明1平米堆头或4纵陈列的可见依据"
             )
+        vertical_count = observation.get("vertical_facing_count")
+        vertical_basis = list(observation.get("vertical_facing_basis") or [])
+        normalized_vertical_basis = [str(value).strip().casefold() for value in vertical_basis]
+        if any(not value for value in normalized_vertical_basis):
+            raise AuditError(
+                f"合同第 {line_no} 家门店的逐列依据包含空白项"
+            )
+        if len(normalized_vertical_basis) != len(set(normalized_vertical_basis)):
+            raise AuditError(
+                f"合同第 {line_no} 家门店的逐列依据存在重复，不能把同一纵列重复计数"
+            )
+        if vertical_count is None:
+            if vertical_basis:
+                raise AuditError(
+                    f"合同第 {line_no} 家门店未给出可计数纵列，却返回了纵列依据"
+                )
+        elif int(vertical_count) != len(vertical_basis):
+            raise AuditError(
+                f"合同第 {line_no} 家门店的可见纵列数与逐列依据数量不一致："
+                f"count={vertical_count}, basis={len(vertical_basis)}"
+            )
+        proves_four_vertical = matched_standard in {"four_vertical", "both"}
+        if proves_four_vertical and (
+            vertical_count is None or int(vertical_count) < 4 or len(vertical_basis) < 4
+        ):
+            raise AuditError(
+                f"合同第 {line_no} 家门店声明达到4纵陈列，但没有列出至少4个可见纵列"
+            )
+        if not proves_four_vertical and vertical_count is not None and int(vertical_count) >= 4:
+            raise AuditError(
+                f"合同第 {line_no} 家门店已列出至少4个可见纵列，却未命中four_vertical"
+            )
+        stack_basis = str(observation.get("stack_1sqm_basis") or "").strip()
+        proves_stack = matched_standard in {"stack_1sqm", "both"}
+        if proves_stack and not stack_basis:
+            raise AuditError(
+                f"合同第 {line_no} 家门店声明达到1平米堆头，但没有面积可见依据"
+            )
+        if not proves_stack and stack_basis:
+            raise AuditError(
+                f"合同第 {line_no} 家门店给出了1平米面积依据，却未命中stack_1sqm"
+            )
 
 
 def _validate_source_names(
@@ -618,8 +683,11 @@ def _run_codex_json(
     label: str,
     max_attempts: int,
     attempt_timeout_seconds: int,
+    reasoning_effort: str,
     post_validate: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
+    if reasoning_effort not in ALLOWED_REASONING_EFFORTS:
+        raise AuditError(f"不支持的模型推理强度：{reasoning_effort}")
     command = [
         codex,
         "exec",
@@ -642,7 +710,7 @@ def _run_codex_json(
         "--model",
         selected_model,
         "-c",
-        'model_reasoning_effort="high"',
+        f"model_reasoning_effort={json.dumps(reasoning_effort)}",
         "-c",
         f"model_catalog_json={json.dumps(str(model_catalog), ensure_ascii=False)}",
     ]
@@ -651,8 +719,10 @@ def _run_codex_json(
 
     last_error = "AI 提取未启动"
     for attempt in range(1, max_attempts + 1):
+        attempt_started = time.monotonic()
         print(
-            f"AI 正在识别 {label}（第 {attempt}/{max_attempts} 次，模型 {selected_model}）...",
+            f"AI 正在识别 {label}（第 {attempt}/{max_attempts} 次，"
+            f"模型 {selected_model}，推理 {reasoning_effort}）...",
             flush=True,
         )
         raw_output.unlink(missing_ok=True)
@@ -672,7 +742,8 @@ def _run_codex_json(
         except subprocess.TimeoutExpired:
             last_error = f"单次视觉识别超过 {attempt_timeout_seconds} 秒"
             print(
-                f"AI 识别 {label} 第 {attempt}/{max_attempts} 次失败：{last_error}",
+                f"AI 识别 {label} 第 {attempt}/{max_attempts} 次失败"
+                f"（{time.monotonic() - attempt_started:.1f} 秒）：{last_error}",
                 flush=True,
             )
             if attempt < max_attempts:
@@ -685,6 +756,10 @@ def _run_codex_json(
                     for value in (completed.stderr, completed.stdout)
                     if value.strip()
                 )[-4000:]
+                if _is_non_retryable_codex_error(detail):
+                    raise CodexRequestConfigurationError(
+                        f"codex 请求配置错误，重复执行无法修复：{detail}"
+                    )
                 raise AuditError(f"codex 退出码 {completed.returncode}：{detail}")
             if not raw_output.is_file():
                 raise AuditError("codex 未生成结构化证据")
@@ -694,11 +769,24 @@ def _run_codex_json(
             validate_json(value, schema)
             if post_validate is not None:
                 post_validate(value)
+            print(
+                f"AI 完成 {label}（第 {attempt}/{max_attempts} 次，"
+                f"{time.monotonic() - attempt_started:.1f} 秒）",
+                flush=True,
+            )
             return value
+        except CodexRequestConfigurationError as exc:
+            print(
+                f"AI 识别 {label} 配置失败，停止重试"
+                f"（{time.monotonic() - attempt_started:.1f} 秒）：{exc}",
+                flush=True,
+            )
+            raise
         except (AuditError, json.JSONDecodeError) as exc:
             last_error = str(exc)
             print(
-                f"AI 识别 {label} 第 {attempt}/{max_attempts} 次失败：{last_error}",
+                f"AI 识别 {label} 第 {attempt}/{max_attempts} 次失败"
+                f"（{time.monotonic() - attempt_started:.1f} 秒）：{last_error}",
                 flush=True,
             )
             if attempt < max_attempts:
@@ -752,6 +840,7 @@ def extract_with_codex(
             label="人员激励材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
+            reasoning_effort=DEFAULT_REASONING_EFFORT,
             post_validate=lambda value: _validate_personnel_sources(case, value),
         )
 
@@ -780,6 +869,7 @@ def extract_with_codex(
         label="堆头合同",
         max_attempts=max_attempts,
         attempt_timeout_seconds=attempt_timeout_seconds,
+        reasoning_effort=DEFAULT_REASONING_EFFORT,
         post_validate=lambda value: _validate_contract_result(case, value),
     )
 
@@ -802,6 +892,7 @@ def extract_with_codex(
         label="堆头商品候选预检",
         max_attempts=max_attempts,
         attempt_timeout_seconds=attempt_timeout_seconds,
+        reasoning_effort=PRODUCT_QUERY_REASONING_EFFORT,
         post_validate=lambda value: _validate_product_query_result(photo_images, value),
     )
     product_rag = _select_product_rag_candidates(full_product_rag, query_result)
@@ -839,6 +930,7 @@ def extract_with_codex(
         label="堆头现场照片",
         max_attempts=max_attempts,
         attempt_timeout_seconds=attempt_timeout_seconds,
+        reasoning_effort=DEFAULT_REASONING_EFFORT,
         post_validate=lambda value: _validate_photo_result(
             case,
             contract_result,
@@ -848,7 +940,7 @@ def extract_with_codex(
     )
 
     merged = {
-        "schema_version": "2.1",
+        "schema_version": "2.2",
         "scenario": "promotional_display",
         "contract": contract_result["contract"],
         "photo_reviews": photo_result["photo_reviews"],
