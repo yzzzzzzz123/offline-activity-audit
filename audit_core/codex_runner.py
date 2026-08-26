@@ -184,7 +184,17 @@ def _copy_product_reference_images(
             suffix = source.suffix.lower() or ".img"
             attached_name = f"rag-reference--{product_id}--{view['view_id']}{suffix}"
             target = destination / attached_name
-            shutil.copy2(source, target)
+            try:
+                shutil.copy2(source, target)
+            except OSError as exc:
+                target.unlink(missing_ok=True)
+                raise AuditError(
+                    "商品知识库参考图复制失败："
+                    f"商品={product_id}，视图={view['view_id']}，"
+                    f"源文件={source}（存在={source.is_file()}，路径长度={len(str(source))}），"
+                    f"目标文件={target}（父目录存在={target.parent.is_dir()}，"
+                    f"路径长度={len(str(target))}）：{exc}"
+                ) from exc
             copied.append(
                 {
                     "reference_product_id": product_id,
@@ -415,7 +425,11 @@ The original contract is `{original_pdf.name}`. Its {len(page_images)} scanned p
 
 Inspect every page at original resolution and return exactly one JSON object conforming to the focused schema. `contract.source_file` must be exactly `{original_pdf.name}`, never a rendered page filename.
 
-Use only explicit core contract terms for dates, stores, display standard, fee, claim, product scope, and promotion requirements. Do not convert a product or sales table appended after the contract into a contractual promotion condition. Generic scope such as `参半所有系列` covers the whole brand range and is not a narrow mandatory-product subset: set `requires_specific_products` to false and `required_products` to an empty array. Set `requires_promotion` to true only when the contract explicitly requires a discount, gift, multi-buy, special price, or other named promotion mechanic. Read the per-store fee from the explicit fee/calculation wording; never infer it from the claim alone. Preserve all contract stores in printed order. Use null or a limitation note instead of guessing.
+Use only explicit core contract terms. Extract every visible contracting party into `contract_parties`; set `customer_name` to the distributor/customer party whose sales file is expected to support this claim, without consulting Excel. Separately extract the activity budget, execution period, activity content, display standard, claimed amount, total stack count, watermark visibility, seal visibility, product scope, promotion requirements, and every merchant/store in printed order. For each store, set `stack_count` only when the contract explicitly states the count or explicitly establishes one stack per listed store; otherwise use null.
+
+Classify the fee wording with `fee_basis`: `per_store` only for an explicit fee per listed store, `per_stack` only for an explicit fee per stack, `total_only` when the document gives only a total budget/claim, and `unclear` when the allocation basis cannot be established. The legacy field `fee_per_store` is the unit-fee slot: put the explicit per-store or per-stack unit fee there, and use `0` for `total_only` or `unclear`. Never infer a unit fee by dividing the total claim. Use null for `activity_budget` or `contract_stack_count` when the document does not state them.
+
+Contract product knowledge is conditional. Set `requires_specific_products=true` only when a core contract term provides a concrete product identity that can be checked against a catalog, such as a product code, a sufficiently specific product name, or a complete valid 69 barcode. Populate both the readable `required_products` list and structured `required_product_identities`; each identity must retain the contract's `visible_text` and use null for identifiers that are absent. A generic brand, whole-series phrase such as `参半所有系列`, broad category, activity description, or appended sales/product table is not a narrow contract SKU condition: set `requires_specific_products=false` and both product arrays empty. Do not convert an appended product/sales table into a contractual promotion condition. Set `requires_promotion=true` only when the core contract explicitly requires a discount, gift, multi-buy, special price, or another named promotion mechanic. Use null or a limitation note instead of guessing.
 """
 
 
@@ -508,7 +522,9 @@ The following already-validated contract JSON is authoritative only for contract
 {contract_json}
 ```
 
-Return exactly one photo-review row for every contract store line, in contract order, including an empty `photo_files` list when no field photo can be assigned. Preserve field-photo basenames exactly. `recognized_products` may contain only products supported by visible field packaging or a grounded product-reference comparison; never use an Excel-derived name. For `product_reference_hits`, return only the listed `reference_product_id` and `view_id` values. Use `exact` only when the field photo shows a complete valid 69 code, or a product code/name plus an independent compatible anchor, or at least two independent identity anchors with a uniquely compatible reference view. Brand, red/silver color, box shape, generic whitening text, a QR code, batch/date printing, or background alone cannot produce `exact`. Use `candidate` when the field packaging is compatible but not unique, and use an empty array when there is no reliable catalog match. Every `visible_basis` item must describe something actually visible in a field photo; reference-only content is not a field observation. A row with no field photo must have an empty `product_reference_hits` array.
+Return exactly one photo-review row for every contract store line, in contract order, including an empty `photo_files` list when no field photo can be assigned. Preserve field-photo basenames exactly. Follow the product chain in this order: first transcribe the useful field-photo text into `visible_text`; second use that visible name/specification/code/barcode text to consider only the supplied bounded catalog candidates; third compare the candidate reference views with the field packaging; finally return the supported product identity as exact, candidate, or empty. These three internal values are rendered for people as 精确匹配（高置信度）, 模糊匹配（中置信度）, and 完全不匹配（低置信度）. `recognized_products` may contain only products supported by visible field packaging or that grounded text-plus-reference-image comparison; never use an Excel-derived name.
+
+For `product_reference_hits`, return only the listed `reference_product_id` and `view_id` values. Use `exact` when the field photo shows a complete valid 69 code; or a registered product short code/alias that uniquely identifies one catalog product, such as the current `SP-1`, even when the full product name is incomplete; or another combination of visible name, specification, and packaging facts that uniquely identifies one product. Accept spacing, case, or hyphen variants such as `SP1`, `sp-1`, and `SP - 1`. A short code shared by several catalog products, such as the current `SP-4`, is not exact by itself and needs visible specification, flavor, name, or packaging detail to disambiguate. Brand, red/silver color, box shape, generic whitening text, a QR code, batch/date printing, or background alone cannot produce `exact`. Use `candidate` when the field packaging is broadly compatible but not unique, and use an empty array when there is no reliable catalog match. Every `visible_basis` item must describe something actually visible in a field photo; reference-only content is not a field observation. A row with no field photo must have empty `visible_text` and `product_reference_hits` arrays.
 
 Extract ordinary visible prices separately from explicit promotion signals. A normal price tag alone is not a promotion. An explicit promotion signal requires visible special-price wording, old/new price, discount, gift, multi-buy, 1+1, 3+2, or value-pack wording. Field filenames are routing leads only and cannot independently prove date, location, product, promotion, or display compliance. Use null, `unclear`, an empty reference-hit array, or a limitation note instead of guessing.
 
@@ -543,10 +559,31 @@ def _validate_contract_result(case: dict[str, Any], evidence: dict[str, Any]) ->
         raise AuditError("AI 返回的合同门店序号存在重复")
     if not contract["requires_specific_products"] and contract["required_products"]:
         raise AuditError("合同未要求限定产品时，required_products 必须为空")
+    if not contract["requires_specific_products"] and contract["required_product_identities"]:
+        raise AuditError("合同未要求限定产品时，required_product_identities 必须为空")
     if contract["requires_specific_products"] and not contract["required_products"]:
         raise AuditError("合同要求限定产品时，required_products 不能为空")
+    if contract["requires_specific_products"] and not contract["required_product_identities"]:
+        raise AuditError("合同要求限定产品时，required_product_identities 不能为空")
+    for item in contract["required_product_identities"]:
+        if not any(
+            str(item.get(field) or "").strip()
+            for field in ("product_code", "product_name", "barcode_69")
+        ):
+            raise AuditError("合同具体商品身份至少需要商品编码、商品名称或69码之一")
+        barcode = str(item.get("barcode_69") or "").strip()
+        if barcode and not ean13_is_valid(barcode):
+            raise AuditError(f"合同具体商品身份包含无效EAN-13：{barcode}")
     if not contract["requires_promotion"] and contract["required_promotion"] not in {None, ""}:
         raise AuditError("合同未要求促销形式时，required_promotion 必须为空")
+    party_values = [str(value).strip() for value in contract["contract_parties"]]
+    if any(not value for value in party_values) or len(party_values) != len(set(party_values)):
+        raise AuditError("合同签订方不能为空或重复")
+    stack_count = contract.get("contract_stack_count")
+    listed_stack_counts = [store.get("stack_count") for store in contract["stores"]]
+    if stack_count is not None and all(value is not None for value in listed_stack_counts):
+        if int(stack_count) != sum(int(value) for value in listed_stack_counts):
+            raise AuditError("合同总堆头数量与逐门店堆头数量之和不一致")
 
 
 def _validate_photo_result(
@@ -940,7 +977,7 @@ def extract_with_codex(
     )
 
     merged = {
-        "schema_version": "2.2",
+        "schema_version": "2.3",
         "scenario": "promotional_display",
         "contract": contract_result["contract"],
         "photo_reviews": photo_result["photo_reviews"],

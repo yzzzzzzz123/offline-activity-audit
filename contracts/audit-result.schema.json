@@ -8,7 +8,7 @@
     "summary", "exceptions"
   ],
   "properties": {
-    "schema_version": {"const": "2.0"},
+    "schema_version": {"const": "2.1"},
     "generated_at": {"type": "string", "format": "date-time"},
     "scenario": {"enum": ["personnel_incentive", "promotional_display"]},
     "case_id": {"type": "string", "minLength": 1},
@@ -58,8 +58,81 @@
               "settlement_line_quantity", "excel_mapped_quantity", "quantity_difference",
               "settlement_line_reward", "calculated_line_reward", "transfer_total",
               "quantity_supported_reward", "settlement_line_count", "matched_sku_count",
-              "quantity_match_count", "excel_detail_row_count", "store_count"
-            ]
+              "quantity_match_count", "excel_detail_row_count", "store_count",
+              "sales_knowledge_matched_count", "sales_knowledge_fuzzy_count",
+              "sales_knowledge_problem_count"
+            ],
+            "properties": {
+              "sales_knowledge_matched_count": {"type": "integer", "minimum": 0},
+              "sales_knowledge_fuzzy_count": {"type": "integer", "minimum": 0},
+              "sales_knowledge_problem_count": {"type": "integer", "minimum": 0}
+            }
+          },
+          "sales": {
+            "type": "object",
+            "required": [
+              "knowledge_status", "knowledge_matched_count", "knowledge_fuzzy_count",
+              "knowledge_problem_count", "knowledge_problem_barcodes",
+              "knowledge_basis", "knowledge_reconciliation"
+            ],
+            "properties": {
+              "knowledge_status": {"enum": ["pass", "fail"]},
+              "knowledge_matched_count": {"type": "integer", "minimum": 0},
+              "knowledge_fuzzy_count": {"type": "integer", "minimum": 0},
+              "knowledge_problem_count": {"type": "integer", "minimum": 0},
+              "knowledge_problem_barcodes": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "knowledge_basis": {"type": "string", "minLength": 1},
+              "knowledge_reconciliation": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "source_barcode_69", "source_product_name", "source_quantity",
+                    "excel_rows", "knowledge_status", "knowledge_product_id",
+                    "knowledge_product_code", "knowledge_product_name",
+                    "knowledge_barcode_69", "barcode_match", "name_match_type",
+                    "name_similarity", "candidate_product_ids", "basis", "resubmission"
+                  ],
+                  "properties": {
+                    "source_barcode_69": {"type": "string"},
+                    "source_product_name": {"type": "string"},
+                    "source_quantity": {"type": "number"},
+                    "excel_rows": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {"type": "integer", "minimum": 1}
+                    },
+                    "knowledge_status": {
+                      "enum": ["matched", "fuzzy_matched", "unmatched", "ambiguous", "conflict"]
+                    },
+                    "knowledge_product_id": {"type": ["string", "null"]},
+                    "knowledge_product_code": {"type": ["string", "null"]},
+                    "knowledge_product_name": {"type": ["string", "null"]},
+                    "knowledge_barcode_69": {
+                      "type": ["string", "null"],
+                      "pattern": "^69[0-9]{11}$"
+                    },
+                    "barcode_match": {"enum": ["exact", "invalid", "missing", "not_found"]},
+                    "name_match_type": {"enum": ["exact", "fuzzy", "unmatched"]},
+                    "name_similarity": {
+                      "type": ["number", "null"],
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "candidate_product_ids": {
+                      "type": "array",
+                      "items": {"type": "string", "minLength": 1}
+                    },
+                    "basis": {"type": "string", "minLength": 1},
+                    "resubmission": {"type": ["string", "null"], "minLength": 1}
+                  }
+                }
+              }
+            }
           },
           "sku_reconciliation": {
             "type": "array",
@@ -71,8 +144,35 @@
                 "mapping_confidence", "excel_quantity", "settlement_quantity",
                 "quantity_difference", "calculated_settlement_reward",
                 "settlement_reward_amount", "settlement_line_amount_difference",
-                "mapping_status", "quantity_status"
-              ]
+                "mapping_status", "quantity_status", "knowledge_status",
+                "knowledge_product_id", "knowledge_product_code",
+                "knowledge_product_name", "knowledge_barcode_69",
+                "knowledge_barcode_match", "knowledge_name_match_type",
+                "knowledge_name_similarity", "knowledge_basis", "knowledge_resubmission"
+              ],
+              "properties": {
+                "knowledge_status": {
+                  "enum": ["matched", "fuzzy_matched", "unmatched", "ambiguous", "conflict"]
+                },
+                "knowledge_product_id": {"type": ["string", "null"]},
+                "knowledge_product_code": {"type": ["string", "null"]},
+                "knowledge_product_name": {"type": ["string", "null"]},
+                "knowledge_barcode_69": {
+                  "type": ["string", "null"],
+                  "pattern": "^69[0-9]{11}$"
+                },
+                "knowledge_barcode_match": {
+                  "enum": ["exact", "invalid", "missing", "not_found"]
+                },
+                "knowledge_name_match_type": {"enum": ["exact", "fuzzy", "unmatched"]},
+                "knowledge_name_similarity": {
+                  "type": ["number", "null"],
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "knowledge_basis": {"type": "string", "minLength": 1},
+                "knowledge_resubmission": {"type": ["string", "null"], "minLength": 1}
+              }
             }
           },
           "sales_trace": {"type": "array", "minItems": 1},
@@ -84,14 +184,215 @@
     {
       "if": {"properties": {"scenario": {"const": "promotional_display"}}},
       "then": {
-        "required": ["contract", "contract_pdf", "sales", "photo_inventory", "store_reconciliation"],
+        "required": [
+          "contract", "contract_product_knowledge", "contract_sales_reconciliation",
+          "contract_pdf", "sales",
+          "photo_inventory", "store_reconciliation"
+        ],
         "properties": {
           "summary": {
             "required": [
-              "contract_store_count", "fee_per_store", "expected_contract_amount",
+              "activity_budget", "contract_store_count", "fee_per_store", "fee_basis",
+              "contract_stack_count", "expected_contract_amount",
               "passed_store_count", "supplement_store_count", "supported_amount",
-              "photo_count", "sales_sku_count", "sales_quantity"
-            ]
+              "photo_count", "sales_sku_count", "sales_quantity",
+              "sales_knowledge_matched_count", "sales_knowledge_fuzzy_count",
+              "sales_knowledge_problem_count"
+            ],
+            "properties": {
+              "activity_budget": {"type": ["number", "null"], "minimum": 0},
+              "fee_basis": {"enum": ["per_store", "per_stack", "total_only", "unclear"]},
+              "contract_stack_count": {"type": ["integer", "null"], "minimum": 1},
+              "expected_contract_amount": {"type": ["number", "null"], "minimum": 0},
+              "sales_knowledge_fuzzy_count": {"type": "integer", "minimum": 0}
+            }
+          },
+          "contract_product_knowledge": {
+            "type": "object",
+            "required": ["status", "records", "knowledge_product_ids", "basis"],
+            "properties": {
+              "status": {"enum": ["not_applicable", "pass", "fail"]},
+              "knowledge_product_ids": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              },
+              "basis": {"type": "string", "minLength": 1},
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "required_product", "source_product_code", "source_product_name",
+                    "source_barcode_69", "knowledge_status", "knowledge_product_id",
+                    "knowledge_product_name", "knowledge_product_code",
+                    "knowledge_barcode_69", "basis"
+                  ],
+                  "properties": {
+                    "required_product": {"type": "string", "minLength": 1},
+                    "source_product_code": {"type": ["string", "null"]},
+                    "source_product_name": {"type": ["string", "null"]},
+                    "source_barcode_69": {"type": ["string", "null"]},
+                    "knowledge_status": {
+                      "enum": ["matched", "fuzzy_matched", "unmatched", "ambiguous", "conflict"]
+                    },
+                    "knowledge_product_id": {"type": ["string", "null"]},
+                    "knowledge_product_name": {"type": ["string", "null"]},
+                    "knowledge_product_code": {"type": ["string", "null"]},
+                    "knowledge_barcode_69": {"type": ["string", "null"]},
+                    "basis": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          },
+          "contract_sales_reconciliation": {
+            "type": "object",
+            "required": [
+              "status", "customer_status", "customer_basis", "customer_matches",
+              "sales_customers", "contract_parties", "period_status", "period_basis",
+              "sales_period_values", "period_checks", "watermark_status", "seal_status",
+              "integrity_status", "integrity_basis"
+            ],
+            "properties": {
+              "status": {"enum": ["pass", "fail", "unverifiable"]},
+              "customer_status": {"enum": ["exact", "fuzzy", "mismatch", "unverifiable"]},
+              "customer_basis": {"type": "string", "minLength": 1},
+              "customer_matches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["sales_customer", "contract_party", "status", "similarity"],
+                  "properties": {
+                    "sales_customer": {"type": "string", "minLength": 1},
+                    "contract_party": {"type": ["string", "null"]},
+                    "status": {"enum": ["exact", "fuzzy", "mismatch"]},
+                    "similarity": {"type": "number", "minimum": 0, "maximum": 1}
+                  }
+                }
+              },
+              "sales_customers": {"type": "array", "items": {"type": "string"}},
+              "contract_parties": {"type": "array", "items": {"type": "string"}},
+              "period_status": {"enum": ["covered", "mismatch", "unverifiable"]},
+              "period_basis": {"type": "string", "minLength": 1},
+              "sales_period_values": {"type": "array", "items": {"type": "string"}},
+              "period_checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["sales_period", "start", "end", "status"],
+                  "properties": {
+                    "sales_period": {"type": "string", "minLength": 1},
+                    "start": {"type": ["string", "null"], "format": "date"},
+                    "end": {"type": ["string", "null"], "format": "date"},
+                    "status": {"enum": ["covered", "mismatch", "unverifiable"]}
+                  }
+                }
+              },
+              "watermark_status": {"enum": ["present", "absent", "unverifiable"]},
+              "seal_status": {"enum": ["present", "absent", "unverifiable"]},
+              "integrity_status": {"enum": ["pass", "fail", "unverifiable"]},
+              "integrity_basis": {"type": "string", "minLength": 1}
+            }
+          },
+          "sales": {
+            "type": "object",
+            "required": [
+              "knowledge_status", "knowledge_matched_count",
+              "knowledge_fuzzy_count", "knowledge_problem_count",
+              "knowledge_problem_rows", "knowledge_basis", "knowledge_reconciliation"
+            ],
+            "properties": {
+              "knowledge_status": {"enum": ["pass", "fail"]},
+              "knowledge_matched_count": {"type": "integer", "minimum": 0},
+              "knowledge_fuzzy_count": {"type": "integer", "minimum": 0},
+              "knowledge_problem_count": {"type": "integer", "minimum": 0},
+              "knowledge_problem_rows": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 1}
+              },
+              "knowledge_basis": {"type": "string", "minLength": 1},
+              "knowledge_reconciliation": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "excel_row", "source_product_code", "source_product_name",
+                    "source_barcode_69", "source_quantity", "knowledge_status",
+                    "knowledge_product_id", "knowledge_product_name",
+                    "knowledge_product_code", "knowledge_barcode_69",
+                    "name_match_type", "name_similarity",
+                    "matched_fields", "unmatched_fields", "conflicting_fields",
+                    "missing_fields", "candidate_product_ids", "basis"
+                  ],
+                  "properties": {
+                    "excel_row": {"type": "integer", "minimum": 1},
+                    "source_product_code": {"type": "string"},
+                    "source_product_name": {"type": "string"},
+                    "source_barcode_69": {"type": "string"},
+                    "source_quantity": {"type": "number"},
+                    "knowledge_status": {
+                      "enum": ["matched", "fuzzy_matched", "unmatched", "ambiguous", "conflict"]
+                    },
+                    "knowledge_product_id": {"type": ["string", "null"]},
+                    "knowledge_product_name": {"type": ["string", "null"]},
+                    "knowledge_product_code": {"type": ["string", "null"]},
+                    "knowledge_barcode_69": {"type": ["string", "null"]},
+                    "name_match_type": {"enum": ["exact", "fuzzy", "unmatched"]},
+                    "name_similarity": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+                    "matched_fields": {"type": "array", "items": {"type": "string"}},
+                    "unmatched_fields": {"type": "array", "items": {"type": "string"}},
+                    "conflicting_fields": {"type": "array", "items": {"type": "string"}},
+                    "missing_fields": {"type": "array", "items": {"type": "string"}},
+                    "candidate_product_ids": {
+                      "type": "array",
+                      "items": {"type": "string", "minLength": 1}
+                    },
+                    "field_comparisons": {
+                      "type": "array",
+                      "minItems": 3,
+                      "maxItems": 3,
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "field", "source_value", "comparison",
+                          "selected_knowledge_value", "matching_products"
+                        ],
+                        "properties": {
+                          "field": {
+                            "enum": ["product_code", "product_name", "barcode_69"]
+                          },
+                          "source_value": {"type": "string"},
+                          "comparison": {
+                            "enum": [
+                              "matched", "fuzzy", "not_found", "conflict",
+                              "ambiguous", "missing", "invalid"
+                            ]
+                          },
+                          "selected_knowledge_value": {"type": ["string", "null"]},
+                          "matching_products": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "product_id", "product_code", "product_name", "barcode_69"
+                              ],
+                              "properties": {
+                                "product_id": {"type": "string", "minLength": 1},
+                                "product_code": {"type": "string", "minLength": 1},
+                                "product_name": {"type": "string", "minLength": 1},
+                                "barcode_69": {"type": "string", "pattern": "^69[0-9]{11}$"}
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "basis": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
           },
           "store_reconciliation": {
             "type": "array",
@@ -104,8 +405,12 @@
                 "display_standard_basis", "display_description",
                 "display_vertical_facing_count", "display_vertical_facing_basis",
                 "display_stack_1sqm_basis", "duplicate_check",
-                "recognized_products", "product_reference_hits", "promotion_summary",
-                "sales_product_names", "sales_product_match", "supported_amount",
+                "visible_text", "recognized_products", "product_reference_hits", "photo_knowledge_match",
+                "photo_knowledge_match_basis", "promotion_summary",
+                "sales_product_names", "sales_product_knowledge_ids",
+                "sales_product_match", "sales_product_match_basis", "sales_product_checks",
+                "contract_sales_status", "contract_stack_count", "claim_units",
+                "amount_rule_status", "amount_rule_basis", "supported_amount",
                 "status", "supplement_advice"
               ],
               "properties": {
@@ -124,9 +429,74 @@
                 },
                 "display_stack_1sqm_basis": {"type": ["string", "null"], "minLength": 1},
                 "duplicate_check": {"enum": ["none", "exact", "possible", "unverifiable"]},
-                "sales_product_match": {"enum": ["exact", "candidate", "unmatched"]},
+                "visible_recognized_products": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "visible_text": {
+                  "type": "array",
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "photo_knowledge_match": {"enum": ["exact", "candidate", "unmatched"]},
+                "photo_knowledge_match_basis": {"type": "string", "minLength": 1},
+                "sales_product_match": {"enum": ["exact", "fuzzy", "candidate", "unmatched"]},
+                "sales_product_match_basis": {"type": "string", "minLength": 1},
+                "sales_product_checks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "knowledge_product_id", "knowledge_product_code",
+                      "knowledge_product_code_aliases", "knowledge_product_name",
+                      "knowledge_barcode_69", "photo_match", "excel_row",
+                      "source_product_code", "source_product_name", "source_barcode_69",
+                      "source_quantity", "product_code_match", "name_match",
+                      "name_similarity", "barcode_match", "status", "confidence",
+                      "barcode_comparison_basis", "basis", "resubmission"
+                    ],
+                    "properties": {
+                      "knowledge_product_id": {"type": "string", "minLength": 1},
+                      "knowledge_product_code": {"type": "string", "minLength": 1},
+                      "knowledge_product_code_aliases": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1}
+                      },
+                      "knowledge_product_name": {"type": "string", "minLength": 1},
+                      "knowledge_barcode_69": {"type": "string", "pattern": "^69[0-9]{11}$"},
+                      "photo_match": {"enum": ["exact", "fuzzy"]},
+                      "excel_row": {"type": ["integer", "null"], "minimum": 1},
+                      "source_product_code": {"type": "string"},
+                      "source_product_name": {"type": "string"},
+                      "source_barcode_69": {"type": "string"},
+                      "source_quantity": {"type": ["number", "null"]},
+                      "product_code_match": {"enum": ["exact", "mismatch", "unverifiable"]},
+                      "name_match": {"enum": ["exact", "fuzzy", "mismatch", "unverifiable"]},
+                      "name_similarity": {
+                        "type": ["number", "null"],
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "barcode_match": {"enum": ["exact", "mismatch", "unverifiable"]},
+                      "status": {"enum": ["exact", "fuzzy", "candidate", "unmatched"]},
+                      "confidence": {"enum": ["high", "medium", "low"]},
+                      "barcode_comparison_basis": {"type": "string", "minLength": 1},
+                      "basis": {"type": "string", "minLength": 1},
+                      "resubmission": {"type": ["string", "null"], "minLength": 1}
+                    }
+                  }
+                },
+                "contract_sales_status": {"enum": ["pass", "fail", "unverifiable"]},
+                "contract_stack_count": {"type": ["integer", "null"], "minimum": 1},
+                "claim_units": {"type": ["integer", "null"], "minimum": 1},
+                "amount_rule_status": {"enum": ["pass", "manual"]},
+                "amount_rule_basis": {"type": "string", "minLength": 1},
                 "status": {"enum": ["pass", "supplement"]},
                 "sales_product_names": {"type": "array", "items": {"type": "string"}},
+                "sales_product_knowledge_ids": {
+                  "type": "array",
+                  "items": {"type": "string", "minLength": 1}
+                },
                 "product_reference_hits": {
                   "type": "array",
                   "items": {

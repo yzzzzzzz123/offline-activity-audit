@@ -18,6 +18,19 @@ from .common import (
     unique_by,
 )
 from .excel_sources import image_file_inventory, read_personnel_sales
+from .product_rag import (
+    canonical_product_name,
+    catalog_product_name_values,
+    ean13_is_valid,
+    load_product_rag,
+    unique_fuzzy_catalog_product,
+)
+
+
+PRODUCT_KNOWLEDGE_SKILL_DIR = (
+    Path(__file__).resolve().parents[1] / "skills" / "audit-promotional-display"
+)
+PASS_PERSONNEL_KNOWLEDGE_MATCHES = {"matched", "fuzzy_matched"}
 
 
 def _period_matches(period_values: list[str], start_text: str, end_text: str) -> bool:
@@ -62,6 +75,219 @@ def _product_similarity(left: Any, right: Any) -> float:
     return overlap / max(1, len(left_grams | right_grams))
 
 
+def _personnel_sales_knowledge_reconciliation(
+    sales_skus: list[dict[str, Any]],
+    catalog: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve personnel Excel SKUs by exact 69 code and unique compatible name."""
+
+    products = list(catalog.get("products") or [])
+    reconciled: list[dict[str, Any]] = []
+    for sku in sales_skus:
+        source_barcode = str(sku.get("barcode") or "").strip()
+        source_name = str(sku.get("product_name") or "").strip()
+        excel_rows = [int(value) for value in sku.get("excel_rows") or []]
+        row_text = "、".join(str(value) for value in excel_rows) or "未识别"
+        barcode_valid = bool(source_barcode) and ean13_is_valid(source_barcode)
+        barcode_candidates = (
+            [
+                product
+                for product in products
+                if str(product.get("barcode_69") or "") == source_barcode
+            ]
+            if barcode_valid
+            else []
+        )
+        source_canonical = canonical_product_name(source_name)
+        exact_name_candidates = [
+            product
+            for product in barcode_candidates
+            if source_canonical
+            and source_canonical
+            in {
+                canonical_product_name(value)
+                for value in catalog_product_name_values(product)
+            }
+        ]
+
+        selected: dict[str, Any] | None = None
+        name_match_type = "unmatched"
+        name_similarity: float | None = None
+        if not source_barcode or not source_name:
+            status = "conflict"
+        elif not barcode_valid:
+            status = "conflict"
+        elif not barcode_candidates:
+            status = "unmatched"
+        elif len(exact_name_candidates) == 1:
+            selected = exact_name_candidates[0]
+            name_match_type = "exact"
+            name_similarity = 1.0
+            status = "matched"
+        elif len(exact_name_candidates) > 1:
+            status = "ambiguous"
+        else:
+            selected, score = unique_fuzzy_catalog_product(
+                source_name,
+                barcode_candidates,
+                minimum_score=0.45 if len(barcode_candidates) > 1 else 0.55,
+            )
+            name_similarity = round(score, 3) if score else None
+            if selected is not None:
+                name_match_type = "fuzzy"
+                status = "fuzzy_matched"
+            elif len(barcode_candidates) > 1:
+                status = "ambiguous"
+            else:
+                status = "conflict"
+
+        diagnostic = selected
+        if diagnostic is None and len(barcode_candidates) == 1:
+            diagnostic = barcode_candidates[0]
+        candidate_ids = sorted(
+            str(product["product_id"]) for product in barcode_candidates
+        )
+        if status == "matched":
+            assert selected is not None
+            basis = (
+                f"销售Excel第{row_text}行的69码{source_barcode}与商品知识库精确一致；"
+                f"产品名与知识库商品{selected['product_code']}精确一致。"
+            )
+            resubmission = None
+        elif status == "fuzzy_matched":
+            assert selected is not None
+            basis = (
+                f"销售Excel第{row_text}行的69码{source_barcode}与商品知识库精确一致；"
+                f"产品名在同码候选内唯一模糊对应知识库商品{selected['product_code']}"
+                f"（相似度{name_similarity:.3f}）。"
+            )
+            resubmission = None
+        elif not source_barcode or not source_name:
+            missing = []
+            if not source_barcode:
+                missing.append("69码")
+            if not source_name:
+                missing.append("产品名")
+            basis = f"销售Excel第{row_text}行缺少{'、'.join(missing)}，无法核对商品知识库。"
+            resubmission = (
+                f"重新提交销售Excel：补全第{row_text}行的{'、'.join(missing)}。"
+            )
+        elif not barcode_valid:
+            basis = (
+                f"销售Excel第{row_text}行的69码{source_barcode}未通过EAN-13校验，"
+                "不能与商品知识库精确匹配。"
+            )
+            resubmission = (
+                f"重新提交销售Excel：更正第{row_text}行69码为有效的13位商品码。"
+            )
+        elif not barcode_candidates:
+            basis = (
+                f"销售Excel第{row_text}行的69码{source_barcode}在正式商品知识库中不存在。"
+            )
+            resubmission = (
+                f"核对销售Excel第{row_text}行69码；若69码正确，"
+                "先补齐该商品的正式知识库资料后重跑。"
+            )
+        elif status == "ambiguous":
+            basis = (
+                f"销售Excel第{row_text}行的69码{source_barcode}精确命中多个知识库商品，"
+                "产品名未能在同码候选内唯一消歧。"
+            )
+            resubmission = (
+                f"重新提交销售Excel：补全第{row_text}行产品名的规格、香型或版本，"
+                "使其能唯一对应商品知识库。"
+            )
+        else:
+            expected = (
+                f"{diagnostic['product_code']} / {diagnostic['product_name']}"
+                if diagnostic is not None
+                else "同码知识库商品"
+            )
+            basis = (
+                f"销售Excel第{row_text}行的69码{source_barcode}与知识库精确一致，"
+                f"但产品名不能模糊对应{expected}。"
+            )
+            resubmission = (
+                f"重新提交销售Excel：核对并更正第{row_text}行产品名；"
+                "若Excel名称正确，则先更正商品知识库名称后重跑。"
+            )
+
+        reconciled.append(
+            {
+                "source_barcode_69": source_barcode,
+                "source_product_name": source_name,
+                "source_quantity": sku.get("quantity"),
+                "excel_rows": excel_rows,
+                "knowledge_status": status,
+                "knowledge_product_id": (
+                    str(diagnostic["product_id"]) if diagnostic is not None else None
+                ),
+                "knowledge_product_code": (
+                    str(diagnostic["product_code"]) if diagnostic is not None else None
+                ),
+                "knowledge_product_name": (
+                    str(diagnostic["product_name"]) if diagnostic is not None else None
+                ),
+                "knowledge_barcode_69": (
+                    str(diagnostic["barcode_69"]) if diagnostic is not None else None
+                ),
+                "barcode_match": (
+                    "missing"
+                    if not source_barcode
+                    else "invalid"
+                    if not barcode_valid
+                    else "exact"
+                    if barcode_candidates
+                    else "not_found"
+                ),
+                "name_match_type": name_match_type,
+                "name_similarity": name_similarity,
+                "candidate_product_ids": candidate_ids,
+                "basis": basis,
+                "resubmission": resubmission,
+            }
+        )
+
+    matched_count = sum(item["knowledge_status"] == "matched" for item in reconciled)
+    fuzzy_count = sum(
+        item["knowledge_status"] == "fuzzy_matched" for item in reconciled
+    )
+    problem_records = [
+        item
+        for item in reconciled
+        if item["knowledge_status"] not in PASS_PERSONNEL_KNOWLEDGE_MATCHES
+    ]
+    return {
+        "status": "pass" if not problem_records else "fail",
+        "sku_count": len(reconciled),
+        "matched_count": matched_count,
+        "fuzzy_count": fuzzy_count,
+        "problem_count": len(problem_records),
+        "problem_barcodes": [item["source_barcode_69"] for item in problem_records],
+        "records": reconciled,
+        "basis": (
+            f"{matched_count + fuzzy_count}/{len(reconciled)}个销售商品通过知识库核验"
+            f"（产品名精确{matched_count}个、模糊{fuzzy_count}个）"
+            + (
+                "；全部69码均精确匹配"
+                if not problem_records
+                else f"；问题69码：{[item['source_barcode_69'] for item in problem_records]}"
+            )
+        ),
+    }
+
+
+def _sales_sku_product_similarity(settlement_name: Any, sku: dict[str, Any]) -> float:
+    names = [sku.get("product_name")]
+    knowledge = sku.get("knowledge_match") or {}
+    if knowledge.get("knowledge_status") in PASS_PERSONNEL_KNOWLEDGE_MATCHES:
+        names.append(knowledge.get("knowledge_product_name"))
+    return max(
+        (_product_similarity(settlement_name, name) for name in names if name),
+        default=0.0,
+    )
+
+
 def _map_settlement_lines(
     lines: list[dict[str, Any]],
     sales_skus: list[dict[str, Any]],
@@ -98,7 +324,7 @@ def _map_settlement_lines(
         scored = sorted(
             (
                 (
-                    _product_similarity(line["product_name"], sku["product_name"]),
+                    _sales_sku_product_similarity(line["product_name"], sku),
                     decimal_value(sku["quantity"], label="Excel SKU quantity") == quantity,
                     sku,
                 )
@@ -133,7 +359,7 @@ def _map_settlement_lines(
             "excel_product_name": candidate["product_name"],
             "confidence": "medium",
             "basis": (
-                "确定性映射：结算商品文字与代码读取的Excel商品文字相似，"
+                "确定性映射：结算商品文字与代码读取的Excel/知识库商品文字相似，"
                 f"相似度={score:.3f}；结算数量与Excel汇总数量"
                 f"{'一致' if decimal_value(candidate['quantity'], label='Excel quantity') == quantity else '不一致'}；"
                 "且满足剩余一行一条码唯一约束。因结算单未显示条码，商品身份不标记为已验证。"
@@ -176,6 +402,16 @@ def _line_result(
         "quantity_difference": None,
         "excel_rows": [],
         "store_quantities": [],
+        "knowledge_status": "unmatched",
+        "knowledge_product_id": None,
+        "knowledge_product_code": None,
+        "knowledge_product_name": None,
+        "knowledge_barcode_69": None,
+        "knowledge_barcode_match": "not_found",
+        "knowledge_name_match_type": "unmatched",
+        "knowledge_name_similarity": None,
+        "knowledge_basis": "尚未找到可核验的销售Excel商品。",
+        "knowledge_resubmission": None,
         "quantity_status": "unmatched",
         "amount_status": "match" if line_amount_difference == 0 else "mismatch",
         "mapping_status": "unmatched",
@@ -235,10 +471,15 @@ def _line_result(
         return result, Decimal("0")
 
     used_barcodes.add(barcode)
+    knowledge = dict(sku.get("knowledge_match") or {})
+    knowledge_status = str(knowledge.get("knowledge_status") or "unmatched")
+    knowledge_pass = knowledge_status in PASS_PERSONNEL_KNOWLEDGE_MATCHES
     excel_quantity = decimal_value(sku["quantity"], label=f"Excel SKU {barcode} quantity")
     difference = excel_quantity - quantity
     supported_quantity = max(Decimal("0"), min(excel_quantity, quantity))
     supported_reward = (supported_quantity * unit_reward).quantize(Decimal("0.01"))
+    if not knowledge_pass:
+        supported_reward = Decimal("0")
     result.update(
         {
             "excel_product_name": sku["product_name"],
@@ -246,12 +487,33 @@ def _line_result(
             "quantity_difference": json_number(difference),
             "excel_rows": sku["excel_rows"],
             "store_quantities": sku["store_quantities"],
+            "knowledge_status": knowledge_status,
+            "knowledge_product_id": knowledge.get("knowledge_product_id"),
+            "knowledge_product_code": knowledge.get("knowledge_product_code"),
+            "knowledge_product_name": knowledge.get("knowledge_product_name"),
+            "knowledge_barcode_69": knowledge.get("knowledge_barcode_69"),
+            "knowledge_barcode_match": knowledge.get("barcode_match") or "not_found",
+            "knowledge_name_match_type": knowledge.get("name_match_type") or "unmatched",
+            "knowledge_name_similarity": knowledge.get("name_similarity"),
+            "knowledge_basis": knowledge.get("basis") or "销售商品未通过知识库核验。",
+            "knowledge_resubmission": knowledge.get("resubmission"),
             "quantity_status": "match" if difference == 0 else "mismatch",
             "mapping_status": "matched",
             "supported_quantity": json_number(supported_quantity),
             "supported_reward_amount": json_number(supported_reward),
         }
     )
+    if not knowledge_pass:
+        exceptions.append(
+            exception(
+                "high",
+                "SALES_PRODUCT_KNOWLEDGE_MISMATCH",
+                f"销售Excel条码{barcode}未通过商品知识库核验：{result['knowledge_basis']}",
+                "该商品的销售数量不能进入人员激励支持金额。",
+                str(result.get("knowledge_resubmission") or "核对销售Excel与商品知识库后重跑。"),
+                source=f"Excel rows {','.join(str(row) for row in sku['excel_rows'])}",
+            )
+        )
     expected_name = match.get("excel_product_name")
     if expected_name and normalize_text(expected_name) != normalize_text(sku["product_name"]):
         exceptions.append(
@@ -423,6 +685,27 @@ def audit_personnel_case(
 ) -> dict[str, Any]:
     sales_path = Path(case["sales_excel"]).resolve()
     sales = read_personnel_sales(sales_path)
+    product_catalog = load_product_rag(PRODUCT_KNOWLEDGE_SKILL_DIR)
+    sales_knowledge = _personnel_sales_knowledge_reconciliation(
+        sales["skus"], product_catalog
+    )
+    knowledge_by_barcode = {
+        str(item["source_barcode_69"]): item
+        for item in sales_knowledge["records"]
+    }
+    for sku in sales["skus"]:
+        sku["knowledge_match"] = knowledge_by_barcode[str(sku["barcode"])]
+    sales.update(
+        {
+            "knowledge_status": sales_knowledge["status"],
+            "knowledge_matched_count": sales_knowledge["matched_count"],
+            "knowledge_fuzzy_count": sales_knowledge["fuzzy_count"],
+            "knowledge_problem_count": sales_knowledge["problem_count"],
+            "knowledge_problem_barcodes": sales_knowledge["problem_barcodes"],
+            "knowledge_basis": sales_knowledge["basis"],
+            "knowledge_reconciliation": sales_knowledge["records"],
+        }
+    )
     source_images = [
         Path(case["settlement_image"]).resolve(),
         *[Path(value).resolve() for value in case["transfer_images"]],
@@ -544,9 +827,15 @@ def audit_personnel_case(
     trace: list[dict[str, Any]] = []
     for record in sales["records"]:
         matched = line_by_barcode.get(record["barcode"])
+        knowledge = knowledge_by_barcode.get(str(record["barcode"])) or {}
         trace.append(
             {
                 **record,
+                "knowledge_status": knowledge.get("knowledge_status"),
+                "knowledge_product_id": knowledge.get("knowledge_product_id"),
+                "knowledge_product_code": knowledge.get("knowledge_product_code"),
+                "knowledge_product_name": knowledge.get("knowledge_product_name"),
+                "knowledge_barcode_69": knowledge.get("knowledge_barcode_69"),
                 "settlement_line_no": matched["line_no"] if matched else None,
                 "settlement_product_name": matched["settlement_product_name"] if matched else None,
                 "unit_reward": matched["unit_reward"] if matched else None,
@@ -559,7 +848,7 @@ def audit_personnel_case(
         )
 
     return {
-        "schema_version": "2.0",
+        "schema_version": "2.1",
         "generated_at": now_utc(),
         "scenario": "personnel_incentive",
         "case_id": str(case.get("case_id") or Path(case["source_archive"]).stem),
@@ -581,6 +870,9 @@ def audit_personnel_case(
             "quantity_match_count": quantity_match_count,
             "excel_detail_row_count": sales["detail_row_count"],
             "store_count": sales["store_count"],
+            "sales_knowledge_matched_count": sales_knowledge["matched_count"],
+            "sales_knowledge_fuzzy_count": sales_knowledge["fuzzy_count"],
+            "sales_knowledge_problem_count": sales_knowledge["problem_count"],
             "high_exception_count": high_count,
             "medium_exception_count": medium_count,
         },

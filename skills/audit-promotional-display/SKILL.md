@@ -1,88 +1,116 @@
 ---
 name: audit-promotional-display
-description: Audit promotional/stack-display claims from a contract PDF, distributor sales Excel, and field photos. Use whenever every contract store must receive a deterministic date/location/display/duplicate decision, visible packaging must be conservatively matched to exact source-cell Excel product names, ordinary prices must be separated from real promotion evidence, and a fixed store-by-store display worksheet must be produced.
+description: Audit promotional or stack-display claims from a contract PDF, distributor sales Excel, field photos, and the maintained multimodal product knowledge base. Use when contract terms, sales identities, photo products, internal correspondence, display evidence, promotion, photo reuse, and supported amount must close into one human-readable six-column worksheet while full evidence remains in JSON.
 ---
 
 # Audit Promotional Display
 
-Build one evidence row per contract store. A filename, distributor total, or product-family resemblance never proves that a particular store performed the contracted display.
+Create one audit row per contract merchant/store. A filename, total sales amount, generic brand scope, or similar package never proves that a store performed the contracted activity.
 
-## AI extraction
+## Required reading
 
-Read [evidence.schema.json](references/evidence.schema.json) and [audit-rules.md](references/audit-rules.md) completely. For field-photo product identity, also read [product-rag.md](references/product-rag.md); the runtime validates [product-rag.json](references/product-rag.json) and attaches its indexed multi-view images separately from field evidence.
+Read these files completely before extracting or judging:
 
-Give the vision AI only the contract PDF, field photos, and repository-owned product-reference views. Product-reference views may establish product identity only; they cannot establish a field store, date, display, promotion, price, or photo uniqueness and must never be returned as `photo_files`. For a scanned PDF, expose every page as a lossless full-resolution page image. Read and validate the contract first; then use that frozen contract result to review the field photos. It must return schema version `2.2` with:
+- [audit-rules.md](references/audit-rules.md)
+- [evidence.schema.json](references/evidence.schema.json)
+- [product-rag.md](references/product-rag.md) for field-photo product identity
 
-- contract customer, dates, display standard, per-store fee, claimed amount, explicit product/promotion requirements, and the complete ordered store list;
-- one review per contract store, with an empty `photo_files` array when that store lacks a photo;
-- visible complete date/location with its visual basis;
-- a structured display observation that separately records whether the photo proves
-  `1平米堆头`, `4纵陈列`, both, neither, or cannot be judged, plus a left-to-right count and
-  description of every visible vertical facing and an independent one-square-metre basis;
-- target-brand products supported by visible packaging only;
-- grounded `product_reference_hits` using only catalog product/view IDs, with `exact` reserved for a valid visible 69 code or multiple independent identity anchors and `candidate` used for non-unique partial packaging;
-- explicit promotion signals separated from ordinary visible prices;
-- source basenames, risks, and suggested supplemental evidence.
+The runtime validates [product-rag.json](references/product-rag.json) and supplies only bounded catalog candidates and their registered multi-view images.
 
-Only explicit core contract terms create mandatory controls. A generic whole-brand scope such as `参半所有系列` is not a narrow required-product subset. Product/sales tables appended after the contract do not create a promotion requirement unless the contract text explicitly says so.
+## Trust boundary
 
-The AI must not receive/read sales Excel, copy an Excel name into a photo product, calculate supported amount, hash photos, or make the final pass decision. Field filenames are leads only. Deterministic code resolves a returned reference ID to the catalog product name, product code, and 69 code; the model does not invent or rewrite those identity fields.
+Vision AI may read:
 
-## Deterministic audit
+- every contract PDF page at original resolution;
+- submitted field photos;
+- bounded repository-owned product-reference images during the final photo pass.
 
-Python must:
+Vision AI must not read the sales Excel, prior outputs, caches, acceptance workbooks, or unrelated repository files. It extracts visible facts only and must not calculate a supported amount or make the final pass decision.
 
-1. Read the sales Excel directly, preserving every original `product_name` cell, customer, period, quantity, amount, and source row.
-2. Validate all AI-returned photo basenames against the extracted source set.
-3. Determine activity-period result from the visible ISO date and contract dates.
-4. Calculate the store relation from the contract name, independently visible location, original source filename, and numbered-branch conflicts; the AI does not decide `exact`, `compatible`, or `mismatch`.
-5. Translate the display observation into the mandatory display control. `meets` is valid only when `matched_standard` is `stack_1sqm`, `four_vertical`, or `both`; `does_not_meet` pairs only with `none`; `unclear` pairs only with `unclear`.
-6. Independently calculate SHA-256, dHash, and pHash for cross-store photo-reuse screening. Exact reuse fails; cross-store near-duplicate candidates remain unresolved until reviewed. This is not a display-standard judgment.
-7. Resolve each visual-RAG hit from the validated catalog, display its product name/product code/69 code, and match it to code-read sales rows by 69 code first and product code second. Fall back to conservative visible-text matching for products outside the catalog. Output only exact source-cell Excel strings and classify `exact`, `candidate`, or `unmatched`; translate them in Excel to `明确对应`, `候选对应`, or `未匹配`.
-8. Build promotion text deterministically. An ordinary price list without an explicit signal must never produce `有促销`.
-9. Award the per-store fee only when photo, full date, location, display, and photo-reuse controls pass. Apply product/promotion controls only if the contract explicitly makes them mandatory.
-10. Sum supported amounts and write values, never formulas.
+Product-reference images establish product identity only. They cannot establish the submitted store, date, location, display, promotion, price, photo originality, or amount, and they must never be returned as submitted `photo_files`.
 
-## Display standard and photo reuse
+## Visual extraction
 
-The contracted display standard is an OR condition: clearly prove at least one of
-`1平米堆头` or `4纵陈列`. Do not output only `陈列符合`. The visual description must say
-which branch is met and what is visible. If area cannot be established and four vertical
-facings/columns cannot be counted, return `unclear` and request a wider or clearer photo.
-For `4纵陈列`, record the exact count and list the same number of distinct, simultaneously
-visible columns from left to right; never add boxes stacked vertically or columns from different
-shelf levels/angles. For `1平米堆头`, provide visible scale, dimensions, or complete-footprint
-evidence rather than inferring area from a close-up.
+Return evidence schema version `2.3`.
 
-Photo reuse is a separate anti-fraud control across contract stores. Never call it
-`陈列重复`, and never use a no-reuse result as evidence that the display itself is compliant.
+For the contract, extract only explicit core terms:
 
-## Product correspondence
+- contracting parties and the customer/distributor party;
+- activity budget, execution period, activity content, display standard, claimed amount;
+- fee basis: `per_store`, `per_stack`, `total_only`, or `unclear`;
+- total stack count and each listed store's stack count only when explicit;
+- watermark and seal visibility;
+- every merchant/store in printed order;
+- specific product and promotion requirements only when the core terms actually impose them.
 
-The maintained multi-view catalog is an identity reference, not field evidence. A complete valid 69 code is the strongest single identifier. Otherwise an exact catalog hit needs a visible product code or legal product name plus an independent compatible anchor, or at least two independent anchors that uniquely converge on one catalog item. Brand, color, box shape, generic claims, QR codes, variable batch/date printing, and backgrounds are never sufficient alone.
+A brand scope, whole series, broad category, activity wording, or appended product/sales table is not a specific contract SKU condition. If the contract does not contain a checkable product code, sufficiently specific product name, or complete valid 69 code, set product knowledge to not applicable.
 
-- `exact`: visible packaging/bundle/specification uniquely supports one code-read Excel row. In the maintained campaign mapping, a legible `3+2` bundle that selects the unique `3+2` Excel item qualifies.
-- `candidate`: visible series/packaging narrows the code-read names but cannot establish one exact SKU, including maintained SP-1/SE-1/SP-2/SP-4 aliases.
-- `unmatched`: no source-cell Excel name is supported.
+For every contract store, return exactly one photo review, including an empty review when no photo can be assigned. Preserve submitted basenames exactly. Extract:
 
-Do not silently rewrite spelling, brand, size, flavor, or bundle notation. Candidate output may list several original Excel names, in source-row order.
+- useful visible text, complete date, location, and their visual basis;
+- whether the photo proves `1平米堆头`, `4纵陈列`, both, neither, or is unclear;
+- a reliable vertical-facing count and corresponding left-to-right basis;
+- explicit promotion signals separately from ordinary prices;
+- risks and useful supplemental material.
 
-## Promotion
+Follow the field-product chain in this order:
 
-`有促销` requires visible special-price wording, old/new price, discount, gift, multi-buy, `1+1`, `3+2`, or `超值装/特享装/量贩装`. A lone `19.90元` or other ordinary tag is only a price. When quality prevents a decision, write `无法判断` with the limitation.
+1. transcribe useful packaging text, name, specification, product code, and complete barcode;
+2. retrieve only the bounded catalog candidates supplied by the runtime;
+3. compare those reference views with the submitted packaging;
+4. return only a uniquely supported exact identity, a fuzzy identity, or no identity.
 
-Product and promotion fields are auxiliary by default. They must not override date, location, display, or duplicate failures unless the contract explicitly requires the product/promotion.
+The field photo does not need to show a complete product name or a 69 code. A visible registered short code that belongs to one catalog product, such as `SP-1`, is enough for an exact product identity even when spacing, case, or the hyphen differs. A short code shared by several products, such as the current `SP-4`, stays fuzzy until specification, flavor, clearer name text, or packaging disambiguates it. Product names may be fuzzy throughout the audit. A supplied product code and a supplied 69 code remain strict.
 
-## Worksheet contract
+## Deterministic audit order
 
-For every contract store write:
+Python owns the decision in this exact order:
 
-- A: store, per-store fee, display standard;
-- B: code-read customer/period, exact Excel names, correspondence label, and `无门店明细，不能单独证明该店` when applicable;
-- C in strict order: `文件`, `识别日期`, `识别地点`, `陈列标准核验`, `视觉依据`, `照片复用检查`, `识别产品`, `促销信息`;
-- D: date/location/display-standard/photo-reuse comparison with the contract, keeping the last two controls on separate lines;
-- E: deterministic supported amount;
-- F: `通过` or specific supplemental evidence.
+1. Read sales Excel cells directly and preserve customer, business date, product code, product name, 69 code, quantity/amount, and Excel row number.
+2. Reconcile a contract product only when the contract contains a concrete checkable identity. Otherwise record `not_applicable`.
+3. Resolve all photo hits through the catalog. A store's photo-product gate passes only when at least one catalog product exists and all returned hits are exact. Do not require a visible photo barcode: first determine the catalog product from visible name fragments, a catalog-unique short code, and packaging. A fuzzy photo identity makes later strict code and 69-code checks unavailable, not mismatched.
+4. For every field product, use its catalog identity to locate only the relevant sales rows:
+   - start a fresh sales-row identity check with the field product's exact catalog 69 code plus an exact or specification-compatible fuzzy product name; retain a row only when the sales catalog reconciliation independently resolves it to that same catalog product;
+   - a short code such as `SP-3` may establish the photo product, but the same text inside a sales product name is never a sales-row locator and never overrides a different product name or 69 code;
+   - product code is a strict verification field after row location, never an alternative locator that can bypass exact 69 code plus compatible name;
+   - product code must strictly equal the catalog code or a registered alias; an unregistered distributor code such as `020...` fails even when name and 69 code agree;
+   - 69 code must be a valid EAN-13 and strictly equal the catalog 69 code;
+   - product name may be exact or fuzzy when specification/size/count remains compatible;
+   - if no row has exact catalog 69 code, compatible name, and an independent resolution to the same product, report the valid sales row as missing; do not attach or rewrite a name-only, short-code-only, or different-barcode row;
+   - every relevant row must pass. Show every relevant row; do not truncate to a sample or redirect the reader to JSON;
+   - retain whole-file sales reconciliation as an internal diagnostic only. An unrelated bad row never becomes a global switch that fails every store.
+5. Compare the files internally after the field-product chain is established:
+   - contract ↔ photo: merchant/location, period/date, display requirement, promotion requirement, and optional concrete contract product;
+   - photo ↔ sales: the catalog product determined from the photo against every relevant sales row's strict code, fuzzy-compatible name, and strict 69 code;
+   - contract ↔ sales: signing party/customer, execution period/business date, and watermark/seal integrity.
+6. Independently check submitted photo existence and cross-store exact/near reuse.
+7. Calculate amount only from an explicit unit basis:
+   - `per_store`: unit fee × passed stores;
+   - `per_stack`: unit fee × explicit passed stack count;
+   - `total_only` or `unclear`: never divide the total automatically; require manual confirmation;
+   - cap the recommendation by the claim and by the explicit activity budget when present.
+8. Validate the structured result before writing a workbook. Write values only, never formulas.
+
+## Display and promotion
+
+The display standard is an OR condition: clearly proving either `1平米堆头` or `4纵陈列` passes this control. `陈列符合` without a visible basis is insufficient. Four vertical facings must be simultaneously visible and countable left to right; vertically stacked boxes or different shelf levels cannot be added. One square metre needs visible scale, dimensions, or a complete-footprint basis.
+
+Photo reuse is a separate anti-fraud control and never proves display compliance.
+
+Promotion exists only with an explicit special price, old/new price, discount, gift, multi-buy, `1+1`, `3+2`, or value-pack signal. A normal price tag alone is not promotion. Promotion is mandatory only when the contract explicitly requires it.
+
+## Human-readable worksheet
+
+Keep one six-column row per contract store and write the total row immediately after the last store:
+
+- A — contract summary: parties, budget/claim, period, activity content, merchant/store, stack count, watermark/seal, display, and any actual optional product or promotion terms. Put `盖章：是/否` on its own line immediately after the watermark line. If the contract does not require a specific product or promotion, omit that line entirely instead of writing a negative placeholder. Put full global terms in the first row; later rows may point to it and show only store-specific terms.
+- B — field-photo summary: every submitted basename, useful visible text, date, location, display conclusion and short visual basis, visible vertical count, cross-store reuse result, catalog-backed product, promotion result, and one plain product confidence label.
+- C — code-read sales information: customer and business date, followed by every sales row relevant to the field product. Within the existing cell, show the catalog product and corresponding Excel row as separate labeled field blocks for product code, product name, 69 code, and quantity; do not concatenate identities with slash separators. Follow the blocks with the three field results and one `置信度：高/中/低` label. Do not show unrelated rows and do not truncate relevant rows. The HTML view must render the same visible field blocks as compact key/value tables without adding or changing facts.
+- D — exactly three short comparisons in evidence order: contract ↔ photo, photo ↔ sales, and contract ↔ sales. Give every relationship only one overall `置信度：高/中/低` label and one short reason. Exact, fuzzy, or mismatch wording may appear only in the field-specific explanation, not as a repeated overall match-result label.
+- E — short fee basis, unit count × unit fee, and supported amount.
+- F — `通过` or `暂不能核销`, followed by `要重新提交什么`. Group requests by source file so the reader sees at most one concrete request for sales Excel, one for the contract, and one for field photos. Name the affected Excel rows/fields or the exact photo content that must be visible.
+
+Do not render catalog candidate sets, raw-versus-authority dumps, hashes, long model reasoning, or a secondary detail table in Excel. Never tell the reader to consult JSON, an internal result, or another detail file: the delivered workbook is the reader's complete handoff. Preserve internal structured evidence for program validation without making it a reading prerequisite.
 
 Formal runs occur only through:
 

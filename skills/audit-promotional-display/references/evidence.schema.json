@@ -6,28 +6,57 @@
   "additionalProperties": false,
   "required": ["schema_version", "scenario", "contract", "photo_reviews", "extraction_notes"],
   "properties": {
-    "schema_version": {"type": "string", "const": "2.2"},
+    "schema_version": {"type": "string", "const": "2.3"},
     "scenario": {"type": "string", "const": "promotional_display"},
     "contract": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "source_file", "customer_name", "activity_start", "activity_end",
-        "display_standard", "fee_per_store", "claimed_amount", "seal_visible",
-        "requires_specific_products", "required_products", "requires_promotion",
+        "source_file", "customer_name", "contract_parties", "activity_start", "activity_end",
+        "activity_budget", "activity_content", "display_standard", "fee_per_store",
+        "fee_basis", "claimed_amount", "contract_stack_count", "watermark_visible",
+        "seal_visible", "requires_specific_products", "required_products",
+        "required_product_identities", "requires_promotion",
         "required_promotion", "stores", "notes"
       ],
       "properties": {
         "source_file": {"type": "string", "minLength": 1},
         "customer_name": {"type": "string", "minLength": 1},
+        "contract_parties": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
         "activity_start": {"type": "string", "format": "date"},
         "activity_end": {"type": "string", "format": "date"},
+        "activity_budget": {"type": ["number", "null"], "minimum": 0},
+        "activity_content": {"type": "string", "minLength": 1},
         "display_standard": {"type": "string", "minLength": 1},
         "fee_per_store": {"type": "number", "minimum": 0},
+        "fee_basis": {
+          "type": "string",
+          "enum": ["per_store", "per_stack", "total_only", "unclear"]
+        },
         "claimed_amount": {"type": "number", "minimum": 0},
+        "contract_stack_count": {"type": ["integer", "null"], "minimum": 1},
+        "watermark_visible": {"type": ["boolean", "null"]},
         "seal_visible": {"type": ["boolean", "null"]},
         "requires_specific_products": {"type": "boolean"},
         "required_products": {"type": "array", "items": {"type": "string"}},
+        "required_product_identities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["visible_text", "product_code", "product_name", "barcode_69"],
+            "properties": {
+              "visible_text": {"type": "string", "minLength": 1},
+              "product_code": {"type": ["string", "null"]},
+              "product_name": {"type": ["string", "null"]},
+              "barcode_69": {"type": ["string", "null"], "pattern": "^69[0-9]{11}$"}
+            }
+          }
+        },
         "requires_promotion": {"type": "boolean"},
         "required_promotion": {"type": ["string", "null"]},
         "stores": {
@@ -36,11 +65,12 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["line_no", "store_name", "address"],
+            "required": ["line_no", "store_name", "address", "stack_count"],
             "properties": {
               "line_no": {"type": "integer", "minimum": 1},
               "store_name": {"type": "string", "minLength": 1},
-              "address": {"type": ["string", "null"]}
+              "address": {"type": ["string", "null"]},
+              "stack_count": {"type": ["integer", "null"], "minimum": 1}
             }
           }
         },
@@ -55,7 +85,8 @@
         "required": [
           "store_line_no", "contract_store_name", "photo_files", "visible_date",
           "visible_location", "location_basis",
-          "display_observation", "recognized_products", "product_reference_hits", "promotion_evidence",
+          "display_observation", "visible_text", "recognized_products",
+          "product_reference_hits", "promotion_evidence",
           "risk_notes", "supplement_advice"
         ],
         "properties": {
@@ -93,6 +124,10 @@
               "description": {"type": "string", "minLength": 1},
               "limitations": {"type": "array", "items": {"type": "string"}}
             }
+          },
+          "visible_text": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
           },
           "recognized_products": {
             "type": "array",

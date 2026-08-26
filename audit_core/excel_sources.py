@@ -52,7 +52,7 @@ def _header_map(ws: Any, candidates: dict[str, set[str]]) -> tuple[int, dict[str
         if candidates is PERSONNEL_HEADERS:
             required |= {"store", "barcode"}
         else:
-            required |= {"customer"}
+            required |= {"customer", "product_code", "barcode"}
         if required.issubset(mapping):
             return row, mapping
     raise AuditError(f"Could not find required Excel headers in sheet {ws.title!r}")

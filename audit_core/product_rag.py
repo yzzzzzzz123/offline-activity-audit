@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,9 @@ CATALOG_RELATIVE_PATH = Path("references") / "product-rag.json"
 SCHEMA_RELATIVE_PATH = Path("references") / "product-rag.schema.json"
 PENDING_RELATIVE_PATH = Path("canban-product-multimodal-knowledge-base") / "pending-barcode.json"
 PENDING_SCHEMA_RELATIVE_PATH = Path("references") / "product-rag-pending.schema.json"
+FIELD_SHORT_CODE_PATTERN = re.compile(
+    r"(?<![0-9A-Za-z])([A-Za-z]{1,4})[\s\-－_]*([0-9]{1,4})(?![0-9A-Za-z])"
+)
 
 
 def ean13_is_valid(value: str) -> bool:
@@ -22,6 +26,96 @@ def ean13_is_valid(value: str) -> bool:
     digits = [int(item) for item in value]
     weighted = sum(digits[index] * (1 if index % 2 == 0 else 3) for index in range(12))
     return (10 - weighted % 10) % 10 == digits[-1]
+
+
+def canonical_product_name(value: Any) -> str:
+    """Normalize a source/catalog product name without weakening identifiers."""
+
+    text = unicodedata.normalize("NFKC", str(value or "")).lower()
+    text = text.replace("參半", "参半")
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff+%]+", "", text)
+
+
+def catalog_product_name_values(product: dict[str, Any]) -> list[str]:
+    """Return the authoritative name and catalog-controlled aliases for matching."""
+
+    values = [str(product.get("product_name") or "")]
+    values.extend(str(value) for value in product.get("aliases") or [])
+    for source in product.get("sources") or []:
+        observed_name = str(source.get("observed_product_name") or "").strip()
+        observed_specification = str(source.get("observed_specification") or "").strip()
+        observed_variant = str(source.get("observed_variant") or "").strip()
+        values.extend(
+            [
+                observed_name,
+                f"{observed_name}{observed_variant}{observed_specification}",
+                f"{observed_name}{observed_specification}{observed_variant}",
+            ]
+        )
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def _product_name_grams(value: Any) -> set[str]:
+    text = canonical_product_name(value)
+    for token in ("参半", "oralshark", "牙膏", "组合装", "超值装", "特享装", "量贩装"):
+        text = text.replace(token, "")
+    if len(text) < 2:
+        return {text} if text else set()
+    return {text[index : index + 2] for index in range(len(text) - 1)}
+
+
+def _measurement_tokens(value: Any) -> set[str]:
+    text = unicodedata.normalize("NFKC", str(value or "")).lower()
+    return {
+        f"{number}{unit}"
+        for number, unit in re.findall(
+            r"(\d+(?:\.\d+)?)\s*(ml|毫升|g|克|支|条|片)",
+            text,
+        )
+    }
+
+
+def catalog_product_name_score(value: Any, product: dict[str, Any]) -> float:
+    """Score one source name against the names controlled by one catalog product."""
+
+    source_measurements = _measurement_tokens(value)
+    scores: list[float] = []
+    for candidate in catalog_product_name_values(product):
+        candidate_measurements = _measurement_tokens(candidate)
+        if (
+            source_measurements
+            and candidate_measurements
+            and not source_measurements.intersection(candidate_measurements)
+        ):
+            continue
+        left_grams = _product_name_grams(value)
+        right_grams = _product_name_grams(candidate)
+        if not left_grams or not right_grams:
+            score = 0.0
+        else:
+            score = len(left_grams & right_grams) / len(left_grams | right_grams)
+        scores.append(score)
+    return max(scores, default=0.0)
+
+
+def unique_fuzzy_catalog_product(
+    value: Any,
+    products: list[dict[str, Any]],
+    *,
+    minimum_score: float,
+    minimum_margin: float = 0.08,
+) -> tuple[dict[str, Any] | None, float]:
+    """Select one catalog product only when fuzzy name evidence is strong and unique."""
+
+    ranked = sorted(
+        ((catalog_product_name_score(value, product), product) for product in products),
+        key=lambda item: (-item[0], str(item[1].get("product_id") or "")),
+    )
+    if not ranked or ranked[0][0] < minimum_score:
+        return None, ranked[0][0] if ranked else 0.0
+    if len(ranked) > 1 and ranked[0][0] - ranked[1][0] < minimum_margin:
+        return None, ranked[0][0]
+    return ranked[0][1], ranked[0][0]
 
 
 def _unique_text(values: list[str], label: str) -> None:
@@ -234,9 +328,91 @@ def resolve_product_reference_hits(
     return resolved
 
 
+def apply_visible_short_code_exact_hits(
+    resolved_hits: list[dict[str, Any]],
+    visible_text: list[str],
+    catalog: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Apply the field-photo rule for a visible, catalog-unique short product code.
+
+    Short packaging codes such as ``SP-1`` are deliberately tolerant of spaces,
+    case, and hyphen style.  A code can establish an exact field identity only
+    when it is a registered catalog alias for exactly one product.  Shared codes
+    such as the current ``SP-4`` group remain fuzzy until another visible package
+    feature disambiguates them.
+    """
+
+    visible_codes = {
+        f"{match.group(1).upper()}{match.group(2)}"
+        for value in visible_text
+        for match in FIELD_SHORT_CODE_PATTERN.finditer(str(value))
+    }
+    if not visible_codes:
+        return resolved_hits
+
+    alias_index: dict[str, dict[str, tuple[dict[str, Any], str]]] = {}
+    for product in catalog.get("products") or []:
+        for alias in product.get("product_code_aliases") or []:
+            match = FIELD_SHORT_CODE_PATTERN.fullmatch(str(alias).strip())
+            if match is None:
+                continue
+            canonical = f"{match.group(1).upper()}{match.group(2)}"
+            alias_index.setdefault(canonical, {})[str(product["product_id"])] = (
+                product,
+                str(alias),
+            )
+
+    result = [
+        {
+            **hit,
+            "matched_view_ids": list(hit.get("matched_view_ids") or []),
+            "visible_basis": list(hit.get("visible_basis") or []),
+            "limitations": list(hit.get("limitations") or []),
+        }
+        for hit in resolved_hits
+    ]
+    by_id = {str(hit["reference_product_id"]): hit for hit in result}
+    for canonical in sorted(visible_codes):
+        matches = alias_index.get(canonical) or {}
+        if len(matches) != 1:
+            continue
+        product, display_alias = next(iter(matches.values()))
+        if product.get("match_policy") == "candidate_only":
+            continue
+        product_id = str(product["product_id"])
+        basis = (
+            f"现场照片可见知识库登记短码 {display_alias}，"
+            "且该短码只对应这一种商品"
+        )
+        hit = by_id.get(product_id)
+        if hit is None:
+            hit = {
+                "reference_product_id": product_id,
+                "product_name": str(product["product_name"]),
+                "product_code": str(product["product_code"]),
+                "product_code_aliases": [
+                    str(value) for value in product.get("product_code_aliases") or []
+                ],
+                "barcode_69": str(product["barcode_69"]),
+                "specification": str(product["specification"]),
+                "variant": product.get("variant"),
+                "confidence": "exact",
+                "matched_view_ids": [],
+                "visible_basis": [basis],
+                "limitations": [],
+            }
+            result.append(hit)
+            by_id[product_id] = hit
+            continue
+        hit["confidence"] = "exact"
+        if basis not in hit["visible_basis"]:
+            hit["visible_basis"].append(basis)
+    return result
+
+
 def product_reference_label(hit: dict[str, Any]) -> str:
-    confidence = "精确命中" if hit["confidence"] == "exact" else "候选命中"
+    confidence = "精确匹配（高置信度）" if hit["confidence"] == "exact" else "模糊匹配（中置信度）"
     return (
         f"{hit['product_name']}（产品编码：{hit['product_code']}；"
-        f"69码：{hit['barcode_69']}；视觉RAG：{confidence}）"
+        f"69码：{hit['barcode_69']}；商品知识库：{confidence}）"
     )

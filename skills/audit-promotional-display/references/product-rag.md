@@ -1,74 +1,98 @@
-# 商品多视图视觉 RAG
+# Product multimodal RAG rules
 
-本目录维护现场照片商品识别所用的多视图参考库。读取
-[`product-rag.json`](product-rag.json) 时，同时按
-[`product-rag.schema.json`](product-rag.schema.json) 核验结构；运行代码还会核对每张参考图的
-路径、SHA-256、产品 ID 和 69 码。集中图片、待补条码清单和维护说明位于
-[`Canban 商品多模态知识库`](../canban-product-multimodal-knowledge-base/README.md)。
+## Authority and storage
 
-## 识别边界
+The maintained catalog is a repository-delivered multimodal product knowledge base:
 
-参考库只回答“现场包装最可能是哪一个商品”。它不能证明现场门店、拍摄日期、陈列面积、
-纵向陈列数量、促销形式或照片未被复用，也不能替代任何现场照片。
+- structured authority: `references/product-rag.json`;
+- controlled product directories: `canban-product-multimodal-knowledge-base/products/`;
+- directory convention: `<interface barcode>__<Windows-safe interface product name>__<fixed product code>/`;
+- registered reference images are integrity-checked before use.
 
-对每个现场可见商品先检索候选，再把候选的多个包装面与现场局部逐面比较：
+The product code is the immutable business key for interface synchronization. A barcode may be shared by multiple products, so it must not be used to recover or change the product code. Product name, aliases, barcode, variants, specifications, and reference views remain catalog-controlled identity fields.
 
-- 69 码完整可读且校验通过时，是最强的单项身份依据；
-- 产品编码与品牌同时可见，或法定产品名称与另一个独立包装锚点同时可见时，可支持精确命中；
-- 现场只露出部分包装时，至少需要两个互相独立的锚点及相容的版式/图形特征；
-- 只凭品牌、红银配色、盒形、通用功效词、二维码或相似背景，只能给候选或不匹配；
-- 参考库中的防伪二维码、批次、日期喷码、折痕、反光和背景不是稳定身份特征；
-- 强锚点冲突时不得用整体外观覆盖冲突，应返回候选或不匹配并说明冲突。
+## Interface synchronization
 
-## 有界检索
+Use `scripts/sync_product_identity_by_code.py` for knowledge-base naming maintenance:
 
-不得把完整参考库一次性附加给视觉模型。先只看现场图并提取当张照片可见的商品名、产品编码
-和完整有效 69 码，再由确定性代码检索候选。仅有品牌、颜色、盒型或通用品类词时不召回。
-每张现场图最多保留两个文本候选，单次任务最多八个候选商品，每个候选最多附加四张参考图；
-因此单次参考图上限为 32 张。无法形成可靠候选时返回空命中，不得退回全库扫描。
+1. Read the product code from the existing controlled directory. A newly staged directory may temporarily use only the product code as its name; its first successful synchronization must convert it to the complete three-field convention.
+2. Query the mapping API with `product_code` only.
+3. Accept exactly one response tuple whose returned product code exactly equals the query.
+4. Fail closed on no exact tuple, multiple distinct exact tuples, an empty product name, or an invalid EAN-13 barcode.
+5. Keep the product code and source relationships unchanged. Update the directory name, registered catalog name/barcode, identity anchors, and registered view paths from the exact response.
+6. Preserve the API product name verbatim in the catalog. Replace only Windows-forbidden directory characters in the folder label; for example, `*` becomes `×` and `/` becomes `／`.
+7. Do not rename image files or change image bytes. Reload the catalog after applying and verify every registered image path and SHA-256.
 
-## 输出要求
+After directory synchronization, use the same tool's `register` command to add every plan-covered controlled directory that is still missing from the catalog. Registration must verify that the current directory is the deterministic target of the exact interface tuple, validate every image with Pillow, record dimensions and SHA-256, and atomically reload the catalog. When the original source collection is unavailable, keep `sources` empty rather than inventing source lineage; retain the current image filename and mark the view `unclassified` and `unreviewed` with an explicit source-lineage limitation.
 
-现场照片核验的 `product_reference_hits` 只返回目录中存在的 `reference_product_id` 和
-`matched_view_ids`。`visible_basis` 必须描述现场照片真正可见的文字、编码、条码或版式，
-不能把参考图内容冒充现场可见内容。
+Never query or reconcile this maintenance flow by the old barcode, and never use fuzzy product-name matching to choose an API row.
 
-- `exact`：现场依据足以把候选收敛为唯一目录商品；
-- `candidate`：与目录商品相容但没有唯一性；
-- 空数组：没有可靠目录命中。
+## Retrieval chain
 
-目录中 `match_policy=candidate_only` 的同码冲突商品即使外观相容也不得返回 `exact`。
+For each submitted field-photo group, use this sequence only:
 
-确定性代码根据命中的 `reference_product_id` 回填产品名称、主产品编码、产品编码别名和
-69 码，并优先用 69 码、其次用主编码或别名与销售 Excel 原始行比对。模型不得读取 Excel，
-也不得自行改写这些目录字段。
+1. extract visible text anchors from the field photo;
+2. query the catalog with complete barcode, product code, product name, specification, flavor/variant, and packaging text;
+3. retain only the runtime's bounded candidate set, normally no more than two candidates per photo query;
+4. compare submitted packaging against the registered multi-view reference images;
+5. return catalog IDs and registered view IDs only.
 
-单张现场照片的最小可行性测试使用
-[`product-compare.schema.json`](product-compare.schema.json)：现场图与一个候选商品的有界参考
-视图必须在同一次视觉判断中输入，输出 `exact`、`candidate` 或 `no_match`，并列出真正命中的
-`matched_view_ids`、现场可见标识和冲突。该结构用于证明发生了逐图对照，不把文本检索结果
-直接当作商品命中。
+Do not scan arbitrary product directories from the model prompt. Do not treat every product with the same barcode as the same SKU. Do not return a product merely because a generic brand word or color is shared.
 
-## 扩充目录
+## Anchor strength
 
-每个新商品至少填写唯一 `product_id`、包装法定 `product_name`、13 位 `barcode_69`、规格
-和一张真实参考图；推荐提供多个物理面。包装没有独立产品编码时，`product_code` 必须明确写
-`未标注`，不得把 69 码或推测值伪装成产品编码。69 码必须以 `69` 开头并通过 EAN-13 校验。
-同一 69 码的不同来源、包装版本和补充视图合并到一个商品条目并保留来源；不同 69 码的相似
-SKU 分别建条目，不能把系列名当作具体 SKU。条码缺失或受遮挡的素材只能进入待补清单，不能
-进入正式候选目录。新增或替换参考图后必须更新 SHA-256，并运行项目测试和正式现场材料回归。
+Strong anchors:
 
-`参半牙具` 是只读原始数据集。知识库标准化、Excel 映射、条码纠错和产品编码回填只修改受控
-图片副本、目录标签及 catalog，不得静默改名、移动或删除原始目录；catalog 中的
-`source_folder` 继续保存真实原始路径。只有用户另行明确授权修正原始数据集时，才允许变更其
-结构。正式区不能唯一收敛的重复来源或条码冲突商品不复制进交付知识库，也不进入正式
-catalog；按 Excel 已发出商品清单列为待重拍，取得可验证新图后再通过受控导入器晋升。
+- complete valid visible barcode;
+- visible registered product code or alias;
+- sufficiently specific legal or registered product name;
+- compatible specification, count, volume, flavor/variant, and bundle notation;
+- distinctive packaging details confirmed against registered reference views.
 
-商品编码映射接口是一对多接口，不保证一个 69 码只返回一个内部 SKU。只有产品名、品类、
-规格和款式相容，并按当前线下核销场景排除国际标签、客户专供、运输箱规等候选后能够唯一
-收敛时，才可写入主 `product_code` 并把正式目录改为
-`<69码>__<规范化产品名>__<产品编码>`。包装可见旧编码或同一实物的已验证历史编码进入
-`product_code_aliases`；仍不能唯一收敛时继续使用 `未标注`，不得默认取接口第一条。
-查询、计划、预检、显式批准和原子改名统一使用
-[`sync_product_codes.py`](../scripts/sync_product_codes.py)，不得另写一次性批量改名命令绕过其
-同码校验、来源镜像哈希、目标冲突和回滚门禁。
+Weak anchors that cannot identify a SKU alone:
+
+- brand only;
+- common colors;
+- box, tube, or bottle shape;
+- generic whitening, freshening, antibacterial, or audience wording;
+- QR code;
+- batch/date printing;
+- background shelf or display furniture.
+
+## Exact, candidate, and unmatched
+
+Return `exact` only when one product is uniquely supported by one of these routes:
+
+- a complete valid visible barcode and no unresolved same-code variant conflict;
+- a visible registered product code or unique alias;
+- a visible product code or fuzzy-compatible product name plus an independent compatible specification, variant, or package anchor;
+- at least two independent field anchors that uniquely converge and agree with one or more registered reference views.
+
+Return `candidate` when packaging is compatible but identity remains non-unique, including an unresolved same-barcode product group or shared alias. Return no hit when the submitted view does not support a catalog identity.
+
+Candidate hits never pass the photo-product gate and never become exact merely because the same catalog ID appears in sales data.
+
+## Separation from sales and contract
+
+The photo model never reads sales Excel. A sales product name, code, or barcode cannot be copied into `visible_text`, `recognized_products`, or `visible_basis`.
+
+Deterministic code separately checks sales rows:
+
+- code strictly equals the registered code or alias;
+- barcode strictly equals a valid catalog barcode;
+- name is exact or uniquely fuzzy-compatible with the strict code/barcode product.
+
+Only after both sales and photo identities pass their own knowledge checks may the runtime compare catalog products, names, codes, and barcodes. The photo itself does not need to show a barcode: an exact photo identity supplies the catalog barcode used for the sales comparison. A fuzzy photo identity leaves that later barcode check unavailable. Concrete contract products follow the same catalog route; generic brand scope is not applicable.
+
+## Evidence boundary
+
+Reference images can support identity only. They cannot prove:
+
+- field merchant, store, or location;
+- field date;
+- display area or vertical-display count;
+- promotion or field price;
+- originality or non-reuse of submitted photos;
+- reimbursement amount.
+
+Every `visible_basis` sentence must describe something visible in a submitted field photo. Reference-only content is never a field observation. Keep full retrieval candidates, registered identities, matched view IDs, integrity hashes, and limitations in the internal structured result. In Excel, show only the product, match level, score, and exact resubmission requirement; never direct the reader to the internal result.

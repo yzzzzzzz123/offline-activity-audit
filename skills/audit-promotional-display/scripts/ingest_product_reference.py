@@ -42,10 +42,22 @@ SOURCE_COLLECTIONS = {
     "参半样品图（31个）": SKILL_ROOT / "参半样品图（31个）",
 }
 SOURCE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,49}$")
-FOLDER_UNSAFE_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
-FOLDER_SEPARATORS = re.compile(r"[\s\-_]+")
+FOLDER_CONTROL_CHARS = re.compile(r"[\x00-\x1f]+")
+WINDOWS_FOLDER_REPLACEMENTS = str.maketrans(
+    {
+        "\\": "＼",
+        "/": "／",
+        ":": "：",
+        "*": "×",
+        "?": "？",
+        '"': "＂",
+        "<": "＜",
+        ">": "＞",
+        "|": "｜",
+    }
+)
 PRODUCT_CODE_FOLDER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-MAX_PRODUCT_FOLDER_LABEL_LENGTH = 48
+MAX_PRODUCT_FOLDER_LABEL_LENGTH = 80
 
 
 def _parse_args() -> argparse.Namespace:
@@ -79,18 +91,24 @@ def _relative_text(path: Path) -> str:
 
 
 def _safe_product_folder_label(product_name: str) -> str:
-    """Make the human-readable directory suffix deterministic and Windows-safe.
+    """Keep the authoritative product name readable while making it Windows-safe.
 
-    The catalog remains the identity authority.  This label is intentionally a
-    frozen display aid beside the immutable barcode/source-id rather than an
-    input for matching or a reason to rename an existing product directory.
+    Product-code synchronization treats the interface product name as an
+    authoritative field.  Preserve its spaces, punctuation, and channel text;
+    translate only characters Windows forbids in a directory name.  Refuse an
+    overlong label instead of silently truncating a business field.
     """
 
-    label = FOLDER_UNSAFE_CHARS.sub("-", product_name.strip())
-    label = FOLDER_SEPARATORS.sub("-", label).strip(". -_")
+    label = FOLDER_CONTROL_CHARS.sub("-", product_name.strip())
+    label = label.translate(WINDOWS_FOLDER_REPLACEMENTS).rstrip(". ")
     if not label:
         raise AuditError("产品名无法生成安全的知识库目录标签")
-    return label[:MAX_PRODUCT_FOLDER_LABEL_LENGTH].rstrip(". -_")
+    if len(label) > MAX_PRODUCT_FOLDER_LABEL_LENGTH:
+        raise AuditError(
+            "产品名超过知识库目录标签长度上限，禁止静默截断："
+            f"{len(label)}>{MAX_PRODUCT_FOLDER_LABEL_LENGTH}"
+        )
+    return label
 
 
 def _catalog_product_directory(

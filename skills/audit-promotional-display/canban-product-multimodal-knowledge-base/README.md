@@ -1,39 +1,64 @@
 # Canban Product Multimodal Knowledge Base
 
-本目录保存 `参半牙具` 原始数据集的受控图片副本，用于现场商品视觉检索和逐图比对。`参半牙具` 是只读原始数据集；本轮对账不会改名、移动、删除或改写其中任何目录和图片。
+本目录保存商品参考图的受控副本，用于现场商品视觉检索和逐图比对。原始素材集合保持只读；知识库标准化不会改名、移动、删除或改写原始目录及图片。
 
 ## 当前内容
 
-- 原始数据集保持 115 个直接子目录、483 张图片。
-- 正式 `products/` 当前有 104 个已通过“69 码精确相等 + 产品名称模糊唯一收敛”门禁的商品。
-- 104 个正式商品对应 104 个唯一 Excel 产品编码、104 个来源目录和 434 张参考图。
-- 其余 11 个来源目录、49 张图片只保留在只读原始数据集，不复制到本交付目录，也不进入正式 RAG catalog；不能唯一映射的 Excel 商品按缺口清单重新拍摄。
-- `8.19样品申请汇总表(3).xlsx` 保持原文件不变。
-- 当前没有待补 69 码商品。
+- `products/` 共有 118 个商品目录、499 个图片文件。
+- 正式 `product-rag.json` 已登记全部 118 个商品目录和 499 张参考图；这些图片都会进入运行时检索。
+- 其中后补的 14 个商品、65 张图片没有可核验的原始素材集合路径；catalog 不伪造 `source_id` 或 `source_folder`，仅保留加入 catalog 时的原图片文件名，并把视图标记为 `unclassified/unreviewed`。
+- 118 个目录的产品编码均唯一；产品编码是目录与接口映射的固定主键。
+- `8.19样品申请汇总表.xlsx` 及各原始素材集合保持不变。
 
-正式目录事实保存在 `../references/product-rag.json`，并按 `../references/product-rag.schema.json` 校验。正式图片目录固定为：
+正式目录事实保存在 `../references/product-rag.json`，并按 `../references/product-rag.schema.json` 校验。目录命名固定为：
 
-`products/<Excel精确69码>__<Excel标准产品名>__<Excel唯一产品编码>/`
+`products/<接口69码>__<接口产品名称的Windows安全标签>__<固定产品编码>/`
 
-运行时只加载 `products/` 和 catalog 中登记的图片。未进入正式区的原始素材不能产生精确或候选命中。
+产品名称只替换 Windows 禁止用于目录名的字符；例如接口原文中的 `*` 在目录名中显示为 `×`，`/` 显示为 `／`。catalog 的 `product_name` 保留接口原文，图片文件名和图片内容不变。
 
-## 本轮对账规则
+## 接口同步规则
 
-1. 先以 13 位 69 码与 Excel 做完全相等匹配；69 码不同即不得自动对应。
-2. 同一 69 码存在多个 Excel 商品时，再以原始目录中的产品名称、规格、口味、颜色、包装款式和联名标识做模糊消歧。
-3. 只有唯一收敛到一个 Excel 产品名称和唯一产品编码时，才进入正式 `products/`。
-4. 同一个产品编码不得生成多个正式商品条目。
-5. 重复来源、条码冲突或仍不能唯一消歧的商品不进入交付知识库；按 Excel 已发出商品清单列为待重拍，取得可验证新图后再通过同一门禁导入。
+1. 从现有知识库目录末尾读取产品编码，产品编码在本流程中固定不变。新加入的目录允许暂时只使用产品编码命名，首次同步后必须转换为完整三字段目录名。
+2. 商品编码映射接口只能使用 `product_code` 参数查询；不得使用现有 69 码反查，也不得用产品名模糊搜索接口结果。
+3. 只接受接口结果中 `product_code` 与查询值完全相等的记录。
+4. 每个产品编码必须唯一收敛到一组产品编码、产品名称和 69 码；没有精确结果、多个不同精确结果、空名称或无效 EAN-13 均失败关闭。
+5. 接口产品名称和 69 码更新目录；已登记商品同时更新 catalog、身份锚点和图片路径。旧名称仅作为 alias 保留，产品编码和 `sources[].source_folder` 不变。
+6. 目录移动使用临时中间名并在失败时回滚；catalog 先做 Schema 校验，再原子替换，最后重新校验全部图片路径与 SHA-256。
 
-本轮已纠正“参半益生菌漱口水-阳光西柚 500ml”的知识库 69 码：原始目录名写成 `6970356116967`，但原图条码清晰显示 `6970356169673`，并与 Excel 完全一致。原始目录因只读而保留原名，正式 catalog 和知识库目录使用经照片与 Excel 双重确认的 `6970356169673`。
+维护脚本分为获取、计划和应用三步；密钥只从进程环境或 Windows 用户环境读取，不写入仓库：
+
+```powershell
+$mappingFile = Join-Path $env:TEMP 'canban-product-code-mapping.json'
+$planFile = Join-Path $env:TEMP 'canban-product-identity-plan.json'
+
+py -3 -B skills/audit-promotional-display/scripts/sync_product_identity_by_code.py `
+  fetch --output $mappingFile
+
+py -3 -B skills/audit-promotional-display/scripts/sync_product_identity_by_code.py `
+  plan --mapping-file $mappingFile --output $planFile
+
+# 不带 --confirm 时只预演，不改动目录或 catalog。
+py -3 -B skills/audit-promotional-display/scripts/sync_product_identity_by_code.py `
+  apply --plan-file $planFile
+
+py -3 -B skills/audit-promotional-display/scripts/sync_product_identity_by_code.py `
+  apply --plan-file $planFile --confirm
+
+# 将计划覆盖但尚未登记的受控目录及图片加入正式 catalog；先预演，再确认。
+py -3 -B skills/audit-promotional-display/scripts/sync_product_identity_by_code.py `
+  register --plan-file $planFile
+
+py -3 -B skills/audit-promotional-display/scripts/sync_product_identity_by_code.py `
+  register --plan-file $planFile --confirm
+```
 
 ## 识别边界
 
-- 完整且校验通过的 69 码是最强单项身份锚点。
+- 完整且校验通过的 69 码是强身份锚点，但同码多商品时还必须消歧。
 - 明确产品编码，或正式产品名加另一项独立包装锚点，可支持精确比对。
 - 品牌、颜色、盒型、通用功效词、防伪二维码、批次和日期喷码不能单独确定商品。
 - 参考图只用于判断现场包装最可能对应哪个商品，不能证明门店、日期、陈列面积、4 纵陈列、促销、价格、照片唯一性或支持金额。
-- 未进入正式 `products/` 和 catalog 的原始图片不进入运行时索引。
+- 只有 catalog 已登记且路径、Schema、SHA-256 均通过校验的受控图片才进入运行时索引。
 
 ## 有界检索
 
@@ -47,14 +72,14 @@
 
 ## 维护边界
 
-- `参半牙具` 作为原始数据集保持只读。知识库可以修正标准产品名、69 码和产品编码，但 catalog 的 `source_folder` 必须继续指向真实存在的原始目录。
-- 不得因知识库标准化而静默重命名、移动或删除原始目录；如确需修正原始数据集，必须由用户另行明确授权。
-- 新商品必须先进入原始数据集，再通过受控导入器复制到知识库；条码缺失或无法唯一映射时不得进入正式 `products/`。
-- 每次维护后必须重新加载 catalog、验证全部图片路径与 SHA-256，并分别核对正式 catalog 已覆盖来源及原始集未覆盖来源；未覆盖来源不得被误报为正式商品。
+- 原始素材集合保持只读；catalog 的 `sources[].source_folder` 必须继续指向真实原始目录。
+- 不得因知识库标准化而静默改名、移动或删除原始目录；如需修正原始数据，必须由用户另行明确授权。
+- 新商品必须通过受控导入器逐商品复制到知识库；不得跨商品批量猜测身份。
+- 每次维护后必须重新加载 catalog，验证全部图片路径和 SHA-256，并确认物理目录与正式 catalog 商品一一覆盖。
 
 ## Git LFS 交付
 
-434 张 JPG 参考图和权威样品 Excel 使用 Git LFS，代码、Schema、catalog 与说明文档使用普通 Git。新机器克隆后先执行：
+正式 JPG 参考图和权威样品 Excel 使用 Git LFS，代码、Schema、catalog 与说明文档使用普通 Git。新机器克隆后先执行：
 
 ```powershell
 git lfs install
@@ -74,10 +99,10 @@ py -3 -B skills/audit-promotional-display/scripts/ingest_product_reference.py `
   --source-collection '参半牙具' `
   --source-id 'dental-060' `
   --product-name '参半示例商品' `
-  --product-code '未标注' `
+  --product-code 'CP-EXAMPLE-0001' `
   --specification '100g' `
   --variant '示例香型' `
   --barcode '69xxxxxxxxxxx'
 ```
 
-若条码不可见或不能与 Excel 精确匹配，必须进入人工核对，不能根据相邻商品、接口第一条结果或名称相似度强行补码。
+条码不可见或身份无法唯一确认时必须进入人工核对，不能根据相邻商品、接口第一条非精确结果或名称相似度强行补码。
