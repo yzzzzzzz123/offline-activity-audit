@@ -1082,6 +1082,30 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
     }
     contract_requirement_text = "\n".join(_contract_requirement_lines(contract))
     all_failed_controls: list[str] = []
+    sales_internal_status = str(
+        summary.get("sales_internal_status")
+        or sales.get("internal_status")
+        or "pass"
+    )
+    sales_internal_problem_rows = list(
+        summary.get("sales_internal_problem_rows")
+        or sales.get("internal_problem_rows")
+        or []
+    )
+    sales_internal_text = (
+        "通过（逐行金额、打印总数量和打印合计金额均一致）"
+        if sales_internal_status == "pass"
+        else (
+            "未通过"
+            if sales_internal_status == "fail"
+            else "无法完整核对"
+        )
+        + (
+            f"（问题行：{_row_ranges([int(value) for value in sales_internal_problem_rows])}）"
+            if sales_internal_problem_rows
+            else ""
+        )
+    )
 
     row = 4
     activity_requests: list[str] = []
@@ -1093,6 +1117,16 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
         activity_requests.append("重新提交盖章或带水印的完整合同")
     if int(summary.get("sales_knowledge_problem_count") or 0) > 0:
         activity_requests.append("重新导出销售Excel的商品知识库问题行")
+    if sales_internal_status != "pass":
+        row_suffix = (
+            f"（第{_row_ranges([int(value) for value in sales_internal_problem_rows])}行）"
+            if sales_internal_problem_rows
+            else ""
+        )
+        activity_requests.append(
+            "重新导出销售Excel：更正数量×零售价与行合计，"
+            f"并保留唯一清晰的合计/总计行{row_suffix}"
+        )
     sales_knowledge_text = (
         f"精确{_number(summary.get('sales_knowledge_matched_count'))}行、"
         f"模糊{_number(summary.get('sales_knowledge_fuzzy_count'))}行、"
@@ -1119,11 +1153,13 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             f"商品明细：{len(sales.get('records') or [])}行\n"
             f"数量：{_number(sales.get('total_quantity'))}\n"
             f"合计金额：{_number(sales.get('retail_amount'))}元\n"
-            f"商品知识库：{sales_knowledge_text}"
+            f"商品知识库：{sales_knowledge_text}\n"
+            f"Excel内部核对：{sales_internal_text}"
         ),
         (
             f"合同主体与周期 ↔ 销售Excel：{_contract_sales_text(contract_sales)}\n"
-            f"销售Excel ↔ 商品知识库：{sales_knowledge_text}"
+            f"销售Excel ↔ 商品知识库：{sales_knowledge_text}\n"
+            f"销售Excel文件内部：{sales_internal_text}"
         ),
         "",
         (
@@ -1331,9 +1367,19 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
         attachment_knowledge.get("status") not in {"not_applicable", "pass"}
         or attachment_sales.get("status") not in {"not_applicable", "pass"}
     )
-    if summary["supplement_store_count"] == 0 and not attachment_issue:
+    sales_internal_issue = sales_internal_status != "pass"
+    if (
+        summary["supplement_store_count"] == 0
+        and not attachment_issue
+        and not sales_internal_issue
+    ):
         conclusion = "通过"
-    elif summary["passed_store_count"] and summary["supplement_store_count"]:
+    elif (
+        summary["passed_store_count"]
+        and summary["supplement_store_count"]
+        and not attachment_issue
+        and not sales_internal_issue
+    ):
         conclusion = "部分通过"
     else:
         conclusion = "暂不能核销"
@@ -1343,13 +1389,17 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
         failed_control_summary = (
             failed_control_summary + "、" if failed_control_summary != "无" else ""
         ) + "合同销售附件"
+    if sales_internal_issue:
+        failed_control_summary = (
+            failed_control_summary + "、" if failed_control_summary != "无" else ""
+        ) + "销售Excel文件内部"
     _write_row(
         ws,
         row,
         [
             f"合计金额\n合同{summary['contract_store_count']}家；预算{_number(summary.get('activity_budget'))}元；申报{_number(summary['claimed_amount'])}元",
             f"共识别{summary['photo_count']}张照片",
-            f"Excel读取{summary['sales_sku_count']}行商品\n数量{_number(summary['sales_quantity'])}；零售额{retail}元\n与现场商品相关的销售行已在各门店逐项展示",
+            f"Excel读取{summary['sales_sku_count']}行商品\n数量{_number(summary['sales_quantity'])}；零售额{retail}元\nExcel内部核对：{sales_internal_text}\n与现场商品相关的销售行已在各门店逐项展示",
             f"{summary['passed_store_count']}家通过；{summary['supplement_store_count']}家需补证\n未通过字段汇总：{failed_control_summary}",
             f"建议核销{_number(summary['suggested_approved_amount'])}元\n暂缓{_number(summary['temporarily_held_amount'])}元",
             conclusion,

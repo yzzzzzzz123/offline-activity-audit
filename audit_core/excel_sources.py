@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from math import cos, pi
 from collections import defaultdict
 from pathlib import Path
@@ -75,6 +76,16 @@ def _number(value: Any) -> float | None:
 
 def _json_quantity(value: float) -> int | float:
     return int(value) if value.is_integer() else value
+
+
+def _money_pair_status(left: Any, right: Any) -> str:
+    if left is None or right is None:
+        return "unverifiable"
+    try:
+        difference = abs(Decimal(str(left)) - Decimal(str(right)))
+    except Exception:
+        return "unverifiable"
+    return "exact" if difference <= Decimal("0.01") else "mismatch"
 
 
 def read_personnel_sales(path: str | Path) -> dict[str, Any]:
@@ -182,21 +193,54 @@ def read_display_sales(path: str | Path) -> dict[str, Any]:
     header_row, columns = _header_map(formula_ws, DISPLAY_HEADERS)
     records: list[dict[str, Any]] = []
     external_formula_cells: list[str] = []
+    printed_totals: list[dict[str, Any]] = []
     for row in range(header_row + 1, formula_ws.max_row + 1):
+        formula_values = [
+            formula_ws.cell(row, col).value
+            for col in range(1, formula_ws.max_column + 1)
+        ]
+        for col, value in enumerate(formula_values, 1):
+            if isinstance(value, str) and value.startswith("=") and "[" in value:
+                external_formula_cells.append(formula_ws.cell(row, col).coordinate)
+        normalized_cells = {
+            normalize_text(value)
+            for value in formula_values
+            if value is not None
+        }
+        if normalized_cells & {"合计", "总计"}:
+            printed_totals.append(
+                {
+                    "excel_row": row,
+                    "quantity": _number(value_ws.cell(row, columns["quantity"]).value),
+                    "total_amount": (
+                        _number(value_ws.cell(row, columns["total"]).value)
+                        if "total" in columns
+                        else None
+                    ),
+                }
+            )
+            continue
         customer = formula_ws.cell(row, columns["customer"]).value
         product = formula_ws.cell(row, columns["product"]).value
         quantity = _number(value_ws.cell(row, columns["quantity"]).value)
         if not customer or not product or quantity is None:
             continue
-        formula_values = [formula_ws.cell(row, col).value for col in range(1, formula_ws.max_column + 1)]
-        for col, value in enumerate(formula_values, 1):
-            if isinstance(value, str) and value.startswith("=") and "[" in value:
-                external_formula_cells.append(formula_ws.cell(row, col).coordinate)
         total_value = (
             _number(value_ws.cell(row, columns["total"]).value)
             if "total" in columns
             else None
         )
+        retail_price = (
+            _number(value_ws.cell(row, columns["retail_price"]).value)
+            if "retail_price" in columns
+            else None
+        )
+        calculated_total = (
+            quantity * retail_price
+            if retail_price is not None
+            else None
+        )
+        line_amount_status = _money_pair_status(calculated_total, total_value)
         records.append(
             {
                 "excel_row": row,
@@ -209,18 +253,63 @@ def read_display_sales(path: str | Path) -> dict[str, Any]:
                     formula_ws.cell(row, columns.get("unit", 0)).value or ""
                 ).strip(),
                 "quantity": _json_quantity(quantity),
-                "retail_price": (
-                    _number(value_ws.cell(row, columns["retail_price"]).value)
-                    if "retail_price" in columns
+                "retail_price": retail_price,
+                "total_amount": total_value,
+                "calculated_total_amount": (
+                    _json_quantity(calculated_total)
+                    if calculated_total is not None
                     else None
                 ),
-                "total_amount": total_value,
+                "line_amount_status": line_amount_status,
+                "line_amount_difference": (
+                    _json_quantity(total_value - calculated_total)
+                    if total_value is not None and calculated_total is not None
+                    else None
+                ),
             }
         )
     if not records:
         raise AuditError(f"No valid sales detail rows found in {source}")
     total_quantity = sum(float(item["quantity"]) for item in records)
     known_total_amounts = [item["total_amount"] for item in records if item["total_amount"] is not None]
+    calculated_total_amount = (
+        sum(known_total_amounts)
+        if len(known_total_amounts) == len(records)
+        else None
+    )
+    printed_total = printed_totals[0] if len(printed_totals) == 1 else None
+    printed_quantity_status = (
+        _money_pair_status(printed_total.get("quantity"), total_quantity)
+        if printed_total is not None
+        else "unverifiable"
+    )
+    printed_amount_status = (
+        _money_pair_status(printed_total.get("total_amount"), calculated_total_amount)
+        if printed_total is not None
+        else "unverifiable"
+    )
+    line_problem_rows = [
+        int(item["excel_row"])
+        for item in records
+        if item["line_amount_status"] != "exact"
+    ]
+    internal_problem_rows = list(line_problem_rows)
+    if len(printed_totals) != 1:
+        internal_problem_rows.extend(int(item["excel_row"]) for item in printed_totals)
+    elif printed_quantity_status != "exact" or printed_amount_status != "exact":
+        internal_problem_rows.append(int(printed_total["excel_row"]))
+    internal_problem_rows = sorted(set(internal_problem_rows))
+    internal_statuses = {
+        *(str(item["line_amount_status"]) for item in records),
+        printed_quantity_status,
+        printed_amount_status,
+    }
+    if "mismatch" in internal_statuses:
+        internal_status = "fail"
+    elif "unverifiable" in internal_statuses or len(printed_totals) != 1:
+        internal_status = "unverifiable"
+    else:
+        internal_status = "pass"
     result = {
         "source_file": str(source),
         "sheet": formula_ws.title,
@@ -228,9 +317,47 @@ def read_display_sales(path: str | Path) -> dict[str, Any]:
         "sku_count": len(records),
         "total_quantity": _json_quantity(total_quantity),
         "retail_amount": (
-            _json_quantity(sum(known_total_amounts))
-            if len(known_total_amounts) == len(records)
+            _json_quantity(calculated_total_amount)
+            if calculated_total_amount is not None
             else None
+        ),
+        "printed_total_rows": printed_totals,
+        "printed_total_row": (
+            int(printed_total["excel_row"]) if printed_total is not None else None
+        ),
+        "printed_total_quantity": (
+            _json_quantity(float(printed_total["quantity"]))
+            if printed_total is not None and printed_total.get("quantity") is not None
+            else None
+        ),
+        "printed_total_amount": (
+            _json_quantity(float(printed_total["total_amount"]))
+            if printed_total is not None and printed_total.get("total_amount") is not None
+            else None
+        ),
+        "calculated_total_quantity": _json_quantity(total_quantity),
+        "calculated_total_amount": (
+            _json_quantity(calculated_total_amount)
+            if calculated_total_amount is not None
+            else None
+        ),
+        "line_amount_status": (
+            "fail"
+            if any(item["line_amount_status"] == "mismatch" for item in records)
+            else "unverifiable"
+            if line_problem_rows
+            else "pass"
+        ),
+        "line_amount_problem_rows": line_problem_rows,
+        "printed_quantity_status": printed_quantity_status,
+        "printed_amount_status": printed_amount_status,
+        "internal_status": internal_status,
+        "internal_problem_rows": internal_problem_rows,
+        "internal_basis": (
+            f"销售Excel明细{len(records)}行逐行核对数量×零售价=合计金额；"
+            f"行金额{'全部一致' if not line_problem_rows else '问题行' + str(line_problem_rows)}；"
+            f"打印总数量{'一致' if printed_quantity_status == 'exact' else '不一致或无法核对'}，"
+            f"打印合计金额{'一致' if printed_amount_status == 'exact' else '不一致或无法核对'}。"
         ),
         "customers": sorted({item["customer_name"] for item in records}),
         "period_values": sorted({item["period_text"] for item in records if item["period_text"]}),

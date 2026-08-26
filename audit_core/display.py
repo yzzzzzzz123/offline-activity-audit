@@ -913,6 +913,9 @@ def _contract_attachment_sales_reconciliation(
             "records": [],
             "unmatched_contract_rows": [],
             "unmatched_sales_rows": [],
+            "ambiguous_sales_rows": [],
+            "attachment_line_amount_status": "not_applicable",
+            "attachment_line_amount_problem_rows": [],
             "quantity_status": "not_applicable",
             "amount_status": "not_applicable",
             "basis": "合同包未附商品销售明细，本项不核验。",
@@ -948,15 +951,36 @@ def _contract_attachment_sales_reconciliation(
             strict_count == 1 and name_status not in {"exact", "fuzzy"}
         ):
             return -1.0, int(sales_row["excel_row"])
-        score = float(code_exact) + float(barcode_exact) + name_score
-        score += 0.1 * (
+        customer_score = _entity_similarity(
+            contract_row.get("customer_name"), sales_row.get("customer_name")
+        )
+        score = 100.0 * strict_count + name_score + customer_score
+        score += float(
+            _period_pair_status(
+                contract_row.get("business_date"), sales_row.get("period_text")
+            )
+            == "exact"
+        )
+        score += float(
+            _text_pair_status(contract_row.get("unit"), sales_row.get("unit"))
+            == "exact"
+        )
+        score += float(
             _number_pair_status(contract_row.get("quantity"), sales_row.get("quantity"))
             == "exact"
         )
-        score += 0.1 * (
+        score += float(
             _number_pair_status(
                 contract_row.get("retail_price"),
                 sales_row.get("retail_price"),
+                tolerance=Decimal("0.01"),
+            )
+            == "exact"
+        )
+        score += float(
+            _number_pair_status(
+                contract_row.get("total_amount"),
+                sales_row.get("total_amount"),
                 tolerance=Decimal("0.01"),
             )
             == "exact"
@@ -971,24 +995,58 @@ def _contract_attachment_sales_reconciliation(
             ),
             key=lambda item: (-item[0], item[1]),
         )
-        selected = ranked[0][2] if ranked and ranked[0][0] >= 0 else None
+        valid_ranked = [item for item in ranked if item[0] >= 0]
+        ambiguous_rows: list[int] = []
+        if valid_ranked:
+            top_score = valid_ranked[0][0]
+            ambiguous_rows = [
+                int(item[1])
+                for item in valid_ranked
+                if abs(item[0] - top_score) <= 1e-9
+            ]
+        selected = (
+            valid_ranked[0][2]
+            if valid_ranked and len(ambiguous_rows) == 1
+            else None
+        )
         if selected is None:
             missing_identity = any(
                 not str(contract_row.get(field) or "").strip()
                 for field in ("product_code", "product_name", "barcode_69")
+            )
+            ambiguous = len(ambiguous_rows) > 1
+            contract_line_amount_status = _number_pair_status(
+                _decimal_value(contract_row.get("quantity"))
+                * _decimal_value(contract_row.get("retail_price"))
+                if _decimal_value(contract_row.get("quantity")) is not None
+                and _decimal_value(contract_row.get("retail_price")) is not None
+                else None,
+                contract_row.get("total_amount"),
+                tolerance=Decimal("0.01"),
             )
             checks.append(
                 {
                     "contract_line_no": int(contract_row["line_no"]),
                     "contract_source_page": int(contract_row["source_page"]),
                     "sales_excel_row": None,
-                    "status": "unverifiable" if missing_identity else "fail",
+                    "status": (
+                        "unverifiable"
+                        if missing_identity or ambiguous
+                        else "fail"
+                    ),
                     "confidence": "low",
                     "field_comparisons": [],
+                    "ambiguous_sales_rows": ambiguous_rows,
+                    "contract_line_amount_status": contract_line_amount_status,
                     "basis": (
                         "合同附件商品身份不完整，无法定位销售Excel行。"
                         if missing_identity
-                        else "销售Excel没有找到与合同附件69码或商品编码一致、且名称能够对应的商品行。"
+                        else (
+                            "合同附件行同时命中多个证据评分相同的销售Excel行，"
+                            f"无法唯一配对：{ambiguous_rows}。"
+                            if ambiguous
+                            else "销售Excel没有找到与合同附件69码或商品编码一致、且名称能够对应的商品行。"
+                        )
                     ),
                 }
             )
@@ -1011,6 +1069,18 @@ def _contract_attachment_sales_reconciliation(
         )
         name_status, name_score = _product_name_pair_status(
             contract_row.get("product_name"), selected.get("product_name")
+        )
+        contract_quantity = _decimal_value(contract_row.get("quantity"))
+        contract_price = _decimal_value(contract_row.get("retail_price"))
+        contract_calculated_amount = (
+            contract_quantity * contract_price
+            if contract_quantity is not None and contract_price is not None
+            else None
+        )
+        contract_line_amount_status = _number_pair_status(
+            contract_calculated_amount,
+            contract_row.get("total_amount"),
+            tolerance=Decimal("0.01"),
         )
         comparisons = [
             {
@@ -1086,9 +1156,9 @@ def _contract_attachment_sales_reconciliation(
             },
         ]
         statuses = {str(item["status"]) for item in comparisons}
-        if "mismatch" in statuses:
+        if "mismatch" in statuses or contract_line_amount_status == "mismatch":
             row_status = "fail"
-        elif "unverifiable" in statuses:
+        elif "unverifiable" in statuses or contract_line_amount_status == "unverifiable":
             row_status = "unverifiable"
         else:
             row_status = "pass"
@@ -1104,6 +1174,8 @@ def _contract_attachment_sales_reconciliation(
             for item in comparisons
             if item["status"] in {"mismatch", "unverifiable"}
         ]
+        if contract_line_amount_status != "exact":
+            problem_fields.append("合同附件数量×零售价")
         checks.append(
             {
                 "contract_line_no": int(contract_row["line_no"]),
@@ -1112,6 +1184,13 @@ def _contract_attachment_sales_reconciliation(
                 "status": row_status,
                 "confidence": confidence,
                 "field_comparisons": comparisons,
+                "ambiguous_sales_rows": [],
+                "contract_calculated_total_amount": (
+                    json_number(contract_calculated_amount)
+                    if contract_calculated_amount is not None
+                    else None
+                ),
+                "contract_line_amount_status": contract_line_amount_status,
                 "basis": (
                     "客户、业务日期、商品身份、单位、数量、零售价和合计金额均一致。"
                     if not problem_fields
@@ -1125,7 +1204,31 @@ def _contract_attachment_sales_reconciliation(
         for item in checks
         if item["sales_excel_row"] is None
     ]
-    unmatched_sales_rows = sorted(unused_sales_rows)
+    ambiguous_sales_rows = sorted(
+        {
+            int(row)
+            for item in checks
+            for row in item.get("ambiguous_sales_rows") or []
+        }
+    )
+    unmatched_sales_rows = sorted(
+        set(unused_sales_rows) - set(ambiguous_sales_rows)
+    )
+    attachment_line_amount_problem_rows = [
+        int(item["contract_line_no"])
+        for item in checks
+        if item.get("contract_line_amount_status") != "exact"
+    ]
+    attachment_line_amount_status = (
+        "fail"
+        if any(
+            item.get("contract_line_amount_status") == "mismatch"
+            for item in checks
+        )
+        else "unverifiable"
+        if attachment_line_amount_problem_rows
+        else "pass"
+    )
     attachment_quantity = attachment.get("total_quantity")
     attachment_amount = attachment.get("total_amount")
     quantity_source_status = _number_pair_status(
@@ -1195,6 +1298,9 @@ def _contract_attachment_sales_reconciliation(
         "records": checks,
         "unmatched_contract_rows": unmatched_contract_rows,
         "unmatched_sales_rows": unmatched_sales_rows,
+        "ambiguous_sales_rows": ambiguous_sales_rows,
+        "attachment_line_amount_status": attachment_line_amount_status,
+        "attachment_line_amount_problem_rows": attachment_line_amount_problem_rows,
         "attachment_total_quantity": attachment_quantity,
         "calculated_attachment_quantity": (
             json_number(calculated_attachment_quantity)
@@ -1218,6 +1324,7 @@ def _contract_attachment_sales_reconciliation(
         "basis": (
             f"合同附件{len(attachment_records)}行与销售Excel{len(sales_records)}行逐项核对；"
             f"通过{matched_count}行，问题{len(problem_checks) + len(unmatched_sales_rows)}行；"
+            f"附件行金额{'全部一致' if attachment_line_amount_status == 'pass' else '有问题或无法核对'}；"
             f"数量{'一致' if quantity_status == 'exact' else '不一致或无法核对'}，"
             f"合计金额{'一致' if amount_status == 'exact' else '不一致或无法核对'}。"
         ),
@@ -1793,6 +1900,17 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
     exceptions: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
     referenced: set[str] = set()
+    if sales.get("internal_status") != "pass":
+        exceptions.append(
+            exception(
+                "high",
+                "SALES_EXCEL_INTERNAL_RECONCILIATION_FAILED",
+                str(sales.get("internal_basis") or "销售Excel内部核对未通过。"),
+                "销售Excel的明细行金额或打印合计不能自我闭环。",
+                "按问题行更正数量、零售价或合计金额，并保留唯一的合计/总计行。",
+                source=Path(str(sales.get("source_file") or sales_path)).name,
+            )
+        )
     if contract_knowledge["status"] == "fail":
         exceptions.append(
             exception(
@@ -2185,16 +2303,18 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
         contract_attachment_knowledge["status"] in {"pass", "not_applicable"}
         and contract_attachment_sales["status"] in {"pass", "not_applicable"}
     )
-    if not attachment_global_pass:
+    sales_internal_pass = sales.get("internal_status") == "pass"
+    activity_global_pass = attachment_global_pass and sales_internal_pass
+    if not activity_global_pass:
         # Preserve each store's independently supported amount for diagnosis,
-        # but a broken stamped-attachment chain blocks settlement for the whole
-        # activity until the activity-level evidence is corrected.
+        # but a broken stamped-attachment or sales-file internal chain blocks
+        # settlement for the activity until that global evidence is corrected.
         suggested = Decimal("0")
     conclusion = (
         "pass"
-        if results and not supplement_count and attachment_global_pass
+        if results and not supplement_count and activity_global_pass
         else "partial_pass"
-        if attachment_global_pass and passed_count and supplement_count
+        if activity_global_pass and passed_count and supplement_count
         else "human_review"
     )
     return {
@@ -2225,6 +2345,15 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
             "sales_sku_count": sales["sku_count"],
             "sales_quantity": sales["total_quantity"],
             "sales_retail_amount": sales["retail_amount"],
+            "sales_internal_status": sales.get("internal_status"),
+            "sales_internal_problem_rows": list(
+                sales.get("internal_problem_rows") or []
+            ),
+            "sales_line_amount_status": sales.get("line_amount_status"),
+            "sales_printed_quantity_status": sales.get(
+                "printed_quantity_status"
+            ),
+            "sales_printed_amount_status": sales.get("printed_amount_status"),
             "sales_knowledge_matched_count": sales_knowledge["matched_count"],
             "sales_knowledge_fuzzy_count": sales_knowledge["fuzzy_count"],
             "sales_knowledge_problem_count": sales_knowledge["problem_count"],
