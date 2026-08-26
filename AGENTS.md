@@ -132,7 +132,7 @@ It must embed the complete visible six-column content of every workbook row in o
 must not add, omit, reinterpret, truncate, or independently calculate any business fact. It must
 open directly from disk without a server, network, CDN, font download, external JavaScript, or
 separate asset directory. Provide ordinary-reader controls for scenario switching, keyword search,
-pass/supplement/summary filtering, compact view, expand/collapse, opening the sibling Excel, printing,
+pass/supplement/summary filtering, compact view, expand/collapse, opening the sibling Excel,
 copying a row conclusion, and returning to the top. The same plain-language and forbidden-engineering-
 term rules apply to both formats. Generate and verify both temporary files before publishing either;
 a failed run must leave neither final sibling behind.

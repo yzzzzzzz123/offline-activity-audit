@@ -297,7 +297,7 @@ HTML_TEMPLATE = r'''<!doctype html>
       white-space: nowrap;
     }
     .masthead-actions { display: flex; align-items: center; gap: 8px; }
-    .excel-link, .header-button {
+    .excel-link {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -313,8 +313,6 @@ HTML_TEMPLATE = r'''<!doctype html>
     }
     .excel-link { color: #f7fbf8; background: var(--accent); border: 1px solid var(--accent); }
     .excel-link:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
-    .header-button { color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); }
-    .header-button:hover { border-color: var(--accent); color: var(--accent-strong); }
 
     .shell {
       display: grid;
@@ -725,7 +723,7 @@ HTML_TEMPLATE = r'''<!doctype html>
       .masthead-meta { display: block; line-height: 1.4; }
       .masthead-meta span:last-child { display: none; }
       .masthead-actions > * { flex: 1; }
-      .excel-link, .header-button { min-height: 36px; padding: 6px 10px; font-size: 12px; }
+      .excel-link { min-height: 36px; padding: 6px 10px; font-size: 12px; }
       .shell { gap: 10px; margin-top: 10px; }
       .scenario-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 6px; }
       .tab-button { min-height: 38px; padding: 7px 8px; font-size: 12px; }
@@ -800,7 +798,6 @@ HTML_TEMPLATE = r'''<!doctype html>
       </div>
       <div class="masthead-actions">
         <a class="excel-link" id="excelLink" href="#" title="打开同名 Excel 文件">打开同版 Excel</a>
-        <button class="header-button" id="printButton" type="button">打印 / 存 PDF</button>
       </div>
     </div>
   </header>
@@ -1156,11 +1153,6 @@ HTML_TEMPLATE = r'''<!doctype html>
         if (row) copyText(row.values[5] || row.values.join('\n'));
       });
 
-      document.getElementById('printButton').addEventListener('click', () => {
-        records.querySelectorAll('details').forEach((detail) => { detail.open = true; });
-        window.setTimeout(() => window.print(), 40);
-      });
-      window.addEventListener('afterprint', () => renderRecords());
       const topObserver = new IntersectionObserver(([entry]) => {
         backTop.classList.toggle('visible', !entry.isIntersecting);
       });
@@ -1232,7 +1224,6 @@ def verify_html_report(
         'id="statusFilters"',
         'id="densityButton"',
         'id="expandButton"',
-        'id="printButton"',
         'id="excelLink"',
         'id="backTop"',
     )

@@ -523,13 +523,15 @@ class HtmlReportTests(unittest.TestCase):
                 ["人员激励核销", "堆头核销"],
             )
             self.assertEqual(verification["external_dependency_count"], 0)
-            self.assertEqual(verification["button_count"], 8)
+            self.assertEqual(verification["button_count"], 7)
             self.assertTrue(verification["workbook_content_equal"])
 
             html = html_path.read_text(encoding="utf-8")
             self.assertIn("只看待补", html)
             self.assertIn("展开全部", html)
-            self.assertIn("打印 / 存 PDF", html)
+            self.assertNotIn("打印 / 存 PDF", html)
+            self.assertNotIn('id="printButton"', html)
+            self.assertNotIn("window.print()", html)
             self.assertIn("打开同版 Excel", html)
             self.assertIn("现场商品1（知识库）", html)
             self.assertIn("对应销售Excel第2行", html)

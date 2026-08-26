@@ -141,7 +141,7 @@ it must preserve every sheet, header, row, line break, conclusion, and resubmiss
 and must not introduce a second calculation or judgment path. Keep all CSS, JavaScript, and data
 inline so the page opens from `file://` without a server, network, CDN, font download, or asset folder.
 Provide buttons for scenario switching, keyword search, conclusion filtering, compact display,
-expand/collapse, copying a row conclusion, opening the sibling Excel, printing, and returning to the
+expand/collapse, copying a row conclusion, opening the sibling Excel, and returning to the
 top. Apply the same no-truncation, plain-language, and forbidden-engineering-term rules as Excel.
 
 Design the HTML as a restrained internal review tool. Use a compact Chinese header, a desktop
