@@ -77,8 +77,11 @@ the model, or leave it behind after success or failure. Legacy/acceptance workbo
 
 The single HTML contains a main interface and the submitted scenario subinterfaces:
 
-- the main interface shows run identity, overall conclusion, scenario entry points, counts, supported/
-  held amounts, and the concrete materials that must be resubmitted;
+- the main interface is a concise decision cockpit derived only from submitted scenario facts: one
+  overall state, three continuous counts for scenario/object/pass, one separately explained total for
+  pending records, and one real entry panel for each submitted scenario. The pending total must split
+  detail-object issues from overview/settlement issues so the object/pass/pending numbers are not
+  mistaken for one mutually exclusive total;
 - the personnel-incentive subinterface contains product reconciliation plus one settlement-and-payment
   area for totals, actual application, recipient, store correspondence, and complete transfer date;
 - the promotional-display subinterface contains a campaign/core-contract overview, conditional
@@ -167,6 +170,22 @@ The generated page must remain one `file://`-openable document with all business
 JavaScript inline and no server, network, CDN, font download, sibling Excel, JSON sidecar, or asset
 directory. Its fixed main/personnel/display navigation, search/filter/detail interactions, responsive
 behavior, visible copy, and buttons come from the canonical asset and are not recreated by the Agent.
+
+Template `2.1.0` freezes the home visual contract. Keep the existing white header and `参半` + small
+lower-right `CANBAN` lockup. The home view uses a cold-gray industrial canvas with restrained Canban
+sky-blue light, then one unified clipped overview cabin with a thin sky-blue top line and a single soft
+shadow. The cabin contains, in order: `核销总览` plus the overall state; one continuous three-column
+strip for `核销场景`、`核验对象`、`通过`; and the only dark anchor for `待补记录`, including
+`对象待补 N · 汇总/结算待补 N`. Beneath it keep only two wide scenario-entry panels when both
+scenarios exist. Personnel uses purple and display uses amber for scenario meaning, while interactive
+buttons remain Canban sky blue. Each entry panel shows its existing four counts, a `passed / total`
+progress bar, a specific pending label, and the real `进入<场景名>` button. Personnel pending labels
+order settlement before product issues; display labels order store before campaign issues. Do not
+replace this with a detached heading plus metric cards, generic card piles, a health ring, clock,
+agent/terminal/online decoration, English eyebrow copy, fake actions, textures, external assets, or
+entry animation. At 1100 px the cabin may reflow to two columns; at 780 px it becomes one column and
+scenario entries stack; at 390×844 the page must not overflow horizontally and the first scenario
+entry remains in or immediately adjacent to the first viewport.
 
 ## Output and verification
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="canban-template-version" content="2.0.1">
+  <meta name="canban-template-version" content="2.1.0">
   <meta name="canban-style-sha256" content="__CANBAN_STYLE_SHA256__">
   <meta name="canban-shell-sha256" content="__CANBAN_SHELL_SHA256__">
   <title>参半渠道活动核销</title>
@@ -131,77 +131,241 @@
     }
     .workspace-head h2 { margin: 0; font-size: clamp(20px, 2vw, 26px); font-weight: 780; line-height: 1.3; letter-spacing: -.025em; }
 
-    .home-view { min-width: 0; }
-    .home-head {
-      display: flex;
-      align-items: end;
-      justify-content: space-between;
-      gap: 16px;
-      min-height: 58px;
-      padding: 4px 2px 12px;
+    .home-view {
+      position: relative;
+      min-width: 0;
+      min-height: calc(100vh - 100px);
+      padding: clamp(14px, 1.6vw, 24px);
+      overflow: hidden;
+      border: 1px solid #d7e0e4;
+      background:
+        radial-gradient(circle at 88% -16%, rgba(24, 169, 245, .12), transparent 26rem),
+        linear-gradient(145deg, #f2f5f6 0%, #e7edef 50%, #eff3f4 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .86);
     }
-    .home-head h2 { margin: 0; font-size: clamp(22px, 2vw, 28px); font-weight: 800; line-height: 1.25; letter-spacing: -.03em; }
+    .home-cockpit {
+      position: relative;
+      display: grid;
+      min-height: 198px;
+      margin-bottom: 18px;
+      overflow: hidden;
+      border: 1px solid #c7d2d7;
+      background: linear-gradient(112deg, rgba(255, 255, 255, .98), rgba(239, 244, 246, .97));
+      filter: drop-shadow(0 12px 10px rgba(31, 48, 57, .10));
+      clip-path: polygon(0 0, calc(100% - 21px) 0, 100% 21px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
+      grid-template-columns: minmax(265px, .92fr) minmax(390px, 1.3fr) minmax(220px, .67fr);
+      isolation: isolate;
+    }
+    .home-cockpit::before {
+      position: absolute;
+      z-index: 4;
+      top: -1px;
+      right: 7%;
+      width: min(34%, 360px);
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--accent) 18%, var(--accent) 82%, transparent);
+      content: "";
+      pointer-events: none;
+    }
+    .home-cockpit-intro {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      padding: 28px clamp(22px, 2vw, 34px);
+      align-items: center;
+      border-right: 1px solid rgba(171, 186, 193, .66);
+      background:
+        radial-gradient(circle at 28% 50%, rgba(255, 255, 255, .96), transparent 62%),
+        linear-gradient(145deg, #f6f9fa, #e8eef0);
+    }
+    .home-cockpit-intro::after {
+      position: absolute;
+      right: 20px;
+      bottom: 18px;
+      width: 42px;
+      height: 1px;
+      background: var(--accent);
+      box-shadow: 12px -6px 0 -0.25px rgba(24, 169, 245, .34);
+      content: "";
+    }
+    .home-title-lockup { min-width: 0; }
+    .home-title-lockup h2 {
+      margin: 0;
+      font-size: clamp(26px, 2.5vw, 36px);
+      font-weight: 820;
+      line-height: 1.12;
+      letter-spacing: -.055em;
+    }
+    .home-state {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 18px;
+      color: #506068;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .home-state::before {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 auto;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 1px rgba(22, 132, 93, .25);
+      content: "";
+    }
+    .home-state.issue::before { background: var(--danger); box-shadow: 0 0 0 1px rgba(217, 76, 76, .25); }
     .home-summary-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      margin-bottom: 14px;
-      overflow: hidden;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+      min-width: 0;
+      align-self: stretch;
+      background: rgba(250, 252, 253, .76);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
-    .home-section-head { display: flex; align-items: center; min-height: 42px; padding: 0 2px 8px; }
-    .home-section-head h3 { margin: 0; font-size: 17px; font-weight: 780; }
-    .scenario-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .scenario-overview-card {
+    .home-overview-metric {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      padding: 28px clamp(14px, 1.6vw, 24px);
+      flex-direction: column;
+      justify-content: center;
+      border-right: 1px solid rgba(171, 186, 193, .56);
+    }
+    .home-overview-metric:last-child { border-right: 0; }
+    .home-overview-metric span { color: #6a7880; font-size: 11px; font-weight: 700; }
+    .home-overview-metric strong {
+      display: block;
+      margin-top: 8px;
+      color: #1c282e;
+      font-family: var(--font-number);
+      font-size: clamp(31px, 3vw, 44px);
+      font-weight: 720;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.055em;
+      line-height: .95;
+    }
+    .home-overview-metric.accent strong { color: var(--accent-strong); }
+    .home-overview-metric.pass strong { color: var(--success); }
+    .home-issue-anchor {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      padding: 25px clamp(20px, 2vw, 30px);
+      flex-direction: column;
+      justify-content: center;
+      color: #fff;
+      background: linear-gradient(145deg, #22323a, #152127);
+    }
+    .home-issue-anchor::before {
+      position: absolute;
+      top: 25px;
+      left: 0;
+      width: 3px;
+      height: 42px;
+      background: var(--accent);
+      content: "";
+    }
+    .home-issue-anchor > span { color: #b9c8cf; font-size: 11px; font-weight: 720; }
+    .home-issue-anchor strong {
+      display: block;
+      margin-top: 5px;
+      font-family: var(--font-number);
+      font-size: clamp(40px, 4vw, 58px);
+      font-weight: 720;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.06em;
+      line-height: .95;
+    }
+    .home-issue-anchor p {
+      max-width: 220px;
+      margin: 13px 0 0;
+      color: #9fb0b8;
+      font-size: 10px;
+      font-weight: 650;
+      line-height: 1.65;
+    }
+    .home-scenarios { min-width: 0; }
+    .home-section-head {
+      display: flex;
+      min-height: 42px;
+      padding: 0 2px 9px;
+      align-items: center;
+      gap: 12px;
+    }
+    .home-section-head::after { height: 1px; flex: 1; background: #cfd9dd; content: ""; }
+    .home-section-head h3 { margin: 0; font-size: 17px; font-weight: 780; letter-spacing: -.02em; }
+    .scenario-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .scenario-entry {
+      --scenario-tone: var(--amber);
+      --scenario-wash: #fff8ed;
+      position: relative;
+      display: grid;
       min-width: 0;
       overflow: hidden;
       background: var(--surface);
-      border: 1px solid var(--line);
-      border-top: 3px solid var(--accent);
-      border-radius: var(--radius);
+      border: 1px solid #ced9de;
+      filter: drop-shadow(0 6px 6px rgba(31, 48, 57, .07));
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+      grid-template-rows: auto 1fr auto;
+      transition: border-color 200ms ease, filter 200ms ease;
     }
-    .scenario-overview-card.personnel { border-top-color: var(--purple); }
-    .scenario-overview-card.display { border-top-color: var(--amber); }
-    .scenario-overview-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 14px 15px 10px; border-bottom: 1px solid var(--line); }
-    .scenario-overview-head h3 { margin: 0; font-size: 16px; font-weight: 780; line-height: 1.4; }
-    .scenario-kind { display: inline-flex; margin-top: 3px; color: var(--ink-soft); font-size: 11px; font-weight: 680; }
+    .scenario-entry::before { position: absolute; z-index: 2; top: 0; right: 0; left: 0; height: 3px; background: var(--scenario-tone); content: ""; }
+    .scenario-entry:hover { border-color: #b8c8cf; filter: drop-shadow(0 8px 8px rgba(31, 48, 57, .10)); }
+    .scenario-entry.personnel { --scenario-tone: var(--purple); --scenario-wash: #f6f1fb; }
+    .scenario-entry.display { --scenario-tone: var(--amber); --scenario-wash: #fff8ed; }
+    .scenario-entry-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; padding: 21px 20px 14px; }
+    .scenario-entry-head h3 { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.35; letter-spacing: -.025em; }
+    .scenario-kind { display: inline-flex; margin-top: 5px; color: var(--scenario-tone); font-size: 11px; font-weight: 720; }
     .scenario-status {
       display: inline-flex;
       flex: 0 0 auto;
       align-items: center;
-      min-height: 24px;
-      padding: 2px 8px;
+      min-height: 27px;
+      max-width: 58%;
+      padding: 3px 9px;
       border: 1px solid #cae9dc;
       border-radius: 999px;
       color: var(--success);
       background: var(--success-soft);
+      text-align: right;
       font-size: 10px;
       font-weight: 760;
+      line-height: 1.35;
     }
-    .scenario-status.issue { color: #b63838; background: var(--danger-soft); border-color: #f0cccc; }
-    .scenario-overview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .scenario-overview-stat { min-width: 0; padding: 12px 10px; border-right: 1px solid var(--line); }
+    .scenario-status.issue { color: var(--scenario-tone); background: var(--scenario-wash); }
+    .scenario-entry.personnel .scenario-status.issue { border-color: #ded1eb; }
+    .scenario-entry.display .scenario-status.issue { border-color: #efd8b7; }
+    .scenario-entry-body { min-width: 0; padding: 0 20px 17px; }
+    .scenario-overview-stats { display: grid; overflow: hidden; border: 1px solid #e0e7ea; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .scenario-overview-stat { min-width: 0; padding: 10px; border-right: 1px solid #e0e7ea; background: #fafcfc; }
     .scenario-overview-stat:last-child { border-right: 0; }
-    .scenario-overview-stat span { display: block; color: var(--ink-soft); font-size: 10px; font-weight: 690; white-space: nowrap; }
-    .scenario-overview-stat strong { display: block; margin-top: 2px; font-family: var(--font-number); font-size: 20px; line-height: 1.2; }
-    .scenario-overview-stat:nth-child(1) strong { color: var(--accent-strong); }
+    .scenario-overview-stat span { display: block; min-height: 2.7em; color: var(--ink-soft); font-size: 10px; font-weight: 690; line-height: 1.35; }
+    .scenario-overview-stat strong { display: block; margin-top: 3px; font-family: var(--font-number); font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+    .scenario-overview-stat:nth-child(1) strong { color: #33434b; }
     .scenario-overview-stat:nth-child(2) strong { color: var(--success); }
     .scenario-overview-stat:nth-child(3) strong { color: var(--danger); }
-    .scenario-overview-stat:nth-child(4) strong { color: var(--purple); }
-    .scenario-overview-actions { display: flex; justify-content: flex-end; padding: 10px 12px; background: var(--surface-soft); border-top: 1px solid var(--line); }
+    .scenario-overview-stat:nth-child(4) strong { color: var(--scenario-tone); }
+    .scenario-progress { margin-top: 14px; }
+    .scenario-progress-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #65747b; font-size: 10px; font-weight: 700; }
+    .scenario-progress-copy strong { color: var(--scenario-tone); font-family: var(--font-number); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .scenario-progress-track { height: 5px; margin-top: 7px; overflow: hidden; background: #e6ecef; }
+    .scenario-progress-value { display: block; width: var(--scenario-progress, 0%); height: 100%; background: var(--scenario-tone); }
+    .scenario-overview-actions { display: flex; justify-content: flex-end; padding: 11px 14px; background: #f7f9fa; border-top: 1px solid #dfe6e9; }
     .enter-scenario {
       min-height: 34px;
-      padding: 6px 13px;
+      padding: 6px 14px;
       color: #fff;
       background: var(--accent);
       border: 1px solid var(--accent);
-      border-radius: var(--radius-small);
+      border-radius: 4px;
       cursor: pointer;
       font-size: 11px;
       font-weight: 760;
+      transition: background-color 200ms ease, border-color 200ms ease, transform 200ms ease;
     }
-    .enter-scenario:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+    .enter-scenario:hover { background: var(--accent-strong); border-color: var(--accent-strong); transform: translateY(-1px); }
+    .enter-scenario:active { transform: translateY(0); }
 
     .summary-grid {
       display: grid;
@@ -421,6 +585,20 @@
     @media (max-width: 1100px) {
       .app-shell, .topbar-inner { width: min(100% - 28px, 1600px); }
       .app-shell { grid-template-columns: 210px minmax(0, 1fr); gap: 14px; }
+      .home-cockpit { grid-template-columns: minmax(240px, .9fr) minmax(360px, 1.35fr); }
+      .home-issue-anchor {
+        display: grid;
+        min-height: 92px;
+        padding: 16px 24px;
+        align-content: center;
+        align-items: center;
+        column-gap: 24px;
+        grid-column: 1 / -1;
+        grid-template-columns: minmax(100px, .35fr) auto minmax(240px, 1fr);
+      }
+      .home-issue-anchor::before { top: 25px; height: 42px; }
+      .home-issue-anchor strong { margin: 0; font-size: 42px; }
+      .home-issue-anchor p { max-width: none; margin: 0; }
       .evidence-grid, .settlement-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 780px) {
@@ -433,7 +611,25 @@
       .side-actions { padding: 6px; }
       .workspace-head { min-height: 50px; }
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .home-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .home-view { min-height: auto; }
+      .home-cockpit { min-height: 0; grid-template-columns: 1fr; }
+      .home-cockpit-intro { min-height: 112px; padding: 20px 22px; border-right: 0; border-bottom: 1px solid rgba(171, 186, 193, .56); }
+      .home-title-lockup h2 { font-size: 28px; }
+      .home-state { margin-top: 11px; }
+      .home-summary-grid { min-height: 88px; }
+      .home-overview-metric { min-height: 88px; padding: 16px; }
+      .home-overview-metric strong { margin-top: 5px; font-size: 32px; }
+      .home-issue-anchor {
+        display: grid;
+        min-height: 92px;
+        padding: 14px 20px;
+        column-gap: 18px;
+        grid-column: auto;
+        grid-template-columns: minmax(90px, .4fr) auto minmax(200px, 1fr);
+      }
+      .home-issue-anchor::before { top: 24px; height: 40px; }
+      .home-issue-anchor strong { margin: 0; font-size: 38px; }
+      .home-issue-anchor p { max-width: none; margin: 0; }
       .scenario-overview-grid { grid-template-columns: 1fr; }
       .metric { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
       .metric:nth-child(2n) { border-right: 0; }
@@ -458,13 +654,36 @@
       .app-shell { gap: 9px; }
       .workspace-head { padding-bottom: 8px; }
       .workspace-head h2 { font-size: 19px; }
-      .home-head { min-height: 48px; padding-bottom: 8px; }
-      .home-head h2 { font-size: 21px; }
-      .scenario-overview-head { padding: 11px 12px 8px; }
+      .home-view { padding: 10px; }
+      .home-cockpit { margin-bottom: 13px; clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+      .home-cockpit-intro { min-height: 94px; padding: 16px; }
+      .home-cockpit-intro::after { right: 16px; bottom: 13px; }
+      .home-title-lockup h2 { font-size: 25px; }
+      .home-state { margin-top: 9px; }
+      .home-summary-grid { min-height: 72px; }
+      .home-overview-metric { min-height: 72px; padding: 11px 9px; }
+      .home-overview-metric span { font-size: 10px; }
+      .home-overview-metric strong { font-size: 27px; }
+      .home-issue-anchor {
+        min-height: 78px;
+        padding: 11px 16px;
+        column-gap: 12px;
+        grid-template-columns: 1fr auto;
+      }
+      .home-issue-anchor::before { top: 19px; height: 38px; }
+      .home-issue-anchor strong { grid-column: 2; grid-row: 1; font-size: 34px; }
+      .home-issue-anchor p { grid-column: 1 / -1; grid-row: 2; margin-top: 3px; font-size: 9px; line-height: 1.45; }
+      .home-section-head { min-height: 36px; padding-bottom: 7px; }
+      .scenario-entry-head { padding: 17px 14px 11px; }
+      .scenario-entry-head h3 { font-size: 16px; }
+      .scenario-status { max-width: 62%; font-size: 9px; }
+      .scenario-entry-body { padding: 0 14px 13px; }
       .scenario-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .scenario-overview-stat { border-bottom: 1px solid var(--line); }
       .scenario-overview-stat:nth-child(2n) { border-right: 0; }
       .scenario-overview-stat:nth-last-child(-n + 2) { border-bottom: 0; }
+      .scenario-overview-stat span { min-height: auto; }
+      .scenario-overview-actions { padding: 9px 12px; }
       .metric { min-height: 69px; padding: 9px; }
       .metric-value { font-size: 22px; }
       .panel-head { min-height: 42px; padding: 8px 10px; }
@@ -508,10 +727,24 @@
 
     <div class="workspace-stack">
       <section class="home-view" id="homeView" aria-label="核销总览">
-        <header class="home-head"><h2>核销总览</h2></header>
-        <section class="home-summary-grid" id="homeSummaryGrid" aria-label="整体业务统计"></section>
-        <div class="home-section-head"><h3>核销场景</h3></div>
-        <section class="scenario-overview-grid" id="scenarioOverview" aria-label="场景概览"></section>
+        <section class="home-cockpit" aria-labelledby="homeTitle">
+          <header class="home-cockpit-intro">
+            <div class="home-title-lockup">
+              <h2 id="homeTitle">核销总览</h2>
+              <div class="home-state" id="homeOverallStatus">核销状态</div>
+            </div>
+          </header>
+          <section class="home-summary-grid" id="homeSummaryGrid" aria-label="整体业务统计"></section>
+          <aside class="home-issue-anchor" aria-label="待补记录">
+            <span>待补记录</span>
+            <strong id="homeIssueTotal">0</strong>
+            <p id="homeIssueBreakdown">对象待补 0 · 汇总/结算待补 0</p>
+          </aside>
+        </section>
+        <section class="home-scenarios" aria-labelledby="homeScenarioTitle">
+          <div class="home-section-head"><h3 id="homeScenarioTitle">核销场景</h3></div>
+          <section class="scenario-overview-grid" id="scenarioOverview" aria-label="场景概览"></section>
+        </section>
       </section>
 
       <section class="workspace" id="scenarioView" aria-label="核销结果" hidden>
@@ -808,31 +1041,48 @@
         const totals = summaries.reduce((result, item) => ({
           objects: result.objects + item.facts.total,
           passed: result.passed + item.facts.passed,
+          detailIssues: result.detailIssues + item.facts.issues,
+          summaryIssues: result.summaryIssues + item.facts.overviewIssues + item.facts.settlementIssues,
           issues: result.issues + item.facts.issues + item.facts.overviewIssues + item.facts.settlementIssues,
-        }), { objects: 0, passed: 0, issues: 0 });
+        }), { objects: 0, passed: 0, detailIssues: 0, summaryIssues: 0, issues: 0 });
         const metrics = [
           ['核销场景', data.sheets.length, 'accent'],
-          ['核验对象', totals.objects, 'teal'],
+          ['核验对象', totals.objects, ''],
           ['通过', totals.passed, 'pass'],
-          ['待补记录', totals.issues, 'issue'],
         ];
+        const overallStatus = document.getElementById('homeOverallStatus');
+        overallStatus.textContent = totals.issues > 0 ? '存在待补记录' : '全部已通过';
+        overallStatus.classList.toggle('issue', totals.issues > 0);
+        document.getElementById('homeIssueTotal').textContent = totals.issues;
+        document.getElementById('homeIssueBreakdown').textContent = `对象待补 ${totals.detailIssues} · 汇总/结算待补 ${totals.summaryIssues}`;
         homeSummaryGrid.innerHTML = metrics.map(([label, value, tone]) => `
-          <article class="metric ${tone}"><span class="metric-label">${label}</span>
-            <strong class="metric-value">${value}</strong></article>`).join('');
+          <div class="home-overview-metric ${tone}"><span>${label}</span><strong>${value}</strong></div>`).join('');
         scenarioOverview.innerHTML = summaries.map(({ sheet, facts }, index) => {
           const personnel = sheet.scenario === 'personnel_incentive';
           const summaryIssues = facts.overviewIssues + facts.settlementIssues;
           const hasIssue = facts.issues > 0 || summaryIssues > 0;
-          return `<article class="scenario-overview-card ${personnel ? 'personnel' : 'display'}" data-home-scenario="${escapeHtml(sheet.scenario)}">
-            <header class="scenario-overview-head">
+          const issueParts = personnel
+            ? [summaryIssues > 0 ? `结算待补${summaryIssues}项` : '', facts.issues > 0 ? `商品待补${facts.issues}项` : '']
+            : [facts.issues > 0 ? `门店待补${facts.issues}项` : '', summaryIssues > 0 ? `活动待补${summaryIssues}项` : ''];
+          const statusLabel = hasIssue ? issueParts.filter(Boolean).join(' · ') : '已对齐';
+          const summaryLabel = personnel ? '结算待补' : '活动待补';
+          const progress = facts.total > 0 ? Math.max(0, Math.min(100, Math.round((facts.passed / facts.total) * 100))) : 0;
+          return `<article class="scenario-entry ${personnel ? 'personnel' : 'display'}" data-home-scenario="${escapeHtml(sheet.scenario)}">
+            <header class="scenario-entry-head">
               <div><h3>${escapeHtml(sheet.name)}</h3><span class="scenario-kind">${personnel ? '商品核验' : '门店核验'}</span></div>
-              <span class="scenario-status ${hasIssue ? 'issue' : ''}">${hasIssue ? '有待补项' : '已对齐'}</span>
+              <span class="scenario-status ${hasIssue ? 'issue' : ''}">${statusLabel}</span>
             </header>
-            <div class="scenario-overview-stats">
-              <div class="scenario-overview-stat"><span>核验对象</span><strong>${facts.total}</strong></div>
-              <div class="scenario-overview-stat"><span>通过</span><strong>${facts.passed}</strong></div>
-              <div class="scenario-overview-stat"><span>对象待补</span><strong>${facts.issues}</strong></div>
-              <div class="scenario-overview-stat"><span>汇总待补</span><strong>${summaryIssues}</strong></div>
+            <div class="scenario-entry-body">
+              <div class="scenario-overview-stats">
+                <div class="scenario-overview-stat"><span>核验对象</span><strong>${facts.total}</strong></div>
+                <div class="scenario-overview-stat"><span>通过</span><strong>${facts.passed}</strong></div>
+                <div class="scenario-overview-stat"><span>${personnel ? '商品待补' : '门店待补'}</span><strong>${facts.issues}</strong></div>
+                <div class="scenario-overview-stat"><span>${summaryLabel}</span><strong>${summaryIssues}</strong></div>
+              </div>
+              <div class="scenario-progress" aria-label="通过进度 ${progress}%">
+                <div class="scenario-progress-copy"><span>通过进度</span><strong>${facts.passed} / ${facts.total}</strong></div>
+                <div class="scenario-progress-track"><span class="scenario-progress-value" style="--scenario-progress:${progress}%"></span></div>
+              </div>
             </div>
             <div class="scenario-overview-actions">
               <button class="enter-scenario" type="button" data-enter-sheet="${index}">进入${escapeHtml(sheet.name)}</button>
