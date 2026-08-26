@@ -12,6 +12,7 @@ from audit_core.common import validate_json
 from audit_core.display import _contract_sales_reconciliation, _display_control
 from audit_core.html_report import (
     _row_heading,
+    _row_status,
     create_html_report_from_workbook,
     verify_html_report,
 )
@@ -470,6 +471,12 @@ class ProducerFilenameTests(unittest.TestCase):
 
 
 class HtmlReportTests(unittest.TestCase):
+    def test_summary_row_with_a_concrete_resubmission_is_still_an_issue(self) -> None:
+        values = ["收款人与日期", "", "", "", "", "置信度：低\n要重新提交：补拍转账截图"]
+        self.assertEqual(_row_status(values, "summary"), "issue")
+        values[5] = "置信度：高\n身份与日期均可确认，无需重新提交"
+        self.assertEqual(_row_status(values, "summary"), "summary")
+
     def test_personnel_card_heading_includes_authoritative_product_name(self) -> None:
         values = [
             "结算第1行\n参半oralshark羟基磷灰石牙膏满陇桂雨味(100g)-线下10.1版",
@@ -481,7 +488,7 @@ class HtmlReportTests(unittest.TestCase):
         ]
         self.assertEqual(
             _row_heading(values, 4, "record", "personnel_incentive"),
-            "结算第1行 · 参半oralshark羟基磷灰石牙膏满陇桂雨味(100g)-线下10.1版",
+            "参半oralshark羟基磷灰石牙膏满陇桂雨味(100g)-线下10.1版",
         )
 
     def test_display_card_heading_prefers_real_store_over_contract_note(self) -> None:
@@ -523,10 +530,22 @@ class HtmlReportTests(unittest.TestCase):
             self.assertIn("只看待补", html)
             self.assertIn("展开全部", html)
             self.assertIn("打印 / 存 PDF", html)
-            self.assertIn("打开原始 Excel", html)
+            self.assertIn("打开同版 Excel", html)
             self.assertIn("现场商品1（知识库）", html)
             self.assertIn("对应销售Excel第2行", html)
             self.assertIn('class="identity-table"', html)
+            self.assertIn('class="side-panel"', html)
+            self.assertIn('class="workspace"', html)
+            self.assertIn("IntersectionObserver", html)
+            self.assertIn("@media (prefers-reduced-motion: reduce)", html)
+            self.assertNotIn("Offline activity verification", html)
+            self.assertNotIn("PERSONNEL INCENTIVE", html)
+            self.assertNotIn("PROMOTIONAL DISPLAY", html)
+            self.assertNotIn("STKaiti", html)
+            self.assertNotIn("radial-gradient", html)
+            self.assertNotIn("window.addEventListener('scroll'", html)
+            self.assertNotIn('class="record-number"', html)
+            self.assertNotIn("—", html)
             self.assertNotRegex(html, r'<(?:script|link)\b[^>]*(?:src|href)=["\']https?://')
 
     def test_html_keeps_every_workbook_row_without_top_n_truncation(self) -> None:
@@ -664,7 +683,7 @@ class DisplayContractTests(unittest.TestCase):
                 self.assertGreaterEqual(float(personnel_sheet.row_dimensions[7].height or 0), 72)
                 self.assertEqual(
                     personnel_sheet["A4"].value,
-                    "结算第1行\n参半示例商品100g标准名称",
+                    "参半示例商品100g标准名称",
                 )
                 personnel_sales_text = str(personnel_sheet["B4"].value)
                 personnel_compare_text = str(personnel_sheet["E4"].value)
@@ -679,8 +698,15 @@ class DisplayContractTests(unittest.TestCase):
                 personnel_conclusion = str(personnel_sheet["F4"].value)
                 self.assertIn("置信度：中", personnel_conclusion)
                 self.assertIn("商品名称唯一模糊匹配", personnel_conclusion)
-                self.assertIn("要重新提交：不用", personnel_conclusion)
+                self.assertIn("无需重新提交", personnel_conclusion)
                 self.assertNotIn("补拍结算单", personnel_conclusion)
+                self.assertEqual(personnel_sheet["D4"].value, "转账仅核对总额")
+                claim_row = next(
+                    row_index
+                    for row_index in range(4, personnel_sheet.max_row + 1)
+                    if personnel_sheet.cell(row_index, 1).value == "实际申请金额"
+                )
+                self.assertEqual(personnel_sheet.cell(claim_row, 2).value, "不适用")
                 contract_text = str(workbook["堆头核销"]["A4"].value)
                 self.assertIn("水印：是\n盖章：是\n陈列：", contract_text)
                 self.assertNotIn("水印：是；盖章：是", contract_text)
@@ -746,7 +772,7 @@ class DisplayContractTests(unittest.TestCase):
                 self.assertIn("本店支持：1000元", str(workbook["堆头核销"]["E4"].value))
                 self.assertEqual(
                     str(workbook["堆头核销"]["F4"].value),
-                    "结论：通过\n要重新提交：不用",
+                    "结论：通过\n无需重新提交",
                 )
                 self.assertNotIn("陈列重复", photo_text + comparison_text)
                 visible_text = "\n".join(
@@ -863,7 +889,7 @@ class DisplayContractTests(unittest.TestCase):
                 self.assertNotIn("审计JSON", sales_text)
                 self.assertEqual(
                     str(workbook["堆头核销"]["F4"].value),
-                    "结论：通过\n要重新提交：不用",
+                    "结论：通过\n无需重新提交",
                 )
             finally:
                 workbook.close()
@@ -1057,7 +1083,7 @@ class DisplayContractTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     str(workbook["堆头核销"]["F4"].value),
-                    "结论：通过\n要重新提交：不用",
+                    "结论：通过\n无需重新提交",
                 )
             finally:
                 workbook.close()

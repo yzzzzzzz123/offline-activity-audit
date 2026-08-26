@@ -52,7 +52,7 @@ Recipient/store/date rules are independent:
 
 Generate one product row per settlement line, then `合计`, `实际申请金额`, and `收款人与日期` rows. Preserve settlement order regardless of Excel order.
 
-- Use the uniquely selected knowledge-base product's complete authoritative name as each `结算第N行` row title. Keep the settlement image's original recognized product text in the visual-evidence column; only fall back to that recognized text as the title when no knowledge product was uniquely established.
+- Use only the uniquely selected knowledge-base product's complete authoritative name as each product-row title; do not add a `结算第N行` prefix. Keep the settlement image's original recognized product text in the visual-evidence column; only fall back to that recognized text as the title when no knowledge product was uniquely established.
 - Show the original Excel product/barcode/quantity, selected knowledge-base product code/name/69 code, exact 69-code result, exact-or-fuzzy product-name result, calculated reward, vision-AI product/quantity/reward, and both differences.
 - Show only one overall label per product: `置信度：高`, `置信度：中`, or `置信度：低`. Exact, fuzzy, or mismatch wording belongs only in the short field-by-field explanation and is not repeated as an overall match-result label. A permitted unique fuzzy knowledge-name match is medium confidence, while a settlement line without a visible barcode remains medium confidence even when its amount matches.
 - Use a concrete supplement statement for an unmapped product, quantity/reward difference, claim difference, missing recipient/store mapping, or incomplete date.

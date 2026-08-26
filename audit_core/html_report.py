@@ -48,13 +48,17 @@ def _row_kind(values: list[str]) -> str:
 
 
 def _row_status(values: list[str], kind: str) -> str:
-    if kind == "summary":
-        return "summary"
     conclusion = values[5] if len(values) > 5 else ""
-    if (
-        "要重新提交：不用" in conclusion
+    no_resubmission = (
+        "无需重新提交" in conclusion
+        or "要重新提交：不用" in conclusion
         or "要重新提交什么：不用" in conclusion
-    ) and not any(
+    )
+    if kind == "summary":
+        if "要重新提交：" in conclusion and not no_resubmission:
+            return "issue"
+        return "summary"
+    if no_resubmission and not any(
         token in conclusion for token in ("暂不能核销", "完全不匹配", "需补")
     ):
         return "pass"
@@ -111,7 +115,7 @@ def _row_heading(
     if scenario == "personnel_incentive":
         title_lines = [line.strip() for line in first.splitlines() if line.strip()]
         if len(title_lines) >= 2 and title_lines[0].startswith("结算第"):
-            return f"{title_lines[0]} · {title_lines[1]}"
+            return title_lines[1][:90]
     for line in first.splitlines():
         label = line.strip()
         if label:
@@ -205,25 +209,30 @@ HTML_TEMPLATE = r'''<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>线下活动核销结果 · 本地查看页</title>
+  <title>线下活动核销结果 - 本地查看页</title>
   <style>
     :root {
-      --ink: #17201b;
-      --ink-soft: #4f5a53;
-      --paper: #f4efe4;
-      --paper-bright: #fffdf7;
-      --line: #d8d0c0;
-      --line-strong: #afa592;
-      --accent: #c74f1c;
-      --accent-dark: #92350f;
-      --moss: #2e6a50;
-      --moss-soft: #e0eee6;
-      --warn: #a7472b;
-      --warn-soft: #f7e3d9;
-      --gold: #b47a20;
-      --gold-soft: #f5ebcf;
-      --shadow: 0 18px 60px rgba(45, 38, 26, .10);
-      --radius: 20px;
+      color-scheme: light;
+      --page: #f1f3f1;
+      --surface: #ffffff;
+      --surface-muted: #f7f8f7;
+      --ink: #1f2723;
+      --ink-soft: #5e6a64;
+      --ink-faint: #7b8781;
+      --line: #d9dfdb;
+      --line-strong: #bcc6c0;
+      --accent: #245c49;
+      --accent-strong: #174535;
+      --accent-soft: #e8f1ec;
+      --danger: #9b4034;
+      --danger-soft: #f8ece9;
+      --summary: #755b24;
+      --summary-soft: #f5f0e3;
+      --panel-radius: 12px;
+      --control-radius: 8px;
+      --label-radius: 6px;
+      --font-sans: "MiSans", "HarmonyOS Sans SC", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      --font-number: "Bahnschrift", "Segoe UI", var(--font-sans);
     }
 
     * { box-sizing: border-box; }
@@ -232,296 +241,308 @@ HTML_TEMPLATE = r'''<!doctype html>
       margin: 0;
       min-width: 320px;
       color: var(--ink);
-      background:
-        radial-gradient(circle at 14% 8%, rgba(199, 79, 28, .09), transparent 26rem),
-        radial-gradient(circle at 92% 18%, rgba(46, 106, 80, .09), transparent 30rem),
-        repeating-linear-gradient(0deg, rgba(41, 35, 23, .018) 0, rgba(41, 35, 23, .018) 1px, transparent 1px, transparent 5px),
-        var(--paper);
-      font-family: "Microsoft YaHei UI", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+      background: var(--page);
+      font-family: var(--font-sans);
+      font-size: 14px;
       line-height: 1.65;
+      text-rendering: optimizeLegibility;
     }
 
     button, input, a { font: inherit; }
     button, a { -webkit-tap-highlight-color: transparent; }
     button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible {
-      outline: 3px solid rgba(199, 79, 28, .28);
-      outline-offset: 3px;
+      outline: 3px solid rgba(36, 92, 73, .24);
+      outline-offset: 2px;
     }
+    button:active, a:active { transform: translateY(1px); }
 
     .masthead {
-      position: relative;
-      overflow: hidden;
-      color: #fffaf0;
-      background: #17201b;
-      border-bottom: 1px solid rgba(255,255,255,.12);
-    }
-    .masthead::before {
-      content: "核";
-      position: absolute;
-      right: clamp(12px, 8vw, 130px);
-      top: -72px;
-      color: rgba(255,255,255,.045);
-      font-family: STKaiti, KaiTi, serif;
-      font-size: clamp(220px, 30vw, 480px);
-      line-height: 1;
-      transform: rotate(-8deg);
-      pointer-events: none;
+      color: var(--ink);
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
     }
     .masthead-inner {
-      position: relative;
-      width: min(1480px, calc(100% - 40px));
-      margin: 0 auto;
-      padding: 42px 0 58px;
-    }
-    .eyebrow {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto auto;
+      gap: 28px;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 18px;
-      color: #e9c59d;
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: .18em;
-      text-transform: uppercase;
+      width: min(1560px, calc(100% - 48px));
+      min-height: 82px;
+      margin: 0 auto;
+      padding: 14px 0;
     }
-    .eyebrow::before { content: ""; width: 38px; height: 2px; background: var(--accent); }
     h1 {
-      max-width: 900px;
       margin: 0;
-      font-family: STKaiti, KaiTi, "Microsoft YaHei UI", sans-serif;
-      font-size: clamp(40px, 6vw, 78px);
-      font-weight: 700;
-      line-height: 1.08;
-      letter-spacing: -.04em;
+      font-size: clamp(22px, 2.4vw, 30px);
+      font-weight: 760;
+      line-height: 1.25;
+      letter-spacing: -.02em;
     }
     .masthead-meta {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 12px;
-      margin-top: 24px;
-      color: #ced7d1;
-      font-size: 14px;
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+      text-align: right;
     }
-    .offline-badge {
+    .masthead-meta #fileName {
+      overflow: hidden;
+      max-width: 340px;
+      color: var(--ink);
+      font-family: var(--font-number);
+      font-size: 13px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .masthead-actions { display: flex; align-items: center; gap: 8px; }
+    .excel-link, .header-button {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 7px 12px;
-      color: #dff3e7;
-      background: rgba(80, 165, 116, .16);
-      border: 1px solid rgba(148, 214, 176, .3);
-      border-radius: 999px;
-      font-weight: 800;
+      justify-content: center;
+      min-height: 42px;
+      padding: 9px 15px;
+      border-radius: var(--control-radius);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 750;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: border-color .16s ease, background .16s ease, color .16s ease;
     }
-    .offline-badge::before { content: ""; width: 8px; height: 8px; background: #7fd39f; border-radius: 50%; box-shadow: 0 0 0 4px rgba(127, 211, 159, .12); }
+    .excel-link { color: #f7fbf8; background: var(--accent); border: 1px solid var(--accent); }
+    .excel-link:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+    .header-button { color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); }
+    .header-button:hover { border-color: var(--accent); color: var(--accent-strong); }
 
     .shell {
-      width: min(1480px, calc(100% - 40px));
-      margin: -26px auto 64px;
-      position: relative;
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 24px;
+      width: min(1560px, calc(100% - 48px));
+      margin: 24px auto 56px;
     }
+    .side-panel {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--panel-radius);
+    }
+    .workspace { min-width: 0; }
     .scenario-tabs {
-      display: flex;
-      gap: 8px;
-      padding: 8px;
-      width: fit-content;
-      max-width: 100%;
-      overflow-x: auto;
-      background: rgba(255,253,247,.96);
-      border: 1px solid rgba(216,208,192,.9);
-      border-radius: 16px;
-      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
     }
     .tab-button {
-      border: 0;
-      padding: 12px 18px;
-      color: var(--ink-soft);
-      background: transparent;
-      border-radius: 11px;
-      cursor: pointer;
-      font-weight: 800;
-      white-space: nowrap;
-      transition: background .18s ease, color .18s ease, transform .18s ease;
-    }
-    .tab-button:hover { transform: translateY(-1px); color: var(--ink); }
-    .tab-button[aria-selected="true"] { color: white; background: var(--ink); box-shadow: 0 8px 24px rgba(23,32,27,.18); }
-
-    .sheet-intro {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 24px;
-      align-items: end;
-      margin: 36px 0 22px;
-    }
-    .sheet-kicker { color: var(--accent); font-size: 12px; font-weight: 900; letter-spacing: .16em; }
-    .sheet-intro h2 {
-      margin: 3px 0 8px;
-      font-family: STKaiti, KaiTi, "Microsoft YaHei UI", sans-serif;
-      font-size: clamp(30px, 4vw, 48px);
-      line-height: 1.18;
-    }
-    .sheet-note { max-width: 950px; margin: 0; color: var(--ink-soft); font-size: 14px; }
-    .excel-link {
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      gap: 9px;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
       min-height: 44px;
-      padding: 10px 16px;
-      color: var(--paper-bright);
-      text-decoration: none;
-      background: var(--moss);
-      border: 1px solid var(--moss);
-      border-radius: 12px;
-      font-weight: 850;
-      box-shadow: 0 10px 24px rgba(46,106,80,.16);
-      transition: transform .18s ease, box-shadow .18s ease;
+      padding: 10px 12px;
+      color: var(--ink-soft);
+      text-align: left;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--control-radius);
+      cursor: pointer;
+      font-weight: 700;
+      transition: border-color .16s ease, background .16s ease, color .16s ease;
     }
-    .excel-link:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(46,106,80,.22); }
+    .tab-button:hover { color: var(--ink); background: var(--surface-muted); }
+    .tab-button[aria-selected="true"] {
+      color: var(--accent-strong);
+      background: var(--accent-soft);
+      border-color: #bfd2c8;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .tab-button small { color: var(--ink-faint); font-family: var(--font-number); font-size: 11px; font-weight: 600; }
+
+    .sheet-intro { padding: 20px 18px 18px; border-bottom: 1px solid var(--line); }
+    .sheet-intro h2 {
+      margin: 0 0 8px;
+      font-size: 21px;
+      font-weight: 760;
+      line-height: 1.35;
+      letter-spacing: -.015em;
+    }
+    .sheet-note { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.7; }
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(150px, 1fr));
-      gap: 12px;
-      margin-bottom: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
     }
     .metric {
-      min-height: 126px;
-      padding: 18px 20px;
-      background: rgba(255,253,247,.9);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      box-shadow: 0 8px 30px rgba(45,38,26,.05);
-      animation: rise .42s both;
+      min-height: 104px;
+      padding: 15px 16px;
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
     }
-    .metric:nth-child(2) { animation-delay: .05s; }
-    .metric:nth-child(3) { animation-delay: .1s; }
-    .metric:nth-child(4) { animation-delay: .15s; }
-    .metric-label { display: block; color: var(--ink-soft); font-size: 13px; font-weight: 750; }
-    .metric-value { display: block; margin-top: 8px; font-family: Georgia, "Times New Roman", serif; font-size: 42px; line-height: 1; font-weight: 700; }
-    .metric-hint { display: block; margin-top: 9px; color: #7f776a; font-size: 12px; }
-    .metric.pass .metric-value { color: var(--moss); }
-    .metric.issue .metric-value { color: var(--warn); }
+    .metric:nth-child(2n) { border-right: 0; }
+    .metric:nth-last-child(-n + 2) { border-bottom: 0; }
+    .metric-label { display: block; color: var(--ink-soft); font-size: 12px; font-weight: 650; }
+    .metric-value {
+      display: block;
+      margin-top: 6px;
+      color: var(--ink);
+      font-family: var(--font-number);
+      font-size: 30px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .metric-hint { display: block; margin-top: 8px; color: var(--ink-faint); font-size: 11px; line-height: 1.45; }
+    .metric.pass .metric-value { color: var(--accent); }
+    .metric.issue .metric-value { color: var(--danger); }
 
+    .side-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+    }
     .toolbar {
       position: sticky;
-      top: 10px;
+      top: 12px;
       z-index: 20;
       display: grid;
-      grid-template-columns: minmax(240px, 1fr) auto auto;
-      gap: 10px;
-      align-items: center;
-      padding: 12px;
-      margin-bottom: 16px;
-      background: rgba(255,253,247,.91);
-      border: 1px solid rgba(216,208,192,.95);
-      border-radius: 16px;
-      box-shadow: 0 12px 38px rgba(45,38,26,.10);
-      backdrop-filter: blur(14px);
+      grid-template-columns: minmax(300px, 1fr) auto;
+      gap: 16px;
+      align-items: end;
+      padding: 14px;
+      margin-bottom: 12px;
+      background: rgba(255, 255, 255, .96);
+      border: 1px solid var(--line);
+      border-radius: var(--panel-radius);
+      box-shadow: 0 8px 24px rgba(40, 55, 47, .07);
+      backdrop-filter: blur(10px);
+    }
+    .control-group { min-width: 0; }
+    .control-label {
+      display: block;
+      margin: 0 0 6px;
+      color: var(--ink-soft);
+      font-size: 11px;
+      font-weight: 700;
     }
     .search-wrap { position: relative; min-width: 0; }
-    .search-wrap::before { content: "⌕"; position: absolute; left: 14px; top: 50%; transform: translateY(-53%); color: #7a7265; font-size: 24px; }
     .search-input {
       width: 100%;
-      height: 44px;
-      padding: 0 42px 0 44px;
+      height: 42px;
+      padding: 0 66px 0 12px;
       color: var(--ink);
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 11px;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--control-radius);
       outline: none;
     }
-    .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(199,79,28,.11); }
+    .search-input::placeholder { color: #88928d; }
+    .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(36, 92, 73, .10); }
     .clear-search {
       position: absolute;
-      right: 8px;
-      top: 6px;
-      width: 32px;
+      right: 5px;
+      top: 5px;
+      min-width: 52px;
       height: 32px;
-      padding: 0;
+      padding: 0 8px;
+      color: var(--ink-soft);
+      background: var(--surface-muted);
       border: 0;
-      color: #756d61;
-      background: transparent;
-      border-radius: 8px;
+      border-radius: 5px;
       cursor: pointer;
-      font-size: 18px;
+      font-size: 12px;
+      font-weight: 650;
     }
     .clear-search[hidden] { display: none; }
-    .segmented, .action-group { display: flex; align-items: center; gap: 6px; }
+    .segmented { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .filter-button, .tool-button {
-      min-height: 40px;
-      padding: 8px 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 38px;
+      padding: 7px 11px;
       color: var(--ink-soft);
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--control-radius);
       cursor: pointer;
-      font-size: 13px;
-      font-weight: 800;
+      font-size: 12px;
+      font-weight: 700;
       white-space: nowrap;
-      transition: border-color .18s ease, color .18s ease, background .18s ease;
+      transition: border-color .16s ease, color .16s ease, background .16s ease;
     }
-    .filter-button:hover, .tool-button:hover { color: var(--ink); border-color: var(--line-strong); }
-    .filter-button[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
-    .tool-button.primary { color: #fff; background: var(--ink); border-color: var(--ink); }
+    .filter-button:hover, .tool-button:hover { color: var(--ink); border-color: var(--accent); }
+    .filter-button[aria-pressed="true"] { color: #f7fbf8; background: var(--accent); border-color: var(--accent); }
+    .filter-count {
+      min-width: 20px;
+      padding: 1px 5px;
+      color: inherit;
+      background: rgba(31, 39, 35, .07);
+      border-radius: 4px;
+      font-family: var(--font-number);
+      font-size: 10px;
+      text-align: center;
+    }
+    .filter-button[aria-pressed="true"] .filter-count { background: rgba(255, 255, 255, .18); }
+    .side-actions .tool-button { width: 100%; }
 
     .results-line {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 16px;
-      min-height: 34px;
-      margin: 0 4px 10px;
+      min-height: 32px;
+      margin: 0 2px 8px;
       color: var(--ink-soft);
-      font-size: 13px;
+      font-size: 12px;
     }
-    .results-line strong { color: var(--ink); }
+    .results-line strong { color: var(--ink); font-family: var(--font-number); }
 
-    .records { display: grid; gap: 12px; }
+    .records { display: grid; gap: 8px; }
     .record-card {
-      background: rgba(255,253,247,.96);
-      border: 1px solid var(--line);
-      border-left: 5px solid var(--line-strong);
-      border-radius: var(--radius);
-      box-shadow: 0 10px 38px rgba(45,38,26,.055);
       overflow: clip;
-      animation: rise .34s both;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--line-strong);
+      border-radius: var(--panel-radius);
+      transition: border-color .16s ease, box-shadow .16s ease;
     }
-    .record-card.pass { border-left-color: var(--moss); }
-    .record-card.issue { border-left-color: var(--warn); }
-    .record-card.summary { border-left-color: var(--gold); background: #fff9e9; }
+    .record-card:hover { border-color: var(--line-strong); box-shadow: 0 6px 18px rgba(40, 55, 47, .055); }
+    .record-card.pass { border-left-color: var(--accent); }
+    .record-card.issue { border-left-color: var(--danger); }
+    .record-card.summary { border-left-color: var(--summary); background: #fdfcf8; }
     .record-card details > summary {
       display: grid;
-      grid-template-columns: 48px minmax(0, 1fr) auto 24px;
+      grid-template-columns: minmax(0, 1fr) auto 20px;
       gap: 14px;
       align-items: center;
-      min-height: 104px;
-      padding: 18px 22px;
+      min-height: 86px;
+      padding: 16px 18px;
       cursor: pointer;
       list-style: none;
     }
     .record-card summary::-webkit-details-marker { display: none; }
-    .record-number {
-      display: grid;
-      place-items: center;
-      width: 42px;
-      height: 42px;
-      color: #fff;
-      background: var(--ink);
-      border-radius: 50%;
-      font-family: Georgia, serif;
-      font-size: 14px;
-      font-weight: 700;
-    }
-    .record-card.summary .record-number { background: var(--gold); }
     .record-title { min-width: 0; }
-    .record-title h3 { margin: 0 0 5px; font-size: 17px; line-height: 1.4; }
+    .record-title h3 { margin: 0 0 4px; font-size: 16px; font-weight: 740; line-height: 1.45; }
     .record-title p {
       display: -webkit-box;
       margin: 0;
       overflow: hidden;
       color: var(--ink-soft);
-      font-size: 13px;
+      font-size: 12px;
+      line-height: 1.55;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
     }
@@ -529,232 +550,309 @@ HTML_TEMPLATE = r'''<!doctype html>
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 76px;
-      padding: 7px 11px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 900;
+      min-width: 68px;
+      padding: 5px 9px;
+      border: 1px solid transparent;
+      border-radius: var(--label-radius);
+      font-size: 11px;
+      font-weight: 750;
     }
-    .status-pill.pass { color: #245840; background: var(--moss-soft); }
-    .status-pill.issue { color: #86341e; background: var(--warn-soft); }
-    .status-pill.summary { color: #80580f; background: var(--gold-soft); }
-    .chevron { color: #796f61; font-size: 20px; transition: transform .2s ease; }
-    details[open] .chevron { transform: rotate(180deg); }
+    .status-pill.pass { color: var(--accent-strong); background: var(--accent-soft); border-color: #c9dbd1; }
+    .status-pill.issue { color: #813127; background: var(--danger-soft); border-color: #eccac4; }
+    .status-pill.summary { color: #674d18; background: var(--summary-soft); border-color: #e5d8b8; }
+    .chevron { display: grid; place-items: center; color: var(--ink-faint); font-family: var(--font-number); font-size: 17px; }
+    .chevron::before { content: "+"; }
+    details[open] .chevron::before { content: "-"; }
 
-    .record-body { padding: 0 22px 22px; border-top: 1px solid var(--line); }
+    .record-body { padding: 18px; background: #fbfcfb; border-top: 1px solid var(--line); }
     .evidence-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
-      padding-top: 18px;
     }
     .evidence-cell {
       min-width: 0;
-      padding: 16px;
-      background: #fff;
-      border: 1px solid #e5dece;
-      border-radius: 13px;
+      padding: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
     }
+    .record-card.pass .conclusion-cell { background: #f4f8f5; border-color: #cadbd2; }
+    .record-card.issue .conclusion-cell { background: #fdf7f5; border-color: #ebccc6; }
+    .record-card.summary .conclusion-cell { background: #faf7ee; border-color: #e5d8b8; }
     .evidence-label {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 11px;
-      padding-bottom: 9px;
-      border-bottom: 1px solid #eee7da;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
     }
-    .evidence-label strong { font-size: 13px; }
-    .evidence-label small { overflow: hidden; color: #82786a; text-overflow: ellipsis; white-space: nowrap; }
-    .cell-body { color: #374139; font-size: 13px; word-break: break-word; }
+    .evidence-label strong { color: var(--ink); font-size: 12px; font-weight: 750; }
+    .evidence-label small {
+      max-width: 58%;
+      color: var(--ink-faint);
+      font-size: 10px;
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+    .cell-body { color: #36413b; font-size: 12px; word-break: break-word; }
     .cell-line { margin: 0 0 6px; white-space: pre-wrap; }
     .cell-line:last-child { margin-bottom: 0; }
-    .cell-line b { color: var(--ink); font-weight: 850; }
+    .cell-line b { color: var(--ink); font-weight: 720; }
     .identity-card {
-      margin: 10px 0;
+      margin: 9px 0;
       overflow: hidden;
-      background: #fffdf8;
-      border: 1px solid #ddd2bf;
-      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--control-radius);
     }
     .identity-title {
       padding: 8px 10px;
-      color: var(--ink);
-      background: #f2eadc;
-      border-bottom: 1px solid #ddd2bf;
-      font-weight: 900;
+      color: var(--accent-strong);
+      background: var(--accent-soft);
+      border-bottom: 1px solid #c9d8d0;
+      font-size: 12px;
+      font-weight: 750;
     }
     .identity-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .identity-table th,
     .identity-table td { padding: 7px 9px; vertical-align: top; text-align: left; }
     .identity-table tr + tr th,
-    .identity-table tr + tr td { border-top: 1px solid #eee7da; }
+    .identity-table tr + tr td { border-top: 1px solid var(--line); }
     .identity-table th {
-      width: 76px;
-      color: #6f6558;
-      background: rgba(246, 241, 232, .72);
-      font-weight: 800;
+      width: 78px;
+      color: var(--ink-soft);
+      background: var(--surface-muted);
+      font-weight: 650;
       white-space: nowrap;
     }
-    .identity-table td { color: #28342c; font-weight: 700; }
-    .identity-spacer { height: 4px; }
-    .empty-value { color: #948b7e; font-style: italic; }
+    .identity-table td { color: var(--ink); font-weight: 650; }
+    .identity-spacer { height: 3px; }
+    .empty-value { color: var(--ink-faint); }
     .record-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 
     .empty-state {
-      padding: 64px 24px;
+      padding: 56px 24px;
       text-align: center;
-      background: rgba(255,253,247,.82);
+      background: var(--surface);
       border: 1px dashed var(--line-strong);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
     }
-    .empty-state strong { display: block; margin-bottom: 6px; font-size: 20px; }
-    .empty-state span { color: var(--ink-soft); }
+    .empty-state strong { display: block; margin-bottom: 5px; font-size: 17px; }
+    .empty-state span { color: var(--ink-soft); font-size: 12px; }
 
-    .compact .record-card details > summary { min-height: 76px; padding-block: 12px; }
+    .compact .record-card details > summary { min-height: 66px; padding-block: 10px; }
     .compact .record-title p { -webkit-line-clamp: 1; }
     .compact .evidence-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .compact .evidence-cell { padding: 12px; }
+    .compact .evidence-cell { padding: 11px; }
 
     .back-top {
       position: fixed;
-      right: 22px;
-      bottom: 22px;
-      width: 46px;
-      height: 46px;
-      border: 1px solid rgba(255,255,255,.15);
-      color: #fff;
-      background: var(--ink);
-      border-radius: 50%;
-      box-shadow: 0 12px 30px rgba(23,32,27,.22);
+      right: 20px;
+      bottom: 20px;
+      min-width: 76px;
+      height: 40px;
+      padding: 0 12px;
+      color: #f7fbf8;
+      background: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: var(--control-radius);
       cursor: pointer;
       opacity: 0;
       pointer-events: none;
-      transform: translateY(8px);
-      transition: opacity .2s ease, transform .2s ease;
+      transform: translateY(6px);
+      transition: opacity .16s ease, transform .16s ease, background .16s ease;
     }
+    .back-top:hover { background: var(--accent-strong); }
     .back-top.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
     .toast {
       position: fixed;
       left: 50%;
-      bottom: 26px;
+      bottom: 24px;
       z-index: 50;
       max-width: min(420px, calc(100% - 32px));
-      padding: 11px 16px;
-      color: #fff;
-      background: var(--ink);
-      border-radius: 999px;
-      box-shadow: 0 12px 34px rgba(23,32,27,.26);
+      padding: 10px 14px;
+      color: #f7fbf8;
+      background: #27312c;
+      border-radius: var(--control-radius);
+      box-shadow: 0 10px 24px rgba(31, 39, 35, .18);
       opacity: 0;
       pointer-events: none;
-      transform: translate(-50%, 12px);
-      transition: opacity .2s ease, transform .2s ease;
+      transform: translate(-50%, 10px);
+      transition: opacity .16s ease, transform .16s ease;
     }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
-    .page-footer { margin: 34px 0 0; color: #766e63; font-size: 12px; text-align: center; }
-
-    @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-    @media (max-width: 1040px) {
-      .summary-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
-      .toolbar { grid-template-columns: 1fr; position: relative; top: 0; }
-      .segmented, .action-group { flex-wrap: wrap; }
-      .evidence-grid, .compact .evidence-grid { grid-template-columns: 1fr; }
+    .page-footer {
+      width: min(1560px, calc(100% - 48px));
+      margin: 0 auto 30px;
+      color: var(--ink-faint);
+      font-size: 11px;
+      text-align: right;
     }
-    @media (max-width: 720px) {
-      .masthead-inner, .shell { width: min(100% - 24px, 1480px); }
-      .masthead-inner { padding: 32px 0 48px; }
-      .shell { margin-top: -22px; }
-      .sheet-intro { grid-template-columns: 1fr; align-items: start; }
-      .summary-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-      .metric { min-height: 104px; padding: 15px; }
-      .metric-value { font-size: 34px; }
-      .record-card details > summary { grid-template-columns: 38px minmax(0,1fr) 20px; padding: 14px; }
-      .record-number { width: 34px; height: 34px; }
-      .status-pill { grid-column: 2; justify-self: start; }
-      .chevron { grid-column: 3; grid-row: 1 / span 2; }
-      .record-body { padding: 0 14px 16px; }
-      .results-line { align-items: flex-start; flex-direction: column; gap: 2px; }
+
+    @media (max-width: 1180px) {
+      .masthead-inner, .shell, .page-footer { width: min(100% - 32px, 1560px); }
+      .masthead-inner { grid-template-columns: minmax(220px, 1fr) auto; }
+      .masthead-meta { grid-column: 1 / -1; grid-row: 2; text-align: left; }
+      .masthead-meta #fileName { max-width: none; }
+      .shell { grid-template-columns: 1fr; }
+      .side-panel { position: relative; top: 0; }
+      .scenario-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .metric { border-right: 1px solid var(--line); border-bottom: 0; }
+      .metric:nth-child(2n) { border-right: 1px solid var(--line); }
+      .metric:last-child { border-right: 0; }
+      .side-actions { display: flex; }
+      .side-actions .tool-button { width: auto; }
+    }
+    @media (max-width: 760px) {
+      .masthead-inner, .shell, .page-footer { width: min(100% - 24px, 1560px); }
+      .masthead-inner { gap: 14px; min-height: 0; padding: 14px 0; }
+      .masthead-actions { justify-self: end; }
+      .shell { gap: 14px; margin-top: 14px; }
+      .toolbar { grid-template-columns: 1fr; position: relative; top: 0; gap: 12px; }
+      .evidence-grid, .compact .evidence-grid { grid-template-columns: 1fr; }
+      .record-body { padding: 14px; }
+      .page-footer { text-align: left; }
+    }
+    @media (max-width: 520px) {
+      body { line-height: 1.55; }
+      .masthead-inner { grid-template-columns: 1fr; gap: 8px; padding: 10px 0; }
+      h1 { font-size: 20px; }
+      .masthead-meta, .masthead-actions { grid-column: 1; grid-row: auto; justify-self: stretch; text-align: left; }
+      .masthead-meta { display: block; line-height: 1.4; }
+      .masthead-meta span:last-child { display: none; }
+      .masthead-actions > * { flex: 1; }
+      .excel-link, .header-button { min-height: 36px; padding: 6px 10px; font-size: 12px; }
+      .shell { gap: 10px; margin-top: 10px; }
+      .scenario-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 6px; }
+      .tab-button { min-height: 38px; padding: 7px 8px; font-size: 12px; }
+      .sheet-intro { padding: 9px 11px; }
+      .sheet-intro h2 { margin-bottom: 2px; font-size: 16px; }
+      .sheet-note { font-size: 10px; line-height: 1.45; }
+      .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .metric { min-height: 76px; padding: 8px 6px; border-right: 1px solid var(--line); border-bottom: 0; }
+      .metric:nth-child(2n) { border-right: 1px solid var(--line); }
+      .metric:last-child { border-right: 0; }
+      .metric-label { font-size: 10px; }
+      .metric-value { margin-top: 3px; font-size: 21px; }
+      .metric-hint { display: block; margin-top: 4px; font-size: 9px; line-height: 1.25; }
+      .side-actions { display: grid; gap: 6px; padding: 6px; }
+      .side-actions .tool-button { width: 100%; }
+      .toolbar { gap: 8px; padding: 10px; margin-bottom: 6px; }
+      .control-label { margin-bottom: 4px; }
+      .search-input { height: 38px; }
+      .segmented { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      .filter-button { width: 100%; min-height: 34px; gap: 3px; padding: 4px 3px; font-size: 10px; }
+      .filter-count { min-width: 16px; padding-inline: 3px; }
+      .results-line { min-height: 28px; margin-bottom: 6px; }
+      .record-card details > summary { grid-template-columns: minmax(0, 1fr) 18px; gap: 10px; padding: 14px; }
+      .status-pill { grid-column: 1; justify-self: start; }
+      .chevron { grid-column: 2; grid-row: 1 / span 2; }
+      .evidence-label { align-items: flex-start; flex-direction: column; }
+      .evidence-label small { max-width: 100%; text-align: left; }
+      .results-line { align-items: center; flex-direction: row; gap: 8px; font-size: 11px; }
+      .back-top { right: 12px; bottom: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .01ms !important; }
     }
 
     @media print {
-      body { background: #fff; }
-      .masthead { color: #000; background: #fff; border-bottom: 2px solid #000; }
-      .masthead::before, .eyebrow, .offline-badge, .scenario-tabs, .toolbar, .excel-link, .record-actions, .back-top, .toast { display: none !important; }
-      .masthead-inner, .shell { width: 100%; margin: 0; padding: 12px 0; }
-      h1 { color: #000; font-size: 28px; }
-      .masthead-meta { color: #333; }
-      .sheet-intro { margin: 14px 0; }
-      .summary-grid { grid-template-columns: repeat(4, 1fr); }
-      .metric, .record-card { box-shadow: none; break-inside: avoid; }
+      @page { margin: 12mm; }
+      body { background: #fff; font-size: 11px; }
+      .masthead { border-bottom: 1px solid #777; }
+      .masthead-inner, .shell, .page-footer { width: 100%; margin: 0; }
+      .masthead-inner { display: block; min-height: 0; padding: 0 0 10px; }
+      h1 { font-size: 22px; }
+      .masthead-meta { margin-top: 4px; text-align: left; }
+      .masthead-actions, .scenario-tabs, .toolbar, .side-actions, .record-actions, .back-top, .toast { display: none !important; }
+      .shell { display: block; }
+      .side-panel { position: static; overflow: visible; border: 0; }
+      .sheet-intro { padding: 10px 0; border-bottom: 1px solid #999; }
+      .summary-grid { grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid #999; }
+      .metric { min-height: 0; padding: 8px; box-shadow: none; break-inside: avoid; }
+      .metric-value { font-size: 22px; }
+      .workspace { margin-top: 10px; }
       .records { display: block; }
-      .record-card { margin-bottom: 10px; }
-      .record-card details > summary { min-height: auto; padding: 10px; }
+      .record-card { margin-bottom: 8px; box-shadow: none; break-inside: avoid; }
+      .record-card details > summary { min-height: 0; padding: 9px; }
       .record-card details[open] .record-body { display: block; }
+      .record-body { padding: 9px; }
       .evidence-grid, .compact .evidence-grid { grid-template-columns: 1fr 1fr; }
-      .page-footer { margin-top: 14px; }
+      .evidence-cell { padding: 9px; }
+      .page-footer { margin-top: 12px; }
     }
   </style>
 </head>
 <body>
+  <div id="topSentinel" aria-hidden="true"></div>
   <header class="masthead">
     <div class="masthead-inner">
-      <div class="eyebrow">Offline activity verification</div>
-      <h1>线下活动核销结果</h1>
+      <div class="brand-lockup"><h1>线下活动核销结果</h1></div>
       <div class="masthead-meta">
-        <span class="offline-badge">离线可用</span>
         <span id="fileName">本地查看页</span>
-        <span>·</span>
-        <span>所有判断均来自同批 Excel 可见内容</span>
+        <span>页面可离线打开，内容与同名 Excel 保持一致</span>
+      </div>
+      <div class="masthead-actions">
+        <a class="excel-link" id="excelLink" href="#" title="打开同名 Excel 文件">打开同版 Excel</a>
+        <button class="header-button" id="printButton" type="button">打印 / 存 PDF</button>
       </div>
     </div>
   </header>
 
   <main class="shell" id="top">
-    <nav class="scenario-tabs" id="scenarioTabs" aria-label="核销场景"></nav>
+    <aside class="side-panel" aria-label="场景概览">
+      <nav class="scenario-tabs" id="scenarioTabs" role="tablist" aria-label="核销场景"></nav>
 
-    <section class="sheet-intro" aria-labelledby="sheetTitle">
-      <div>
-        <div class="sheet-kicker" id="sheetKicker">AUDIT VIEW</div>
+      <section class="sheet-intro" aria-labelledby="sheetTitle">
         <h2 id="sheetTitle"></h2>
         <p class="sheet-note" id="sheetNote"></p>
-      </div>
-      <a class="excel-link" id="excelLink" href="#" title="打开同名 Excel 原文件">
-        <span aria-hidden="true">▦</span>
-        打开原始 Excel
-      </a>
-    </section>
+      </section>
 
-    <section class="summary-grid" id="summaryGrid" aria-label="当前场景汇总"></section>
+      <section class="summary-grid" id="summaryGrid" aria-label="当前场景概览"></section>
 
-    <section class="toolbar" aria-label="查看工具">
-      <div class="search-wrap">
-        <input class="search-input" id="searchInput" type="search" placeholder="搜索门店、商品、69码、文件名或问题…" autocomplete="off">
-        <button class="clear-search" id="clearSearch" type="button" aria-label="清空搜索" hidden>×</button>
-      </div>
-      <div class="segmented" id="statusFilters" aria-label="结论筛选">
-        <button class="filter-button" type="button" data-status="all" aria-pressed="true">全部</button>
-        <button class="filter-button" type="button" data-status="pass" aria-pressed="false">只看通过</button>
-        <button class="filter-button" type="button" data-status="issue" aria-pressed="false">只看待补</button>
-        <button class="filter-button" type="button" data-status="summary" aria-pressed="false">只看汇总</button>
-      </div>
-      <div class="action-group">
+      <div class="side-actions" aria-label="记录显示方式">
         <button class="tool-button" id="densityButton" type="button" aria-pressed="false">紧凑显示</button>
         <button class="tool-button" id="expandButton" type="button" aria-pressed="false">展开全部</button>
-        <button class="tool-button primary" id="printButton" type="button">打印 / 存 PDF</button>
       </div>
+    </aside>
+
+    <section class="workspace" aria-label="核销记录">
+      <section class="toolbar" aria-label="查找与筛选">
+        <div class="control-group">
+          <label class="control-label" for="searchInput">搜索当前场景</label>
+          <div class="search-wrap">
+            <input class="search-input" id="searchInput" type="search" placeholder="输入门店、商品、69码、文件名或待补问题" autocomplete="off">
+            <button class="clear-search" id="clearSearch" type="button" aria-label="清空搜索" hidden>清空</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <span class="control-label">查看范围</span>
+          <div class="segmented" id="statusFilters" aria-label="结论筛选">
+            <button class="filter-button" type="button" data-status="all" data-label="全部" aria-pressed="true">全部</button>
+            <button class="filter-button" type="button" data-status="pass" data-label="只看通过" aria-pressed="false">只看通过</button>
+            <button class="filter-button" type="button" data-status="issue" data-label="只看待补" aria-pressed="false">只看待补</button>
+            <button class="filter-button" type="button" data-status="summary" data-label="只看汇总" aria-pressed="false">只看汇总</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="results-line">
+        <span id="resultsCount" aria-live="polite"></span>
+        <span>点击记录，查看六列完整内容</span>
+      </div>
+
+      <section class="records" id="records"></section>
     </section>
-
-    <div class="results-line">
-      <span id="resultsCount"></span>
-      <span>点开任意记录即可查看六列完整内容</span>
-    </div>
-
-    <section class="records" id="records" aria-live="polite"></section>
-    <p class="page-footer">这是便于阅读的本地页面；正式核销内容与同名 Excel 保持一致。</p>
   </main>
 
-  <button class="back-top" id="backTop" type="button" aria-label="返回顶部">↑</button>
+  <p class="page-footer">本页用于查看核销结果，完整内容与同名 Excel 一致。</p>
+  <button class="back-top" id="backTop" type="button">返回顶部</button>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   __AUDIT_DATA__
   <script>
@@ -827,12 +925,13 @@ HTML_TEMPLATE = r'''<!doctype html>
         return blocks.join('');
       };
 
-      const renderCell = (header, value) => {
+      const renderCell = (header, value, cellIndex) => {
         const meta = splitHeader(header);
         const body = value
           ? renderCellBody(value)
-          : '<span class="empty-value">本项没有可见内容</span>';
-        return `<section class="evidence-cell">
+          : '<span class="empty-value">没有可核验内容</span>';
+        const emphasis = cellIndex === 5 ? ' conclusion-cell' : '';
+        return `<section class="evidence-cell${emphasis}">
           <div class="evidence-label"><strong>${escapeHtml(meta.label)}</strong>${meta.source ? `<small title="${escapeHtml(meta.source)}">${escapeHtml(meta.source)}</small>` : ''}</div>
           <div class="cell-body">${body}</div>
         </section>`;
@@ -842,7 +941,14 @@ HTML_TEMPLATE = r'''<!doctype html>
 
       const conclusionExcerpt = (row) => {
         const conclusion = row.values[5] || row.values.find(Boolean) || '';
-        return conclusion.replaceAll('\n', ' · ');
+        const lines = conclusion.split('\n').map((line) => line.trim()).filter(Boolean);
+        const priority = lines.filter((line) => line.startsWith('结论：') || line.startsWith('主要问题：') || line.startsWith('置信度：'));
+        if (priority.length >= 2) return priority.slice(0, 2).join('；');
+        if (priority.length === 1) {
+          const next = lines.find((line) => line !== priority[0] && line !== '要重新提交：');
+          return [priority[0], next].filter(Boolean).join('；');
+        }
+        return lines.slice(0, 2).join('；');
       };
 
       const activeSheet = () => data.sheets[state.sheetIndex];
@@ -850,7 +956,8 @@ HTML_TEMPLATE = r'''<!doctype html>
       const currentRows = () => {
         const query = state.query.trim().toLocaleLowerCase('zh-CN');
         return activeSheet().rows.filter((row) => {
-          if (state.status !== 'all' && row.status !== state.status) return false;
+          if (state.status === 'summary' && row.kind !== 'summary') return false;
+          if ((state.status === 'pass' || state.status === 'issue') && row.status !== state.status) return false;
           if (!query) return true;
           return [row.heading, ...row.values].join('\n').toLocaleLowerCase('zh-CN').includes(query);
         });
@@ -907,32 +1014,45 @@ HTML_TEMPLATE = r'''<!doctype html>
 
       const renderTabs = () => {
         tabs.innerHTML = data.sheets.map((sheet, index) => `
-          <button class="tab-button" type="button" role="tab" data-sheet="${index}" aria-selected="${index === state.sheetIndex}">
-            ${escapeHtml(sheet.name)}
+          <button class="tab-button" id="scenarioTab${index}" type="button" role="tab" data-sheet="${index}" aria-controls="records" aria-selected="${index === state.sheetIndex}" tabindex="${index === state.sheetIndex ? '0' : '-1'}">
+            <span>${escapeHtml(sheet.name)}</span><small>${sheet.rows.length}项</small>
           </button>`).join('');
       };
 
       const renderIntro = () => {
         const sheet = activeSheet();
-        document.getElementById('sheetKicker').textContent = sheet.scenario === 'personnel_incentive' ? 'PERSONNEL INCENTIVE' : 'PROMOTIONAL DISPLAY';
         document.getElementById('sheetTitle').textContent = sheet.title;
         document.getElementById('sheetNote').textContent = sheet.note;
       };
 
       const renderMetrics = () => {
         const rows = activeSheet().rows;
-        const recordsOnly = rows.filter((row) => row.kind === 'record');
-        const passed = recordsOnly.filter((row) => row.status === 'pass').length;
-        const issues = recordsOnly.filter((row) => row.status === 'issue').length;
+        const passed = rows.filter((row) => row.status === 'pass').length;
+        const issues = rows.filter((row) => row.status === 'issue').length;
         const summaries = rows.filter((row) => row.kind === 'summary').length;
         const metrics = [
-          ['核销记录', recordsOnly.length, '当前场景逐项记录', ''],
-          ['可直接通过', passed, '无需重新提交材料', 'pass'],
-          ['需重新提交', issues, '点开查看具体补交内容', 'issue'],
-          ['汇总与说明', summaries, '金额、申报或身份汇总', ''],
+          ['全部条目', rows.length, '当前场景完整记录', ''],
+          ['通过', passed, '无需重新提交', 'pass'],
+          ['待补材料', issues, '点开查看补交要求', 'issue'],
+          ['汇总项', summaries, '金额与身份等汇总', ''],
         ];
         document.getElementById('summaryGrid').innerHTML = metrics.map(([label, value, hint, tone]) => `
           <article class="metric ${tone}"><span class="metric-label">${label}</span><strong class="metric-value">${value}</strong><span class="metric-hint">${hint}</span></article>`).join('');
+      };
+
+      const renderFilters = () => {
+        const rows = activeSheet().rows;
+        const counts = {
+          all: rows.length,
+          pass: rows.filter((row) => row.status === 'pass').length,
+          issue: rows.filter((row) => row.status === 'issue').length,
+          summary: rows.filter((row) => row.kind === 'summary').length,
+        };
+        document.querySelectorAll('[data-status]').forEach((button) => {
+          const status = button.dataset.status;
+          button.setAttribute('aria-pressed', String(status === state.status));
+          button.innerHTML = `${escapeHtml(button.dataset.label)}<span class="filter-count">${counts[status]}</span>`;
+        });
       };
 
       const renderRecords = () => {
@@ -943,18 +1063,17 @@ HTML_TEMPLATE = r'''<!doctype html>
           records.innerHTML = '<div class="empty-state"><strong>没有找到符合条件的记录</strong><span>可以清空搜索或切换上方结论筛选。</span></div>';
           return;
         }
-        records.innerHTML = rows.map((row, index) => {
-          const displayIndex = String(row.excel_row - 3).padStart(2, '0');
-          return `<article class="record-card ${row.status}">
+        records.innerHTML = rows.map((row) => {
+          const kindClass = row.kind === 'summary' ? ' summary-row' : '';
+          return `<article class="record-card ${row.status}${kindClass}">
             <details ${state.expanded ? 'open' : ''} data-row="${row.excel_row}">
               <summary>
-                <span class="record-number">${displayIndex}</span>
                 <div class="record-title"><h3>${escapeHtml(row.heading)}</h3><p>${escapeHtml(conclusionExcerpt(row))}</p></div>
                 <span class="status-pill ${row.status}">${statusText(row.status)}</span>
-                <span class="chevron" aria-hidden="true">⌄</span>
+                <span class="chevron" aria-hidden="true"></span>
               </summary>
               <div class="record-body">
-                <div class="evidence-grid">${row.values.map((value, cellIndex) => renderCell(sheet.headers[cellIndex], value)).join('')}</div>
+                <div class="evidence-grid">${row.values.map((value, cellIndex) => renderCell(sheet.headers[cellIndex], value, cellIndex)).join('')}</div>
                 <div class="record-actions"><button class="tool-button copy-conclusion" type="button" data-copy-row="${row.excel_row}">复制本条结论</button></div>
               </div>
             </details>
@@ -966,6 +1085,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         renderTabs();
         renderIntro();
         renderMetrics();
+        renderFilters();
         renderRecords();
       };
 
@@ -978,15 +1098,26 @@ HTML_TEMPLATE = r'''<!doctype html>
         state.expanded = false;
         searchInput.value = '';
         clearSearch.hidden = true;
-        document.querySelectorAll('[data-status]').forEach((item) => item.setAttribute('aria-pressed', String(item.dataset.status === 'all')));
         renderAll();
+      });
+
+      tabs.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        const direction = event.key === 'ArrowRight' ? 1 : -1;
+        const nextIndex = (state.sheetIndex + direction + data.sheets.length) % data.sheets.length;
+        const nextButton = tabs.querySelector(`[data-sheet="${nextIndex}"]`);
+        if (nextButton) {
+          event.preventDefault();
+          nextButton.click();
+          tabs.querySelector(`[data-sheet="${nextIndex}"]`)?.focus();
+        }
       });
 
       document.getElementById('statusFilters').addEventListener('click', (event) => {
         const button = event.target.closest('[data-status]');
         if (!button) return;
         state.status = button.dataset.status;
-        document.querySelectorAll('[data-status]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        renderFilters();
         renderRecords();
       });
 
@@ -1030,8 +1161,14 @@ HTML_TEMPLATE = r'''<!doctype html>
         window.setTimeout(() => window.print(), 40);
       });
       window.addEventListener('afterprint', () => renderRecords());
-      window.addEventListener('scroll', () => backTop.classList.toggle('visible', window.scrollY > 500), { passive: true });
-      backTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+      const topObserver = new IntersectionObserver(([entry]) => {
+        backTop.classList.toggle('visible', !entry.isIntersecting);
+      });
+      topObserver.observe(document.getElementById('topSentinel'));
+      backTop.addEventListener('click', () => {
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+      });
 
       setExcelLink();
       renderAll();

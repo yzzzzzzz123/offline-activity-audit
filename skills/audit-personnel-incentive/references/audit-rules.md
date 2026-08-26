@@ -34,6 +34,6 @@
 
 ## Human-facing row name
 
-- When a settlement line uniquely resolves to a knowledge-base product, use that product's complete authoritative name in the `结算第N行` title.
+- When a settlement line uniquely resolves to a knowledge-base product, use only that product's complete authoritative name as the human-facing title; do not add a `结算第N行` prefix.
 - Keep the settlement image's original recognized product text in the visual-evidence column so the reader can still see what the submitted material actually said.
 - If the knowledge product is not uniquely resolved, do not borrow an Excel or candidate name as authority; retain the recognized settlement text in the title and show the failed match separately.

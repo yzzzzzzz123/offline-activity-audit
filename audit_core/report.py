@@ -229,9 +229,9 @@ def _personnel_conclusion(item: dict[str, Any]) -> str:
         return (
             f"{_match_confidence('fuzzy')}\n"
             "69码精确、商品名称唯一模糊匹配，数量和金额一致，已通过；"
-            "要重新提交：不用"
+            "无需重新提交"
         )
-    return f"{_match_confidence('exact')}\n要重新提交：不用"
+    return f"{_match_confidence('exact')}\n无需重新提交"
 
 
 def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
@@ -270,10 +270,10 @@ def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             ws,
             row,
             [
-                f"结算第{item['line_no']}行\n{_personnel_row_product_name(item)}",
+                _personnel_row_product_name(item),
                 _personnel_sales_knowledge_text(item),
                 f"视觉识别商品：{item['settlement_product_name']}\n数量：{_number(item['settlement_quantity'])}\n行奖励：{_number(item['settlement_reward_amount'])}元",
-                "—（转账只核对总额）",
+                "转账仅核对总额",
                 _personnel_comparison_text(item),
                 _personnel_conclusion(item),
             ],
@@ -307,7 +307,7 @@ def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
                 f"知识库问题商品：{summary.get('sales_knowledge_problem_count', 0)}个"
             ),
             (
-                f"{_match_confidence('exact')}\n三方金额一致；要重新提交：不用"
+                f"{_match_confidence('exact')}\n三方金额一致，无需重新提交"
                 if three_way_difference == 0
                 and int(summary.get("sales_knowledge_problem_count") or 0) == 0
                 else (
@@ -330,12 +330,12 @@ def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
         row,
         [
             "实际申请金额",
-            "—",
+            "不适用",
             f"视觉识别申请：{_number(summary['claimed_amount'])}元",
             f"视觉识别转账：{_number(summary['transfer_total'])}元",
             f"申请金额 - 转账金额：{_number(claim_difference)}元",
             (
-                f"{_match_confidence('exact')}\n申请金额与转账金额一致；要重新提交：不用"
+                f"{_match_confidence('exact')}\n申请金额与转账金额一致，无需重新提交"
                 if claim_difference == 0
                 else (
                     f"{_match_confidence('unmatched')}\n"
@@ -385,7 +385,7 @@ def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             (
                 f"{_match_confidence(identity_level)}\n{amount_note}；"
                 + (
-                    "身份与日期均可确认；要重新提交：不用"
+                    "身份与日期均可确认，无需重新提交"
                     if identity_verified
                     else "要重新提交：补拍转账截图，让收款人、门店和完整日期都看得见"
                 )
@@ -844,7 +844,7 @@ def _row_ranges(values: list[int]) -> str:
         start = previous = value
     groups.append((start, previous))
     return "、".join(
-        str(start) if start == end else f"{start}—{end}"
+        str(start) if start == end else f"{start}-{end}"
         for start, end in groups
     )
 
@@ -1103,7 +1103,7 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             f"本店支持：{_number(item['supported_amount'])}元"
         )
         conclusion_column_text = (
-            "结论：通过\n要重新提交：不用"
+            "结论：通过\n无需重新提交"
             if item["status"] == "pass"
             else (
                 f"结论：暂不能核销\n主要问题：{failed_text}\n"

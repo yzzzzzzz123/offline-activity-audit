@@ -62,7 +62,7 @@ that catalog product's registered 69 code for the sales comparison. A fuzzy phot
 
 For personnel output, a unique fuzzy product-name match is an accepted medium-confidence match, not
 a resubmission reason by itself. When the 69 code is exact, the knowledge item is uniquely resolved,
-and quantity and reward agree, show `置信度：中` with `要重新提交：不用`; request a clearer
+and quantity and reward agree, show `置信度：中` with `无需重新提交`; request a clearer
 settlement line only when the mapping itself remains low-confidence, unmatched, or ambiguous.
 
 The same display audit must then close three internal comparisons: contract signing party/period/
@@ -92,8 +92,8 @@ Never overwrite an existing result. The Excel and HTML from one run must use the
 The workbook has one six-column sheet per submitted scenario. With both scenarios, sheet order is `人员激励核销`, then `堆头核销`. It must contain no formulas or formula-error values. The personnel
 sheet shows the Excel product, selected knowledge-base product code/name/69 code, exact barcode
 result, exact-or-fuzzy name result, settlement comparison, amount comparison, and concrete
-resubmission action in the existing six columns. Each `结算第N行` title uses the complete name of
-the uniquely selected knowledge-base product; the settlement image's recognized name stays in the
+resubmission action in the existing six columns. Each personnel product row title uses only the complete
+name of the uniquely selected knowledge-base product, without a `结算第N行` prefix; the settlement image's recognized name stays in the
 visual-evidence column and becomes the title only when no knowledge product was uniquely resolved. The display
 sheet keeps only the fixed six-column contract-store rows followed immediately by its total row.
 It is a human-readable management summary: A shows contract terms, B shows field-photo facts and the
@@ -136,6 +136,17 @@ pass/supplement/summary filtering, compact view, expand/collapse, opening the si
 copying a row conclusion, and returning to the top. The same plain-language and forbidden-engineering-
 term rules apply to both formats. Generate and verify both temporary files before publishing either;
 a failed run must leave neither final sibling behind.
+
+Treat the HTML as a quiet internal review tool, not a marketing page or a decorative dashboard.
+Use a compact Chinese header, a desktop overview sidebar plus reading workspace, a cool neutral
+background, one deep-green interaction accent, and semantic colors only for pass, supplement, and
+summary states. Use one offline sans-serif font stack, 12px panel corners, and 8px control corners.
+Do not add a hero banner, calligraphy, English eyebrow labels, decorative watermarks or dots,
+textures, gradients, circular row numbers, heavy shadows, or staged entry animation. The first
+record must be visible in the initial desktop viewport and in a 390px mobile viewport; the page must
+not overflow horizontally, and source filenames must wrap instead of being clipped. Keep row kind
+and business status independent so a summary row that requests material remains visible under the
+supplement filter. Honor reduced-motion preferences and avoid continuous scroll listeners.
 
 The workbook under `worktrees/` whose name includes `已追加产品促销` is acceptance-only. Runtime code and model prompts must never open, copy, or depend on it.
 

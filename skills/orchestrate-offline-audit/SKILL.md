@@ -75,15 +75,15 @@ Create a new workbook from an empty `openpyxl.Workbook`; never load, copy, edit,
 Personnel rows:
 
 - one row per settlement product;
-- title each `结算第N行` row with the uniquely selected knowledge-base product's complete authoritative name; retain the settlement image's recognized short/original name only in the visual-evidence column, and use it as the title only when no knowledge product was uniquely established;
+- title each personnel product row with only the uniquely selected knowledge-base product's complete authoritative name, without a `结算第N行` prefix; retain the settlement image's recognized short/original name only in the visual-evidence column, and use it as the title only when no knowledge product was uniquely established;
 - first show the code-read Excel product and the selected knowledge product code/name/69 code;
 - require an exact valid 69-code match and an exact or unique fuzzy product-name match before the
   Excel quantity can support reward, then compare it with the AI-read settlement quantity/reward;
 - treat a unique fuzzy product-name correspondence as an accepted medium-confidence result; when
-  69 code, quantity, and reward pass, write `要重新提交：不用` rather than requesting a clearer
+  69 code, quantity, and reward pass, write `无需重新提交` rather than requesting a clearer
   settlement line solely because the name is not character-for-character equal;
 - then add total, actual-claim, and recipient/date rows;
-- show every product with only one overall `置信度：高`, `置信度：中`, or `置信度：低` label; keep exact/fuzzy/mismatch wording only in the short field comparison, followed by exactly what must be resubmitted or `不用`;
+- show every product with only one overall `置信度：高`, `置信度：中`, or `置信度：低` label; keep exact/fuzzy/mismatch wording only in the short field comparison, followed by exactly what must be resubmitted or `无需重新提交`;
 - never mark recipient/store/date verified unless recipient, store correspondence, and complete transfer date are all visible.
 
 Display rows:
@@ -143,6 +143,16 @@ inline so the page opens from `file://` without a server, network, CDN, font dow
 Provide buttons for scenario switching, keyword search, conclusion filtering, compact display,
 expand/collapse, copying a row conclusion, opening the sibling Excel, printing, and returning to the
 top. Apply the same no-truncation, plain-language, and forbidden-engineering-term rules as Excel.
+
+Design the HTML as a restrained internal review tool. Use a compact Chinese header, a desktop
+overview sidebar plus reading workspace, a cool neutral background, one deep-green interaction
+accent, semantic state colors, one offline sans-serif stack, 12px panel corners, and 8px control
+corners. Do not use a marketing hero, calligraphy, English eyebrow labels, decorative watermarks or
+dots, textures, gradients, circular row numbers, heavy shadows, or staged entry animation. Keep the
+first record visible in the initial desktop and 390px mobile viewports, prevent horizontal overflow,
+and wrap source filenames in full. Treat row kind and business status independently: a summary row
+that requests material must also appear under the supplement filter. Honor reduced-motion
+preferences and avoid continuous scroll listeners.
 
 ## Output and verification
 
