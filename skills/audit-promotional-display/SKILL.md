@@ -31,7 +31,7 @@ Product-reference images establish product identity only. They cannot establish 
 
 ## Visual extraction
 
-Return evidence schema version `2.3`.
+Return evidence schema version `2.4`.
 
 For the contract, extract only explicit core terms:
 
@@ -44,6 +44,18 @@ For the contract, extract only explicit core terms:
 - specific product and promotion requirements only when the core terms actually impose them.
 
 A brand scope, whole series, broad category, activity wording, or appended product/sales table is not a specific contract SKU condition. If the contract does not contain a checkable product code, sufficiently specific product name, or complete valid 69 code, set product knowledge to not applicable.
+
+Treat a printed sales-detail attachment as a separate transcription source under
+`contract.sales_attachment`, never as a contract product or promotion requirement:
+
+- without a row-level attachment, return `present=false`, empty `source_pages` and `records`, and null totals;
+- with an attachment, return `present=true`, list distinct PDF page numbers in ascending order, and transcribe every row in printed order with consecutive `line_no` values starting at 1;
+- for each row preserve `source_page`, customer name, business date, product code, product name, 69 code, unit, quantity, retail price, and row total amount;
+- use null for any illegible business value, but always provide integer `line_no` and `source_page` values;
+- return a 69 code only when it is a complete valid EAN-13; all returned numeric values must be visibly printed and non-negative;
+- copy `total_quantity` and `total_amount` only when the attachment prints those grand totals. Never sum detail rows, multiply quantity by price, infer a missing total, or turn a printed total line into another detail record.
+
+Preserve attachment limitations in `extraction_notes`. Do not fill an attachment field from the separate distributor sales Excel or another file.
 
 For every contract store, return exactly one photo review, including an empty review when no photo can be assigned. Preserve submitted basenames exactly. Extract:
 
@@ -67,7 +79,7 @@ The field photo does not need to show a complete product name or a 69 code. A vi
 Python owns the decision in this exact order:
 
 1. Read sales Excel cells directly and preserve customer, business date, product code, product name, 69 code, quantity/amount, and Excel row number.
-2. Reconcile a contract product only when the contract contains a concrete checkable identity. Otherwise record `not_applicable`.
+2. Preserve any contract sales attachment as row-level source evidence, but never use it to create a contract product/promotion requirement or to identify a field-photo product. Reconcile a contract product only when the core contract terms contain a concrete checkable identity. Otherwise record `not_applicable`.
 3. Resolve all photo hits through the catalog. A store's photo-product gate passes only when at least one catalog product exists and all returned hits are exact. Do not require a visible photo barcode: first determine the catalog product from visible name fragments, a catalog-unique short code, and packaging. A fuzzy photo identity makes later strict code and 69-code checks unavailable, not mismatched.
 4. For every field product, use its catalog identity to locate only the relevant sales rows:
    - start a fresh sales-row identity check with the field product's exact catalog 69 code plus an exact or specification-compatible fuzzy product name; retain a row only when the sales catalog reconciliation independently resolves it to that same catalog product;

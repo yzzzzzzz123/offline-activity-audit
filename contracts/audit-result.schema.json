@@ -185,7 +185,10 @@
       "if": {"properties": {"scenario": {"const": "promotional_display"}}},
       "then": {
         "required": [
-          "contract", "contract_product_knowledge", "contract_sales_reconciliation",
+          "contract", "contract_product_knowledge",
+          "contract_attachment_product_knowledge",
+          "contract_sales_reconciliation",
+          "contract_attachment_sales_reconciliation",
           "contract_pdf", "sales",
           "photo_inventory", "store_reconciliation"
         ],
@@ -197,7 +200,11 @@
               "passed_store_count", "supplement_store_count", "supported_amount",
               "photo_count", "sales_sku_count", "sales_quantity",
               "sales_knowledge_matched_count", "sales_knowledge_fuzzy_count",
-              "sales_knowledge_problem_count"
+              "sales_knowledge_problem_count", "contract_attachment_present",
+              "contract_attachment_row_count", "contract_attachment_quantity",
+              "contract_attachment_amount",
+              "contract_attachment_knowledge_problem_count",
+              "contract_attachment_sales_problem_count"
             ],
             "properties": {
               "activity_budget": {"type": ["number", "null"], "minimum": 0},
@@ -205,6 +212,12 @@
               "contract_stack_count": {"type": ["integer", "null"], "minimum": 1},
               "expected_contract_amount": {"type": ["number", "null"], "minimum": 0},
               "sales_knowledge_fuzzy_count": {"type": "integer", "minimum": 0}
+              ,"contract_attachment_present": {"type": "boolean"}
+              ,"contract_attachment_row_count": {"type": "integer", "minimum": 0}
+              ,"contract_attachment_quantity": {"type": ["number", "null"], "minimum": 0}
+              ,"contract_attachment_amount": {"type": ["number", "null"], "minimum": 0}
+              ,"contract_attachment_knowledge_problem_count": {"type": "integer", "minimum": 0}
+              ,"contract_attachment_sales_problem_count": {"type": "integer", "minimum": 0}
             }
           },
           "contract_product_knowledge": {
@@ -232,6 +245,51 @@
                     "source_product_code": {"type": ["string", "null"]},
                     "source_product_name": {"type": ["string", "null"]},
                     "source_barcode_69": {"type": ["string", "null"]},
+                    "knowledge_status": {
+                      "enum": ["matched", "fuzzy_matched", "unmatched", "ambiguous", "conflict"]
+                    },
+                    "knowledge_product_id": {"type": ["string", "null"]},
+                    "knowledge_product_name": {"type": ["string", "null"]},
+                    "knowledge_product_code": {"type": ["string", "null"]},
+                    "knowledge_barcode_69": {"type": ["string", "null"]},
+                    "basis": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          },
+          "contract_attachment_product_knowledge": {
+            "type": "object",
+            "required": [
+              "status", "record_count", "matched_count", "fuzzy_count",
+              "problem_count", "problem_rows", "records", "basis"
+            ],
+            "properties": {
+              "status": {"enum": ["not_applicable", "pass", "fail"]},
+              "record_count": {"type": "integer", "minimum": 0},
+              "matched_count": {"type": "integer", "minimum": 0},
+              "fuzzy_count": {"type": "integer", "minimum": 0},
+              "problem_count": {"type": "integer", "minimum": 0},
+              "problem_rows": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 1}
+              },
+              "basis": {"type": "string", "minLength": 1},
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "excel_row", "contract_line_no", "source_page",
+                    "source_product_code", "source_product_name",
+                    "source_barcode_69", "source_quantity", "knowledge_status",
+                    "knowledge_product_id", "knowledge_product_name",
+                    "knowledge_product_code", "knowledge_barcode_69", "basis"
+                  ],
+                  "properties": {
+                    "excel_row": {"type": "integer", "minimum": 1},
+                    "contract_line_no": {"type": "integer", "minimum": 1},
+                    "source_page": {"type": "integer", "minimum": 1},
                     "knowledge_status": {
                       "enum": ["matched", "fuzzy_matched", "unmatched", "ambiguous", "conflict"]
                     },
@@ -292,6 +350,70 @@
               "seal_status": {"enum": ["present", "absent", "unverifiable"]},
               "integrity_status": {"enum": ["pass", "fail", "unverifiable"]},
               "integrity_basis": {"type": "string", "minLength": 1}
+            }
+          },
+          "contract_attachment_sales_reconciliation": {
+            "type": "object",
+            "required": [
+              "status", "record_count", "matched_count", "problem_count",
+              "records", "unmatched_contract_rows", "unmatched_sales_rows",
+              "quantity_status", "amount_status", "basis"
+            ],
+            "properties": {
+              "status": {"enum": ["not_applicable", "pass", "fail", "unverifiable"]},
+              "record_count": {"type": "integer", "minimum": 0},
+              "matched_count": {"type": "integer", "minimum": 0},
+              "problem_count": {"type": "integer", "minimum": 0},
+              "unmatched_contract_rows": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 1}
+              },
+              "unmatched_sales_rows": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 1}
+              },
+              "quantity_status": {
+                "enum": ["not_applicable", "exact", "mismatch", "unverifiable"]
+              },
+              "amount_status": {
+                "enum": ["not_applicable", "exact", "mismatch", "unverifiable"]
+              },
+              "basis": {"type": "string", "minLength": 1},
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "contract_line_no", "contract_source_page", "sales_excel_row",
+                    "status", "confidence", "field_comparisons", "basis"
+                  ],
+                  "properties": {
+                    "contract_line_no": {"type": "integer", "minimum": 1},
+                    "contract_source_page": {"type": "integer", "minimum": 1},
+                    "sales_excel_row": {"type": ["integer", "null"], "minimum": 1},
+                    "status": {"enum": ["pass", "fail", "unverifiable"]},
+                    "confidence": {"enum": ["high", "medium", "low"]},
+                    "basis": {"type": "string", "minLength": 1},
+                    "field_comparisons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "contract_value", "sales_value", "status"],
+                        "properties": {
+                          "field": {
+                            "enum": [
+                              "customer_name", "business_date", "product_code",
+                              "product_name", "barcode_69", "unit", "quantity",
+                              "retail_price", "total_amount"
+                            ]
+                          },
+                          "status": {"enum": ["exact", "fuzzy", "mismatch", "unverifiable"]}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           },
           "sales": {
@@ -409,7 +531,13 @@
                 "photo_knowledge_match_basis", "promotion_summary",
                 "sales_product_names", "sales_product_knowledge_ids",
                 "sales_product_match", "sales_product_match_basis", "sales_product_checks",
-                "contract_sales_status", "contract_stack_count", "claim_units",
+                "contract_attachment_product_names",
+                "contract_attachment_product_knowledge_ids",
+                "contract_attachment_product_match",
+                "contract_attachment_product_match_basis",
+                "contract_attachment_product_checks",
+                "contract_sales_status", "contract_attachment_sales_status",
+                "contract_stack_count", "claim_units",
                 "amount_rule_status", "amount_rule_basis", "supported_amount",
                 "status", "supplement_advice"
               ],
@@ -487,6 +615,22 @@
                   }
                 },
                 "contract_sales_status": {"enum": ["pass", "fail", "unverifiable"]},
+                "contract_attachment_sales_status": {
+                  "enum": ["not_applicable", "pass", "fail", "unverifiable"]
+                },
+                "contract_attachment_product_names": {
+                  "type": "array", "items": {"type": "string"}
+                },
+                "contract_attachment_product_knowledge_ids": {
+                  "type": "array", "items": {"type": "string", "minLength": 1}
+                },
+                "contract_attachment_product_match": {
+                  "enum": ["not_applicable", "exact", "fuzzy", "candidate", "unmatched"]
+                },
+                "contract_attachment_product_match_basis": {
+                  "type": "string", "minLength": 1
+                },
+                "contract_attachment_product_checks": {"type": "array"},
                 "contract_stack_count": {"type": ["integer", "null"], "minimum": 1},
                 "claim_units": {"type": ["integer", "null"], "minimum": 1},
                 "amount_rule_status": {"enum": ["pass", "manual"]},

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "scenario", "contract", "photo_reviews", "extraction_notes"],
   "properties": {
-    "schema_version": {"type": "string", "const": "2.3"},
+    "schema_version": {"type": "string", "const": "2.4"},
     "scenario": {"type": "string", "const": "promotional_display"},
     "contract": {
       "type": "object",
@@ -17,7 +17,7 @@
         "fee_basis", "claimed_amount", "contract_stack_count", "watermark_visible",
         "seal_visible", "requires_specific_products", "required_products",
         "required_product_identities", "requires_promotion",
-        "required_promotion", "stores", "notes"
+        "required_promotion", "sales_attachment", "stores", "notes"
       ],
       "properties": {
         "source_file": {"type": "string", "minLength": 1},
@@ -59,6 +59,79 @@
         },
         "requires_promotion": {"type": "boolean"},
         "required_promotion": {"type": ["string", "null"]},
+        "sales_attachment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "present", "source_pages", "records", "total_quantity", "total_amount"
+          ],
+          "properties": {
+            "present": {"type": "boolean"},
+            "source_pages": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "integer", "minimum": 1}
+            },
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "line_no", "source_page", "customer_name", "business_date",
+                  "product_code", "product_name", "barcode_69", "unit", "quantity",
+                  "retail_price", "total_amount"
+                ],
+                "properties": {
+                  "line_no": {"type": "integer", "minimum": 1},
+                  "source_page": {"type": "integer", "minimum": 1},
+                  "customer_name": {"type": ["string", "null"], "minLength": 1},
+                  "business_date": {"type": ["string", "null"], "minLength": 1},
+                  "product_code": {"type": ["string", "null"], "minLength": 1},
+                  "product_name": {"type": ["string", "null"], "minLength": 1},
+                  "barcode_69": {
+                    "type": ["string", "null"],
+                    "pattern": "^69[0-9]{11}$"
+                  },
+                  "unit": {"type": ["string", "null"], "minLength": 1},
+                  "quantity": {"type": ["number", "null"], "minimum": 0},
+                  "retail_price": {"type": ["number", "null"], "minimum": 0},
+                  "total_amount": {"type": ["number", "null"], "minimum": 0}
+                }
+              }
+            },
+            "total_quantity": {"type": ["number", "null"], "minimum": 0},
+            "total_amount": {"type": ["number", "null"], "minimum": 0}
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {"present": {"const": false}},
+                "required": ["present"]
+              },
+              "then": {
+                "properties": {
+                  "source_pages": {"maxItems": 0},
+                  "records": {"maxItems": 0},
+                  "total_quantity": {"type": "null"},
+                  "total_amount": {"type": "null"}
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {"present": {"const": true}},
+                "required": ["present"]
+              },
+              "then": {
+                "properties": {
+                  "source_pages": {"minItems": 1},
+                  "records": {"minItems": 1}
+                }
+              }
+            }
+          ]
+        },
         "stores": {
           "type": "array",
           "minItems": 1,

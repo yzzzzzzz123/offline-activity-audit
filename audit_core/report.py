@@ -292,7 +292,7 @@ def _add_personnel_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
         ws,
         row,
         [
-            "合计",
+            "合计金额",
             (
                 f"数量：{_number(summary['excel_mapped_quantity'])}\n"
                 f"计算奖励：{_number(summary['calculated_line_reward'])}元\n"
@@ -457,7 +457,13 @@ def _sales_difference_fields(item: dict[str, Any]) -> list[str]:
         KNOWLEDGE_FIELD_LABELS.get(str(comparison.get("field")), str(comparison.get("field")))
         for comparison in _sales_field_comparisons(item)
         if comparison.get("comparison") != "matched"
+        and not (
+            comparison.get("field") == "product_name"
+            and comparison.get("comparison") == "fuzzy"
+        )
     ]
+
+
 def _failed_display_controls(
     item: dict[str, Any],
     contract: dict[str, Any],
@@ -481,8 +487,14 @@ def _failed_display_controls(
         failed.append("合同商品知识库")
     if item.get("photo_knowledge_match") != "exact":
         failed.append("现场商品知识库")
-    if item.get("sales_product_match") != "exact":
+    if item.get("sales_product_match") not in {"exact", "fuzzy"}:
         failed.append("现场与销售商品")
+    if item.get("contract_attachment_product_match") not in {
+        "not_applicable",
+        "exact",
+        "fuzzy",
+    }:
+        failed.append("现场与合同附件商品")
     if contract.get("requires_promotion") and not item.get("promotion_present"):
         failed.append("合同促销要求")
     if item.get("amount_rule_status") != "pass":
@@ -806,11 +818,12 @@ def _contract_photo_text(
         or item.get("display_match") != "pass"
     )
     level = "unmatched" if hard_failure else ("fuzzy" if uncertain else "exact")
-    return (
-        f"{_match_confidence(level)}（门店{store}；日期{period}；"
-        f"陈列{display}；促销{promotion_result}；"
-        f"合同商品{contract_product_result}）"
-    )
+    parts = [f"门店{store}", f"日期{period}", f"陈列{display}"]
+    if contract.get("requires_promotion"):
+        parts.append(f"促销{promotion_result}")
+    if contract.get("requires_specific_products"):
+        parts.append(f"合同商品{contract_product_result}")
+    return f"{_match_confidence(level)}（{'；'.join(parts)}）"
 
 
 def _plain_advice(value: Any) -> str:
@@ -876,6 +889,11 @@ def _display_resubmission_items(
         contract_details.append("合同写到的具体商品要能对应知识库商品")
     if item.get("amount_rule_status") != "pass":
         contract_details.append("写清按店或按堆头的单价和数量")
+    contract_details.extend(
+        str(check["resubmission"]).strip()
+        for check in item.get("contract_attachment_product_checks") or []
+        if check.get("resubmission")
+    )
 
     photo_details: list[str] = []
     if not item.get("photo_files"):
@@ -905,6 +923,87 @@ def _display_resubmission_items(
     return result
 
 
+def _contract_attachment_store_text(item: dict[str, Any]) -> str:
+    status = str(item.get("contract_attachment_product_match") or "not_applicable")
+    if status == "not_applicable":
+        return ""
+    checks = list(item.get("contract_attachment_product_checks") or [])
+    if not checks:
+        return "合同附件未找到与现场商品对应的商品行"
+    lines = ["合同附件商品（客户活动期证据，不代表本店销量）"]
+    for index, check in enumerate(checks, 1):
+        lines.extend(
+            [
+                f"现场商品{index}（知识库）",
+                f"商品编码：{check.get('knowledge_product_code') or '缺编码'}",
+                f"商品名称：{check.get('knowledge_product_name') or '缺名称'}",
+                f"69码：{check.get('knowledge_barcode_69') or '缺69码'}",
+            ]
+        )
+        line_no = check.get("excel_row")
+        if line_no is None:
+            lines.extend(
+                [
+                    "对应合同附件：未找到",
+                    f"本行结论：{_match_confidence('unmatched')}",
+                ]
+            )
+            continue
+        page = check.get("source_page")
+        page_text = f"（PDF第{page}页）" if page else ""
+        lines.extend(
+            [
+                f"对应合同附件第{line_no}行{page_text}",
+                f"商品编码：{check.get('source_product_code') or '缺编码'}",
+                f"商品名称：{check.get('source_product_name') or '缺名称'}",
+                f"69码：{check.get('source_barcode_69') or '缺69码'}",
+                f"单位：{check.get('source_unit') or '未识别'}",
+                f"数量：{_number(check.get('source_quantity'))}",
+                f"零售价：{_number(check.get('source_retail_price'))}元",
+                f"合计金额：{_number(check.get('source_total_amount'))}元",
+                (
+                    "逐项核对："
+                    f"商品编码{_field_match_text(check.get('product_code_match'))}；"
+                    f"商品名称{_field_match_text(check.get('name_match'))}；"
+                    f"69码{_field_match_text(check.get('barcode_match'))}"
+                ),
+                f"本行结论：置信度：{dict(high='高', medium='中', low='低').get(str(check.get('confidence')), '低')}",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def _contract_attachment_product_text(item: dict[str, Any]) -> str:
+    status = str(item.get("contract_attachment_product_match") or "not_applicable")
+    if status == "not_applicable":
+        return ""
+    return _internal_product_text(
+        {
+            "sales_product_checks": item.get("contract_attachment_product_checks") or [],
+            "sales_product_match": status,
+        }
+    )
+
+
+def _contract_attachment_sales_text(value: dict[str, Any]) -> str:
+    status = str(value.get("status") or "not_applicable")
+    if status == "not_applicable":
+        return ""
+    confidence = "高" if status == "pass" else "低"
+    return f"置信度：{confidence}（{_clip(value.get('basis') or '未完成逐行核对', 180)}）"
+
+
+def _contract_attachment_knowledge_text(value: dict[str, Any]) -> str:
+    status = str(value.get("status") or "not_applicable")
+    if status == "not_applicable":
+        return ""
+    confidence = "高" if status == "pass" else "低"
+    return (
+        f"置信度：{confidence}（通过{int(value.get('matched_count') or 0) + int(value.get('fuzzy_count') or 0)}行；"
+        f"问题{int(value.get('problem_count') or 0)}行）"
+    )
+
+
 def _contract_requirement_lines(contract: dict[str, Any]) -> list[str]:
     """Show only contract requirements that actually exist in the source."""
 
@@ -932,10 +1031,12 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
     sales = result["sales"]
     contract_sales = result.get("contract_sales_reconciliation") or {}
     contract_knowledge = result.get("contract_product_knowledge") or {}
+    attachment_knowledge = result.get("contract_attachment_product_knowledge") or {}
+    attachment_sales = result.get("contract_attachment_sales_reconciliation") or {}
     _style_title(
         ws,
         "堆头陈列核销（简明对比）",
-        "按合同、现场照片、销售Excel的顺序核验；现场先确定知识库商品，再逐一核对相关销售行。",
+        "现场先确定知识库商品，再分别核对合同销售附件和独立销售Excel，最后核对两份销售材料。",
     )
     _write_header(
         ws,
@@ -983,6 +1084,111 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
     all_failed_controls: list[str] = []
 
     row = 4
+    activity_requests: list[str] = []
+    if contract_sales.get("customer_status") in {"mismatch", "unverifiable"}:
+        activity_requests.append("让销售客户名称与合同签订方能够对应")
+    if contract_sales.get("period_status") in {"mismatch", "unverifiable"}:
+        activity_requests.append("让销售业务日期完整落在合同执行周期内")
+    if contract_sales.get("integrity_status") != "pass":
+        activity_requests.append("重新提交盖章或带水印的完整合同")
+    if int(summary.get("sales_knowledge_problem_count") or 0) > 0:
+        activity_requests.append("重新导出销售Excel的商品知识库问题行")
+    sales_knowledge_text = (
+        f"精确{_number(summary.get('sales_knowledge_matched_count'))}行、"
+        f"模糊{_number(summary.get('sales_knowledge_fuzzy_count'))}行、"
+        f"问题{_number(summary.get('sales_knowledge_problem_count'))}行"
+    )
+    activity_values = [
+        (
+            "活动概况\n"
+            f"签订方：{_short_list(list(contract.get('contract_parties') or []), limit=4)}\n"
+            f"活动预算：{_number(contract.get('activity_budget'))}元；申报：{_number(contract.get('claimed_amount'))}元\n"
+            f"执行周期：{contract.get('activity_start') or '未识别'} 至 {contract.get('activity_end') or '未识别'}\n"
+            f"活动内容：{_clip(contract.get('activity_content') or '未识别', 120)}\n"
+            f"商家/门店：共{len(contract.get('stores') or [])}家\n"
+            f"堆头数量：{_number(contract.get('contract_stack_count'))}\n"
+            f"水印：{_number(contract.get('watermark_visible'))}\n"
+            f"盖章：{_number(contract.get('seal_visible'))}\n"
+            f"{contract_requirement_text}"
+        ),
+        "",
+        (
+            "销售概况\n"
+            f"客户：{_short_list(list(sales.get('customers') or []), limit=4)}\n"
+            f"业务日期：{_short_list(list(sales.get('period_values') or []), limit=6)}\n"
+            f"商品明细：{len(sales.get('records') or [])}行\n"
+            f"数量：{_number(sales.get('total_quantity'))}\n"
+            f"合计金额：{_number(sales.get('retail_amount'))}元\n"
+            f"商品知识库：{sales_knowledge_text}"
+        ),
+        (
+            f"合同主体与周期 ↔ 销售Excel：{_contract_sales_text(contract_sales)}\n"
+            f"销售Excel ↔ 商品知识库：{sales_knowledge_text}"
+        ),
+        "",
+        (
+            "置信度：高\n无需重新提交"
+            if not activity_requests
+            else "置信度：低\n要重新提交：" + "；".join(activity_requests)
+        ),
+    ]
+    _write_row(
+        ws,
+        row,
+        activity_values,
+        height=_display_row_height(activity_values),
+        total=True,
+        font_size=9,
+    )
+    row += 1
+
+    attachment = contract.get("sales_attachment") or {}
+    if attachment.get("present"):
+        attachment_requests: list[str] = []
+        if attachment_knowledge.get("status") == "fail":
+            attachment_requests.append(
+                "合同附件中的问题商品编码要与知识库正式编码一致"
+            )
+        if attachment_sales.get("status") != "pass":
+            attachment_requests.append("合同销售附件要与独立销售Excel逐行一致")
+        source_pages = "、".join(str(value) for value in attachment.get("source_pages") or [])
+        attachment_values = [
+            (
+                "合同销售附件\n"
+                f"来源页：第{source_pages or '未识别'}页\n"
+                f"商品明细：{len(attachment.get('records') or [])}行\n"
+                f"数量：{_number(attachment.get('total_quantity'))}\n"
+                f"合计金额：{_number(attachment.get('total_amount'))}元\n"
+                f"附件 ↔ 商品知识库：{_contract_attachment_knowledge_text(attachment_knowledge)}"
+            ),
+            "",
+            (
+                "独立销售Excel\n"
+                f"商品明细：{len(sales.get('records') or [])}行\n"
+                f"数量：{_number(sales.get('total_quantity'))}\n"
+                f"合计金额：{_number(sales.get('retail_amount'))}元"
+            ),
+            (
+                f"合同附件 ↔ 销售Excel：{_contract_attachment_sales_text(attachment_sales)}\n"
+                "证据范围：客户活动期；两份材料均无门店列，不能证明单店销量"
+            ),
+            "",
+            (
+                "置信度：高\n无需重新提交"
+                if not attachment_requests
+                else "置信度：低\n要重新提交：" + "；".join(attachment_requests)
+            ),
+        ]
+        _write_row(
+            ws,
+            row,
+            attachment_values,
+            height=_display_row_height(attachment_values),
+            total=True,
+            font_size=9,
+        )
+        row += 1
+
     for item in result["store_reconciliation"]:
         photo_names = "、".join(Path(str(value)).name for value in item["photo_files"]) or "未提交照片"
         period = period_labels.get(item["period_match"], str(item["period_match"]))
@@ -1028,24 +1234,13 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             if not contract.get("requires_promotion") or item.get("promotion_present")
             else "不符合"
         )
-        if row == 4:
-            contract_text = (
-                f"签订方：{_short_list(list(contract.get('contract_parties') or []), limit=4)}\n"
-                f"活动预算：{_number(contract.get('activity_budget'))}元；申报：{_number(contract.get('claimed_amount'))}元\n"
-                f"执行周期：{contract.get('activity_start') or '未识别'} 至 {contract.get('activity_end') or '未识别'}\n"
-                f"活动内容：{_clip(contract.get('activity_content') or '未识别', 120)}\n"
-                f"商家/门店：共{len(contract.get('stores') or [])}家；本店{item['contract_store_name']}\n"
-                f"堆头数量：总计{_number(contract.get('contract_stack_count'))}；本店{_number(store_record.get('stack_count'))}\n"
-                f"水印：{_number(contract.get('watermark_visible'))}\n"
-                f"盖章：{_number(contract.get('seal_visible'))}\n"
-                f"{contract_requirement_text}"
-            )
-        else:
-            contract_text = (
-                "合同总体见首行\n"
-                f"第{item['store_line_no']}家：{item['contract_store_name']}\n"
-                f"地址：{contract_address}\n本店堆头：{_number(store_record.get('stack_count'))}"
-            )
+        attachment_store_text = _contract_attachment_store_text(item)
+        contract_text = (
+            f"门店：{item['contract_store_name']}\n"
+            f"地址：{contract_address}\n"
+            f"本店堆头：{_number(store_record.get('stack_count'))}"
+            + (f"\n{attachment_store_text}" if attachment_store_text else "")
+        )
         visible_text = _short_list(
             list(item.get("visible_text") or []),
             limit=6,
@@ -1068,7 +1263,7 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
         sales_column_text = _sales_correspondence_text(
             item,
             sales,
-            include_summary=row == 4,
+            include_summary=False,
         )
         contract_product_result = {
             "not_applicable": "不适用",
@@ -1088,8 +1283,13 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
                 contract_product_result=contract_product_result,
             )
             + "\n"
-            f"现场 ↔ 销售：{_internal_product_text(item)}\n"
-            f"合同 ↔ 销售：{_contract_sales_text(contract_sales)}"
+            f"现场 ↔ 商品知识库：{photo_knowledge}\n"
+            + (
+                f"商品知识库 ↔ 合同附件：{_contract_attachment_product_text(item)}\n"
+                if item.get("contract_attachment_product_match") != "not_applicable"
+                else ""
+            )
+            + f"商品知识库 ↔ 销售Excel：{_internal_product_text(item)}"
         )
         units_text = _number(item.get("claim_units"))
         calculation_text = (
@@ -1127,19 +1327,27 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
         )
         row += 1
 
-    if summary["supplement_store_count"] == 0:
+    attachment_issue = (
+        attachment_knowledge.get("status") not in {"not_applicable", "pass"}
+        or attachment_sales.get("status") not in {"not_applicable", "pass"}
+    )
+    if summary["supplement_store_count"] == 0 and not attachment_issue:
         conclusion = "通过"
-    elif summary["passed_store_count"]:
+    elif summary["passed_store_count"] and summary["supplement_store_count"]:
         conclusion = "部分通过"
     else:
         conclusion = "暂不能核销"
     retail = _number(summary.get("sales_retail_amount"))
     failed_control_summary = "、".join(dict.fromkeys(all_failed_controls)) or "无"
+    if attachment_issue:
+        failed_control_summary = (
+            failed_control_summary + "、" if failed_control_summary != "无" else ""
+        ) + "合同销售附件"
     _write_row(
         ws,
         row,
         [
-            f"合计：合同{summary['contract_store_count']}家\n预算{_number(summary.get('activity_budget'))}元；申报{_number(summary['claimed_amount'])}元",
+            f"合计金额\n合同{summary['contract_store_count']}家；预算{_number(summary.get('activity_budget'))}元；申报{_number(summary['claimed_amount'])}元",
             f"共识别{summary['photo_count']}张照片",
             f"Excel读取{summary['sales_sku_count']}行商品\n数量{_number(summary['sales_quantity'])}；零售额{retail}元\n与现场商品相关的销售行已在各门店逐项展示",
             f"{summary['passed_store_count']}家通过；{summary['supplement_store_count']}家需补证\n未通过字段汇总：{failed_control_summary}",

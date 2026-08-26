@@ -106,8 +106,8 @@ def next_output_path(
     root.mkdir(parents=True, exist_ok=True)
     output_date = output_date_from_run_id(run_id)
     producer = normalize_producer_model(producer_model)
-    base = root / f"{output_date}-{producer}.xlsx"
-    base_html = base.with_suffix(".html")
+    base = root / f"{output_date}-{producer}.html"
+    base_xlsx = base.with_suffix(".xlsx")
     revision_pattern = re.compile(
         rf"^{re.escape(output_date)}-{re.escape(producer)}-1\.(\d+)\.(?:xlsx|html)$"
     )
@@ -116,12 +116,12 @@ def next_output_path(
         for path in root.iterdir()
         if path.is_file() and (match := revision_pattern.fullmatch(path.name)) is not None
     ]
-    if not base.exists() and not base_html.exists() and not revisions:
+    if not base.exists() and not base_xlsx.exists() and not revisions:
         return base
     revision = max(revisions, default=0) + 1
     while True:
-        candidate = root / f"{output_date}-{producer}-1.{revision}.xlsx"
-        if not candidate.exists() and not candidate.with_suffix(".html").exists():
+        candidate = root / f"{output_date}-{producer}-1.{revision}.html"
+        if not candidate.exists() and not candidate.with_suffix(".xlsx").exists():
             return candidate
         revision += 1
 
@@ -151,33 +151,53 @@ def _link_or_copy_exclusive(source: Path, target: Path) -> None:
         raise
 
 
+def _publish_html_without_overwrite(
+    temporary_workbook: Path,
+    temporary_html: Path,
+    run_id: str,
+    producer_model: str,
+    output_dir: Path,
+) -> Path:
+    """Publish the verified HTML exclusively and discard the internal workbook.
+
+    Both temporary artifacts remain private until the HTML has been linked or
+    copied to an unused final name.  Cleanup failures roll back the published
+    HTML so a failed run cannot leave a result that appears complete.
+    Historical XLSX files continue to reserve their old revision labels, but a
+    new run never creates a final XLSX artifact.
+    """
+
+    while True:
+        target_html = next_output_path(run_id, producer_model, output_dir)
+        try:
+            _link_or_copy_exclusive(temporary_html, target_html)
+        except FileExistsError:
+            continue
+        try:
+            temporary_html.unlink()
+            temporary_workbook.unlink()
+        except Exception:
+            target_html.unlink(missing_ok=True)
+            raise
+        return target_html
+
+
 def _publish_pair_without_overwrite(
     temporary_workbook: Path,
     temporary_html: Path,
     run_id: str,
     producer_model: str,
     output_dir: Path,
-) -> tuple[Path, Path]:
-    while True:
-        target_workbook = next_output_path(run_id, producer_model, output_dir)
-        target_html = target_workbook.with_suffix(".html")
-        created: list[Path] = []
-        try:
-            _link_or_copy_exclusive(temporary_workbook, target_workbook)
-            created.append(target_workbook)
-            _link_or_copy_exclusive(temporary_html, target_html)
-            created.append(target_html)
-        except FileExistsError:
-            for target in created:
-                target.unlink(missing_ok=True)
-            continue
-        except Exception:
-            for target in created:
-                target.unlink(missing_ok=True)
-            raise
-        temporary_workbook.unlink()
-        temporary_html.unlink()
-        return target_workbook, target_html
+) -> Path:
+    """Compatibility entry point for callers of the former pair publisher."""
+
+    return _publish_html_without_overwrite(
+        temporary_workbook,
+        temporary_html,
+        run_id,
+        producer_model,
+        output_dir,
+    )
 
 
 def run_audit(
@@ -213,7 +233,7 @@ def run_audit(
             validate_json(result, RESULT_SCHEMA)
             results.append(result)
 
-        temporary_workbook = output_root / f".{normalized_run_id}-{uuid.uuid4().hex}.xlsx"
+        temporary_workbook = temporary_root / "internal-report.xlsx"
         temporary_html = temporary_workbook.with_suffix(".html")
         create_combined_report(results, temporary_workbook)
         verification = verify_workbook(temporary_workbook, scenarios)
@@ -223,7 +243,7 @@ def run_audit(
             scenarios,
             workbook_path=temporary_workbook,
         )
-        published_workbook, published_html = _publish_pair_without_overwrite(
+        published_html = _publish_html_without_overwrite(
             temporary_workbook,
             temporary_html,
             normalized_run_id,
@@ -232,16 +252,14 @@ def run_audit(
         )
         temporary_workbook = None
         temporary_html = None
-        verification["path"] = str(published_workbook)
+        verification.pop("path", None)
         html_verification["path"] = str(published_html)
         verification["html"] = html_verification
         return {
             "run_id": normalized_run_id,
             "producer_model": normalized_producer_model,
-            "output": str(published_workbook),
-            "html_output": str(published_html),
+            "output": str(published_html),
             "outputs": {
-                "xlsx": str(published_workbook),
                 "html": str(published_html),
             },
             "scenarios": scenarios,
@@ -258,7 +276,10 @@ def run_audit(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="从 input/ 的1～2个活动材料ZIP生成线下活动核销Excel和本地HTML"
+        description=(
+            "从 input/ 的1～2个活动材料ZIP生成并校验线下活动核销结果，"
+            "正式发布一个可离线打开的HTML文件"
+        )
     )
     parser.add_argument(
         "--run-id",

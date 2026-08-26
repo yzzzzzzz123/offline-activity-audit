@@ -429,7 +429,11 @@ Use only explicit core contract terms. Extract every visible contracting party i
 
 Classify the fee wording with `fee_basis`: `per_store` only for an explicit fee per listed store, `per_stack` only for an explicit fee per stack, `total_only` when the document gives only a total budget/claim, and `unclear` when the allocation basis cannot be established. The legacy field `fee_per_store` is the unit-fee slot: put the explicit per-store or per-stack unit fee there, and use `0` for `total_only` or `unclear`. Never infer a unit fee by dividing the total claim. Use null for `activity_budget` or `contract_stack_count` when the document does not state them.
 
-Contract product knowledge is conditional. Set `requires_specific_products=true` only when a core contract term provides a concrete product identity that can be checked against a catalog, such as a product code, a sufficiently specific product name, or a complete valid 69 barcode. Populate both the readable `required_products` list and structured `required_product_identities`; each identity must retain the contract's `visible_text` and use null for identifiers that are absent. A generic brand, whole-series phrase such as `参半所有系列`, broad category, activity description, or appended sales/product table is not a narrow contract SKU condition: set `requires_specific_products=false` and both product arrays empty. Do not convert an appended product/sales table into a contractual promotion condition. Set `requires_promotion=true` only when the core contract explicitly requires a discount, gift, multi-buy, special price, or another named promotion mechanic. Use null or a limitation note instead of guessing.
+Contract product knowledge is conditional. Set `requires_specific_products=true` only when a core contract term provides a concrete product identity that can be checked against a catalog, such as a product code, a sufficiently specific product name, or a complete valid 69 barcode. Populate both the readable `required_products` list and structured `required_product_identities`; each identity must retain the contract's `visible_text` and use null for identifiers that are absent. A generic brand, whole-series phrase such as `参半所有系列`, broad category, activity description, or appended sales/product table is not a narrow contract SKU condition: set `requires_specific_products=false` and both product arrays empty. Do not convert an appended product/sales table into a contractual promotion condition. Set `requires_promotion=true` only when the core contract explicitly requires a discount, gift, multi-buy, special price, or another named promotion mechanic.
+
+Extract an appended printed sales-detail table separately into `contract.sales_attachment`; it is evidence from the contract PDF, never a contract product requirement or promotion condition. When no such row-level attachment exists, set `present=false`, `source_pages=[]`, `records=[]`, and both totals to null. When it exists, set `present=true`, list the distinct PDF page numbers in ascending order, and transcribe every printed detail row in its original order. Assign `line_no` consecutively from 1 and retain the actual PDF `source_page` for each row. Preserve these fields independently: customer name, business date, product code, product name, 69 code, unit, quantity, retail price, and row total amount. A business value that is not legible must be null; `line_no` and `source_page` must still be integers. Return a 69 code only when all 13 digits are legible, start with 69, and form a valid EAN-13. Numeric values must be visibly printed and non-negative. `total_quantity` and `total_amount` are optional printed grand totals: copy them only when the attachment explicitly shows them, otherwise use null. Do not sum rows, multiply quantity by price, infer a missing total, turn a printed total line into a detail record, or fill any value from another file. Record material limitations in `extraction_notes` instead of guessing.
+
+Use null or a limitation note instead of guessing.
 """
 
 
@@ -474,7 +478,22 @@ def _photo_prompt(
     product_reference_files: list[dict[str, Any]],
 ) -> str:
     names = "\n".join(f"- `{path.name}`" for path in images)
-    contract_json = json.dumps(contract_result["contract"], ensure_ascii=False, indent=2)
+    contract = contract_result["contract"]
+    photo_contract = {
+        key: contract[key]
+        for key in (
+            "activity_start",
+            "activity_end",
+            "display_standard",
+            "requires_specific_products",
+            "required_products",
+            "required_product_identities",
+            "requires_promotion",
+            "required_promotion",
+            "stores",
+        )
+    }
+    contract_json = json.dumps(photo_contract, ensure_ascii=False, indent=2)
     product_lines: list[str] = []
     products = {
         str(item["product_id"]): item for item in product_rag.get("products") or []
@@ -516,7 +535,7 @@ The following separately attached images are repository-owned product-reference 
 
 {product_context}
 
-The following already-validated contract JSON is authoritative only for contract store order, activity dates, display standard, product scope, and promotion requirements. Do not rewrite it and do not use it to invent facts that are not visible in a photo:
+The following already-validated contract JSON is authoritative only for contract store order, activity dates, display standard, product scope, and promotion requirements. The appended sales-detail transcript is intentionally excluded: never use attachment sales rows to identify a field product. Do not rewrite this JSON and do not use it to invent facts that are not visible in a photo:
 
 ```json
 {contract_json}
@@ -549,7 +568,73 @@ def _validate_personnel_sources(case: dict[str, Any], evidence: dict[str, Any]) 
         raise AuditError("AI 返回了不存在的转账截图文件名：" + "、".join(unknown))
 
 
-def _validate_contract_result(case: dict[str, Any], evidence: dict[str, Any]) -> None:
+def _validate_sales_attachment(
+    contract: dict[str, Any],
+    *,
+    source_page_count: int | None = None,
+) -> None:
+    attachment = contract["sales_attachment"]
+    present = bool(attachment["present"])
+    source_pages = [int(value) for value in attachment["source_pages"]]
+    records = list(attachment["records"])
+
+    if source_pages != sorted(set(source_pages)):
+        raise AuditError("合同附件销售明细来源页必须按升序排列且不得重复")
+    if source_page_count is not None and any(
+        page > source_page_count for page in source_pages
+    ):
+        raise AuditError("合同附件销售明细引用了合同 PDF 范围外的来源页")
+
+    if present:
+        if not source_pages or not records:
+            raise AuditError("合同存在附件销售明细时，来源页和逐行记录均不能为空")
+    elif (
+        source_pages
+        or records
+        or attachment.get("total_quantity") is not None
+        or attachment.get("total_amount") is not None
+    ):
+        raise AuditError("合同未附销售明细时，来源页、记录和总计必须为空")
+
+    line_numbers = [int(record["line_no"]) for record in records]
+    if line_numbers != list(range(1, len(records) + 1)):
+        raise AuditError("合同附件销售明细行号必须从 1 开始连续、唯一并保持印刷顺序")
+
+    source_page_set = set(source_pages)
+    for record in records:
+        source_page = int(record["source_page"])
+        if source_page not in source_page_set:
+            raise AuditError(
+                f"合同附件销售明细第 {record['line_no']} 行来源页不在 source_pages 中"
+            )
+        if source_page_count is not None and source_page > source_page_count:
+            raise AuditError(
+                f"合同附件销售明细第 {record['line_no']} 行引用了合同 PDF 范围外页面"
+            )
+        barcode = str(record.get("barcode_69") or "").strip()
+        if barcode and not ean13_is_valid(barcode):
+            raise AuditError(
+                f"合同附件销售明细第 {record['line_no']} 行包含无效EAN-13：{barcode}"
+            )
+        for field in ("quantity", "retail_price", "total_amount"):
+            value = record.get(field)
+            if value is not None and value < 0:
+                raise AuditError(
+                    f"合同附件销售明细第 {record['line_no']} 行 {field} 不能为负数"
+                )
+
+    for field in ("total_quantity", "total_amount"):
+        value = attachment.get(field)
+        if value is not None and value < 0:
+            raise AuditError(f"合同附件销售明细 {field} 不能为负数")
+
+
+def _validate_contract_result(
+    case: dict[str, Any],
+    evidence: dict[str, Any],
+    *,
+    source_page_count: int | None = None,
+) -> None:
     contract = evidence["contract"]
     expected_contract = Path(case["contract_pdf"]).name
     if Path(str(contract["source_file"])).name != expected_contract:
@@ -576,6 +661,7 @@ def _validate_contract_result(case: dict[str, Any], evidence: dict[str, Any]) ->
             raise AuditError(f"合同具体商品身份包含无效EAN-13：{barcode}")
     if not contract["requires_promotion"] and contract["required_promotion"] not in {None, ""}:
         raise AuditError("合同未要求促销形式时，required_promotion 必须为空")
+    _validate_sales_attachment(contract, source_page_count=source_page_count)
     party_values = [str(value).strip() for value in contract["contract_parties"]]
     if any(not value for value in party_values) or len(party_values) != len(set(party_values)):
         raise AuditError("合同签订方不能为空或重复")
@@ -907,7 +993,11 @@ def extract_with_codex(
         max_attempts=max_attempts,
         attempt_timeout_seconds=attempt_timeout_seconds,
         reasoning_effort=DEFAULT_REASONING_EFFORT,
-        post_validate=lambda value: _validate_contract_result(case, value),
+        post_validate=lambda value: _validate_contract_result(
+            case,
+            value,
+            source_page_count=len(page_images),
+        ),
     )
 
     photo_root = root / "model-promotional_display-photos"
@@ -977,7 +1067,7 @@ def extract_with_codex(
     )
 
     merged = {
-        "schema_version": "2.3",
+        "schema_version": "2.4",
         "scenario": "promotional_display",
         "contract": contract_result["contract"],
         "photo_reviews": photo_result["photo_reviews"],

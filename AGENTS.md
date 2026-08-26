@@ -30,7 +30,7 @@ photo uniqueness, or reimbursement decision and must never be returned as submit
 
 Never give the model a sales Excel or access to repository inputs, prior results, caches, history, or the acceptance workbook. AI must not calculate amounts, select Excel product names, or make reimbursement decisions.
 
-Deterministic Python must safely unpack and route ZIPs, read Excel cells, preserve original source names and rows, aggregate quantities, map products, calculate differences and supported amounts, detect duplicate images, validate results, and generate the workbook.
+Deterministic Python must safely unpack and route ZIPs, read Excel cells, preserve original source names and rows, aggregate quantities, map products, calculate differences and supported amounts, detect duplicate images, validate results, and publish the one canonical self-contained HTML. A temporary workbook or other intermediate representation may exist only inside the run-scoped temporary area for deterministic rendering and verification; it is never a delivery file.
 
 For `personnel_incentive`, deterministic code must reconcile every aggregated sales-Excel SKU
 through the same validated repository product knowledge base before it can support an incentive
@@ -42,16 +42,22 @@ SKU's supported reward at zero. Catalog identity comes from code; product-refere
 sent to the personnel vision pass and are not settlement or transfer evidence.
 
 For `promotional_display`, the validated repository product knowledge base is the authoritative
-product-identity ledger. Deterministic code must first reconcile every sales-Excel row by its
-source product code, product name, and 69 code: product code and valid EAN-13 must strictly match,
-while the product name may be exact or uniquely fuzzy for that same strict product. It must then
-reconcile any specifically required contract
-product; and resolve every field-photo product through the same catalog. Only then may it compare
-submitted files by catalog product IDs, compatible names, and strict 69 codes. A sales row that cannot map to the catalog, maps
-ambiguously, has conflicting identifiers, has an invalid 69 code, or lacks a required identity
-field fails the sales-file knowledge gate. An unregistered external product code fails even when
-the name and barcode appear plausible. Raw source values remain immutable and must never be silently
-normalized into a pass.
+product-identity ledger. Deterministic code must reconcile every standalone sales-Excel row and every
+printed contract sales-attachment row separately by its source product code, product name, and 69
+code: supplied product code and valid EAN-13 remain strict, while the product name may be exact or
+uniquely fuzzy for that same strict product. It must also reconcile any specifically required product
+from the core contract terms and resolve every field-photo product through the same catalog. A row
+that cannot map to the catalog, maps ambiguously, contains conflicting identifiers, has an invalid
+69 code, or lacks the identity needed for a unique match fails only its own source gate. An
+unregistered external product code fails even when the name and barcode appear plausible. Raw source
+values remain immutable and must never be silently normalized into a pass.
+
+Keep the core contract-product condition and the printed sales attachment semantically separate.
+Only an explicit core term can populate `requires_specific_products` and become a contractual SKU
+condition. `contract.sales_attachment` is a page- and row-preserving transcript of an appended sales
+table; it never creates a product requirement or promotion requirement. When no attachment exists,
+the attachment-dependent controls are conditionally not applicable rather than failed. Printed
+attachment totals are transcribed when present but are never reconstructed by model arithmetic.
 
 Product names never require character-for-character equality; unique fuzzy compatibility is allowed
 throughout. Supplied product codes/registered aliases and supplied 69 codes remain strict. A field
@@ -65,90 +71,100 @@ a resubmission reason by itself. When the 69 code is exact, the knowledge item i
 and quantity and reward agree, show `置信度：中` with `无需重新提交`; request a clearer
 settlement line only when the mapping itself remains low-confidence, unmatched, or ambiguous.
 
-The same display audit must then close three internal comparisons: contract signing party/period/
-integrity against sales customer/business date, contract store/date/display/promotion/optional
-product against field photos, and sales identity against photo identity. Amount is automatic only
-for an explicit per-store or per-stack unit basis; a total-only or unclear contract is never divided
-automatically.
+The display product chain must close four explicit links: field photo → product knowledge base,
+knowledge base → contract sales attachment when present, knowledge base → standalone sales Excel,
+and contract sales attachment → standalone sales Excel when present. The last link compares original
+customer/date/product/quantity/price/amount fields only where both sources actually provide them; it
+does not invent missing values or totals. The attachment and standalone Excel have no authoritative
+store column, so both support only customer-level activity-period and product-sales evidence. They
+must never be assigned to a photographed store or presented as proof that a particular store sold a
+product. Store/date/display/promotion evidence still comes from the core contract and field photos.
+Amount is automatic only for an explicit per-store or per-stack unit basis; a total-only or unclear
+contract is never divided automatically.
 
 Never approve an amount only because totals match. Preserve source archive hashes, raw paths, Excel rows, contract or settlement lines, visible limitations, and per-item/per-store evidence.
 
 ## Output contract
 
-Create every result from an empty workbook and publish two sibling delivery files directly to:
+Every Agent executing an audit must invoke the repository-bundled runner and no other production
+entrypoint:
 
-`worktrees/<YYYYMMDD>-<producer-model>.xlsx`
+```powershell
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model>
+```
+
+An Agent must not call internal report/render functions as an alternative workflow, handwrite an
+HTML result, copy a prior page, patch a generated page after the run, or rebuild the frontend from a
+description or screenshot. The bundled runner is responsible for extraction, deterministic business
+logic, rendering, verification, and atomic publication.
+
+Publish exactly one formal delivery file per run:
 
 `worktrees/<YYYYMMDD>-<producer-model>.html`
 
-`producer-model` 必须由实际执行本次任务的模型明确传入：Codex 使用 `codex`，其他模型
-使用可识别的安全标签，例如 `qwen3.7`。`run-id` 必须以有效的 `YYYYMMDD` 业务日期
-开头，后续追踪标识不进入最终文件名。首次 Codex 结果例如 `20260818-codex.xlsx`；
-同日期、同模型再次生成（包括同一输入重跑）时依次使用
-`20260818-codex-1.1.xlsx`、`20260818-codex-1.2.xlsx`。
+Do not publish an `.xlsx`, JSON sidecar, asset directory, or second scenario page. `producer-model`
+must be supplied by the model that actually executes the run: Codex uses `codex`; another model uses
+a clear safe label such as `qwen3.7`. `run-id` must begin with a valid `YYYYMMDD` business date; later
+tracking text does not enter the delivery name. The first Codex result is
+`20260818-codex.html`; same-date same-producer reruns become `20260818-codex-1.1.html`, then
+`20260818-codex-1.2.html`. Never overwrite or refill a missing revision, and keep an independent
+sequence for each producer. Do not create persistent run directories, Git run branches, repository
+snapshots, caches, or another delivery location.
 
-Never overwrite an existing result. The Excel and HTML from one run must use the same stem and revision. Keep a separate revision sequence for every date and producer model, and treat either extension as reserving that revision. Revision labels are monotonic audit identities: if an older workbook or page is moved or deleted, select one greater than the highest remaining revision and never refill the missing label. Do not create persistent run directories, Git run branches, repository snapshots, caches, or separate delivery locations.
+The HTML is the complete formal result. It must be one UTF-8, self-contained `file://` document with
+all verified business data, CSS, JavaScript, and interaction state inline; it must require no server,
+network, CDN, font download, sibling workbook, or separate asset. A temporary workbook may still be
+created from empty state inside the run-scoped temporary directory as a deterministic data/rendering
+intermediate. It must pass its internal verification, must never be exposed to the model, and must be
+deleted before the run finishes. A failed run publishes nothing.
 
-The workbook has one six-column sheet per submitted scenario. With both scenarios, sheet order is `人员激励核销`, then `堆头核销`. It must contain no formulas or formula-error values. The personnel
-sheet shows the Excel product, selected knowledge-base product code/name/69 code, exact barcode
-result, exact-or-fuzzy name result, settlement comparison, amount comparison, and concrete
-resubmission action in the existing six columns. Each personnel product row title uses only the complete
-name of the uniquely selected knowledge-base product, without a `结算第N行` prefix; the settlement image's recognized name stays in the
-visual-evidence column and becomes the title only when no knowledge product was uniquely resolved. The display
-sheet keeps only the fixed six-column contract-store rows followed immediately by its total row.
-It is a human-readable management summary: A shows contract terms, B shows field-photo facts and the
-catalog product established from them, C shows only the sales rows relevant to that field product,
-D shows exactly the three internal comparisons, E shows the short amount calculation, and F shows
-the decision plus at most one concrete resubmission request per source file type. Never append a
-secondary sales-detail table. In the first contract row, the seal result must occupy its own
-`盖章：是/否` line immediately after the watermark line. Omit the product or promotion line entirely
-when the contract does not contain that optional requirement; never print a negative placeholder.
-Within column C, render each field-photo catalog product and its corresponding sales row as separate
-labeled code/name/69-code/quantity blocks inside the existing cell, rather than a slash-delimited
-identity sentence. The HTML view renders those same visible fields as compact key/value tables. The
-field photo establishes the catalog product first. Sales-row
-selection then starts again from that product's exact registered 69 code plus an exact or
-fuzzy-compatible product name; the row must independently resolve to the same catalog product before
-its product-code cell is strictly verified. Every relevant row must be shown without arbitrary top-N truncation and must
-say what Excel contains, what the catalog product contains, and which fields agree or differ; a bare
-`未匹配` is forbidden. A bad sales row unrelated to the store's field product remains an internal
-diagnostic and must not fail every contract store.
-A catalog-unique registered short code may establish the photo product, but it stops at that boundary.
-The same short code occurring inside a sales product name must never locate a row, override a different
-69 code/name, or justify rewriting an independently different product row. If no exact-69 plus
-compatible-name row resolves to the photo product, report that the valid sales row is missing.
-Full field comparisons, candidate sets, image hashes, visual bases, and reasoning boundaries remain
-in the validated audit JSON and must not be dumped into Excel cells.
+The one HTML contains a main reconciliation interface plus scenario subinterfaces, not separate
+files:
 
-Every product or relationship shown in Excel uses one overall status only: `置信度：高`,
-`置信度：中`, or `置信度：低`. Exact, fuzzy, or mismatch wording may remain only in the short
-field-by-field explanation and must not be repeated as a separate overall match label. Excel must use plain language and tell the reader exactly what to resubmit, naming
-the file type, Excel rows/fields, or visible photo content. The workbook is the reader's complete
-handoff: never write `详见审计JSON`, `见内部结果`, or point to another unavailable file. Engineering
-terms such as candidate hit, RAG, product ID, convergence, raw hash, or SKU stay out of cells.
+- the main interface shows run identity, overall conclusion, scenario entry points, counts, amounts,
+  and a plain-language list of materials that must be resubmitted;
+- the personnel-incentive subinterface shows product reconciliation, the selected knowledge-base
+  identity, settlement-image and transfer evidence, amount comparison, and one combined settlement-
+  and-payment area for totals, actual application, recipient, store correspondence, and complete date;
+- the promotional-display subinterface shows the campaign/core-contract overview, conditional sales-
+  attachment detail, product correspondence, store/photo reconciliation, and campaign settlement.
+  Contract-wide facts and final settlement remain outside the store list.
 
-The HTML is a second deterministic view of the just-generated workbook, not a second audit result.
-It must embed the complete visible six-column content of every workbook row in one UTF-8 file and
-must not add, omit, reinterpret, truncate, or independently calculate any business fact. It must
-open directly from disk without a server, network, CDN, font download, external JavaScript, or
-separate asset directory. Provide ordinary-reader controls for scenario switching, keyword search,
-pass/supplement/summary filtering, compact view, expand/collapse, opening the sibling Excel,
-copying a row conclusion, and returning to the top. The same plain-language and forbidden-engineering-
-term rules apply to both formats. Generate and verify both temporary files before publishing either;
-a failed run must leave neither final sibling behind.
+For promotional display, show the four product links without collapsing them into one unexplained
+status: photo → knowledge base, knowledge base → contract sales attachment, knowledge base →
+standalone sales Excel, and attachment → standalone sales Excel. Product code and valid 69 code are
+strict where supplied; only product names may be uniquely fuzzy. Every relevant source row is kept in
+printed/source order with its page or Excel row and concrete differing fields. If the contract has no
+sales attachment, omit its detail table and mark only the two attachment-dependent controls
+conditionally not applicable. Never use an attachment row to create a core contract product or
+promotion condition. Never attach an attachment/Excel row to a store: neither source has a
+store-authoritative column, so they support customer-level activity-period and product-sales evidence
+only. Store performance remains grounded in the core contract and field photos.
 
-Treat the HTML as a quiet internal review tool, not a marketing page or a decorative dashboard.
-Use a compact Chinese header, a desktop overview sidebar plus reading workspace, a cool neutral
-background, one deep-green interaction accent, and semantic colors only for pass, supplement, and
-summary states. Use one offline sans-serif font stack, 12px panel corners, and 8px control corners.
-Do not add a hero banner, calligraphy, English eyebrow labels, decorative watermarks or dots,
-textures, gradients, circular row numbers, heavy shadows, or staged entry animation. The first
-record must be visible in the initial desktop viewport and in a 390px mobile viewport; the page must
-not overflow horizontally, and source filenames must wrap instead of being clipped. Keep row kind
-and business status independent so a summary row that requests material remains visible under the
-supplement filter. Honor reduced-motion preferences and avoid continuous scroll listeners.
+Every product or relationship uses one overall `置信度：高/中/低`. Exact, fuzzy, or mismatch wording
+belongs only in the short field-level explanation. Tell the reader exactly which PDF page, attachment
+line, Excel row/field, settlement line, transfer screenshot, or visible photo content must be
+resubmitted. Never require the reader to consult audit JSON or expose candidate sets, hashes, product
+IDs, convergence, RAG terminology, or model reasoning.
 
-The workbook under `worktrees/` whose name includes `已追加产品促销` is acceptance-only. Runtime code and model prompts must never open, copy, or depend on it.
+The canonical interface asset is
+`skills/orchestrate-offline-audit/assets/canban-audit-shell.html`. The production generator
+`audit_core.html_report.create_html_report_from_workbook` may inject verified run data only through
+the asset's designated data and integrity-hash slots. Every other template byte—including the fixed
+template-version marker, CSS, DOM structure,
+visible interface copy, layout, JavaScript interactions, and the exact button set—must be reused
+unchanged. `audit_core.html_report.verify_html_report` must verify the canonical template version and
+static-shell fingerprint before publication.
+
+Future audit runs and ordinary feature/fix tasks must not restyle, regenerate, paraphrase, reorder, or
+extend the canonical shell; they must not change its CSS, static DOM, visible copy, interaction model,
+or add buttons. The shell may change only when the user explicitly asks for a frontend redesign. That
+same redesign change must deliberately update the asset version, expected fingerprint/structural
+verification, affected tests, and this output contract. Do not silently weaken or bypass the
+verification to accept a changed shell.
+
+Legacy or acceptance workbooks under `worktrees/` are test-only, are not formal output, and must never
+be read, copied, or used by runtime code or model prompts.
 
 ## Change verification
 
@@ -159,4 +175,4 @@ py -3 -B -m unittest discover -s tests -v
 py -3 -B -m compileall -q audit_core skills
 ```
 
-Also validate all JSON files and Skill frontmatter, run the formal command against the retained real ZIP inputs when the execution path changes, verify the generated workbook, and finish with `git diff --check` and `git status --short`.
+Also validate all JSON files and Skill frontmatter, run the bundled formal command against the retained real ZIP inputs when the execution path changes, verify that only the canonical self-contained HTML is published and that its template version/static fingerprint pass, confirm every temporary workbook is removed, and finish with `git diff --check` and `git status --short`.

@@ -9,10 +9,19 @@ from openpyxl import load_workbook
 
 from audit_core.common import AuditError
 from audit_core.common import validate_json
-from audit_core.display import _contract_sales_reconciliation, _display_control
+from audit_core.display import (
+    _contract_attachment_sales_reconciliation,
+    _contract_sales_reconciliation,
+    _display_control,
+)
 from audit_core.html_report import (
+    TEMPLATE_ASSET_PATH,
     _row_heading,
+    _row_kind,
+    _row_section,
     _row_status,
+    _render_template,
+    _workbook_payload,
     create_html_report_from_workbook,
     verify_html_report,
 )
@@ -118,6 +127,12 @@ def _display_result() -> dict:
             "sales_knowledge_matched_count": 1,
             "sales_knowledge_fuzzy_count": 0,
             "sales_knowledge_problem_count": 0,
+            "contract_attachment_present": False,
+            "contract_attachment_row_count": 0,
+            "contract_attachment_quantity": None,
+            "contract_attachment_amount": None,
+            "contract_attachment_knowledge_problem_count": 0,
+            "contract_attachment_sales_problem_count": 0,
             "photo_count": 1,
             "passed_store_count": 1,
             "supplement_store_count": 0,
@@ -147,6 +162,13 @@ def _display_result() -> dict:
             "required_product_identities": [],
             "requires_promotion": False,
             "required_promotion": None,
+            "sales_attachment": {
+                "present": False,
+                "source_pages": [],
+                "records": [],
+                "total_quantity": None,
+                "total_amount": None,
+            },
             "stores": [
                 {
                     "line_no": 1,
@@ -162,6 +184,16 @@ def _display_result() -> dict:
             "records": [],
             "knowledge_product_ids": [],
             "basis": "合同核心条款未限定具体商品，知识库商品门禁不适用。",
+        },
+        "contract_attachment_product_knowledge": {
+            "status": "not_applicable",
+            "record_count": 0,
+            "matched_count": 0,
+            "fuzzy_count": 0,
+            "problem_count": 0,
+            "problem_rows": [],
+            "records": [],
+            "basis": "合同包未附商品销售明细，本项不核验。",
         },
         "contract_pdf": {},
         "contract_sales_reconciliation": {
@@ -194,6 +226,18 @@ def _display_result() -> dict:
             "integrity_status": "pass",
             "integrity_basis": "合同可见水印或盖章。",
         },
+        "contract_attachment_sales_reconciliation": {
+            "status": "not_applicable",
+            "record_count": 0,
+            "matched_count": 0,
+            "problem_count": 0,
+            "records": [],
+            "unmatched_contract_rows": [],
+            "unmatched_sales_rows": [],
+            "quantity_status": "not_applicable",
+            "amount_status": "not_applicable",
+            "basis": "合同包未附商品销售明细，本项不核验。",
+        },
         "sales": {
             "source_file": "堆头销售.xlsx",
             "total_quantity": 20,
@@ -215,7 +259,10 @@ def _display_result() -> dict:
                     "product_code": "CP-KQ-YG-0001",
                     "product_name": "示例商品原名",
                     "barcode": "6970356167341",
+                    "unit": "支",
                     "quantity": 20,
+                    "retail_price": 19.9,
+                    "total_amount": 398,
                 }
             ],
             "knowledge_reconciliation": [
@@ -359,6 +406,12 @@ def _display_result() -> dict:
                     }
                 ],
                 "contract_sales_status": "pass",
+                "contract_attachment_sales_status": "not_applicable",
+                "contract_attachment_product_names": [],
+                "contract_attachment_product_knowledge_ids": [],
+                "contract_attachment_product_match": "not_applicable",
+                "contract_attachment_product_match_basis": "合同包未附商品销售明细，本项不核验。",
+                "contract_attachment_product_checks": [],
                 "contract_stack_count": 1,
                 "claim_units": 1,
                 "amount_rule_status": "pass",
@@ -374,6 +427,142 @@ def _display_result() -> dict:
     }
 
 
+def _attachment_contract_and_sales(row_count: int = 36) -> tuple[dict, dict]:
+    attachment_rows: list[dict] = []
+    sales_rows: list[dict] = []
+    for line_no in range(1, row_count + 1):
+        quantity = line_no + 10
+        retail_price = line_no + 20
+        total_amount = quantity * retail_price
+        code = f"CP-TEST-{line_no:04d}"
+        barcode = f"69{line_no:011d}"
+        name = f"参半测试商品{line_no}"
+        attachment_rows.append(
+            {
+                "line_no": line_no,
+                "source_page": 3 if line_no <= 23 else 4,
+                "customer_name": "东莞市诚成行供应链管理有限公司",
+                "business_date": "2026-04",
+                "product_code": code,
+                "product_name": name,
+                "barcode_69": barcode,
+                "unit": "支",
+                "quantity": quantity,
+                "retail_price": retail_price,
+                "total_amount": total_amount,
+            }
+        )
+        sales_rows.append(
+            {
+                "excel_row": line_no + 1,
+                "customer_name": "东莞市诚成行供应链管理有限公司",
+                "period_text": "2026-04",
+                "product_code": code,
+                "product_name": name,
+                "barcode": barcode,
+                "unit": "支",
+                "quantity": quantity,
+                "retail_price": retail_price,
+                "total_amount": total_amount,
+            }
+        )
+    total_quantity = sum(item["quantity"] for item in attachment_rows)
+    total_amount = sum(item["total_amount"] for item in attachment_rows)
+    contract = {
+        "sales_attachment": {
+            "present": True,
+            "source_pages": [3, 4],
+            "records": attachment_rows,
+            "total_quantity": total_quantity,
+            "total_amount": total_amount,
+        }
+    }
+    sales = {
+        "records": sales_rows,
+        "total_quantity": total_quantity,
+        "retail_amount": total_amount,
+    }
+    return contract, sales
+
+
+def _display_result_with_attachment() -> dict:
+    result = _display_result()
+    attachment = {
+        "present": True,
+        "source_pages": [3],
+        "records": [
+            {
+                "line_no": 1,
+                "source_page": 3,
+                "customer_name": "示例客户",
+                "business_date": "2026-08",
+                "product_code": "CP-KQ-YG-0001",
+                "product_name": "示例商品原名",
+                "barcode_69": "6970356167341",
+                "unit": "支",
+                "quantity": 20,
+                "retail_price": 19.9,
+                "total_amount": 398,
+            }
+        ],
+        "total_quantity": 20,
+        "total_amount": 398,
+    }
+    result["contract"]["sales_attachment"] = attachment
+    result["summary"].update(
+        {
+            "contract_attachment_present": True,
+            "contract_attachment_row_count": 1,
+            "contract_attachment_quantity": 20,
+            "contract_attachment_amount": 398,
+            "contract_attachment_knowledge_problem_count": 0,
+            "contract_attachment_sales_problem_count": 0,
+        }
+    )
+    result["contract_attachment_product_knowledge"] = {
+        "status": "pass",
+        "record_count": 1,
+        "matched_count": 1,
+        "fuzzy_count": 0,
+        "problem_count": 0,
+        "problem_rows": [],
+        "records": [],
+        "basis": "1/1行通过商品知识库；全部通过。",
+    }
+    result["contract_attachment_sales_reconciliation"] = (
+        _contract_attachment_sales_reconciliation(
+            {"sales_attachment": attachment},
+            result["sales"],
+        )
+    )
+    store = result["store_reconciliation"][0]
+    store.update(
+        {
+            "contract_attachment_sales_status": "pass",
+            "contract_attachment_product_names": ["示例商品原名"],
+            "contract_attachment_product_knowledge_ids": ["canban-example"],
+            "contract_attachment_product_match": "exact",
+            "contract_attachment_product_match_basis": "现场商品在合同销售附件中可以对应。",
+            "contract_attachment_product_checks": deepcopy(
+                store["sales_product_checks"]
+            ),
+        }
+    )
+    return result
+
+
+def _row_with_first_cell_prefix(worksheet, prefix: str) -> int:
+    for row_index in range(4, worksheet.max_row + 1):
+        value = str(worksheet.cell(row_index, 1).value or "").strip()
+        if value.startswith(prefix):
+            return row_index
+    raise AssertionError(f"{worksheet.title} 未找到首列以 {prefix!r} 开头的业务行")
+
+
+def _display_detail_row(worksheet) -> int:
+    return _row_with_first_cell_prefix(worksheet, "门店：")
+
+
 class ProducerFilenameTests(unittest.TestCase):
     def test_temporary_run_directory_is_short_and_does_not_embed_run_id(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -386,13 +575,13 @@ class ProducerFilenameTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             first = next_output_path("20260818-simple-007", "codex", root)
-            self.assertEqual(first.name, "20260818-codex.xlsx")
+            self.assertEqual(first.name, "20260818-codex.html")
             first.touch()
             second = next_output_path("20260818-simple-007", "codex", root)
-            self.assertEqual(second.name, "20260818-codex-1.1.xlsx")
+            self.assertEqual(second.name, "20260818-codex-1.1.html")
             second.touch()
             third = next_output_path("20260818-simple-007", "codex", root)
-            self.assertEqual(third.name, "20260818-codex-1.2.xlsx")
+            self.assertEqual(third.name, "20260818-codex-1.2.html")
 
     def test_each_model_has_an_independent_sequence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -400,7 +589,7 @@ class ProducerFilenameTests(unittest.TestCase):
             (root / "20260818-codex.xlsx").touch()
             self.assertEqual(
                 next_output_path("20260818-simple-008", "qwen3.7", root).name,
-                "20260818-qwen3.7.xlsx",
+                "20260818-qwen3.7.html",
             )
 
     def test_missing_historical_files_do_not_reuse_a_revision_label(self) -> None:
@@ -409,13 +598,13 @@ class ProducerFilenameTests(unittest.TestCase):
             (root / "20260818-codex-1.3.xlsx").touch()
             self.assertEqual(
                 next_output_path("20260818-simple-009", "codex", root).name,
-                "20260818-codex-1.4.xlsx",
+                "20260818-codex-1.4.html",
             )
             (root / "20260818-codex.xlsx").touch()
             (root / "20260818-codex-1.1.xlsx").touch()
             self.assertEqual(
                 next_output_path("20260818-simple-010", "codex", root).name,
-                "20260818-codex-1.4.xlsx",
+                "20260818-codex-1.4.html",
             )
 
     def test_html_only_file_also_reserves_its_revision_label(self) -> None:
@@ -424,15 +613,15 @@ class ProducerFilenameTests(unittest.TestCase):
             (root / "20260818-codex.html").touch()
             self.assertEqual(
                 next_output_path("20260818-simple-011", "codex", root).name,
-                "20260818-codex-1.1.xlsx",
+                "20260818-codex-1.1.html",
             )
             (root / "20260818-codex-1.4.html").touch()
             self.assertEqual(
                 next_output_path("20260818-simple-012", "codex", root).name,
-                "20260818-codex-1.5.xlsx",
+                "20260818-codex-1.5.html",
             )
 
-    def test_xlsx_and_html_are_published_with_the_same_revision(self) -> None:
+    def test_only_verified_html_is_published(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             temporary_workbook = root / ".result.xlsx"
@@ -440,7 +629,7 @@ class ProducerFilenameTests(unittest.TestCase):
             temporary_workbook.write_bytes(b"xlsx-content")
             temporary_html.write_text("<html>result</html>", encoding="utf-8")
 
-            workbook_path, html_path = _publish_pair_without_overwrite(
+            html_path = _publish_pair_without_overwrite(
                 temporary_workbook,
                 temporary_html,
                 "20260818-simple-013",
@@ -448,10 +637,9 @@ class ProducerFilenameTests(unittest.TestCase):
                 root,
             )
 
-            self.assertEqual(workbook_path.name, "20260818-codex.xlsx")
             self.assertEqual(html_path.name, "20260818-codex.html")
-            self.assertEqual(workbook_path.read_bytes(), b"xlsx-content")
             self.assertEqual(html_path.read_text(encoding="utf-8"), "<html>result</html>")
+            self.assertFalse((root / "20260818-codex.xlsx").exists())
             self.assertFalse(temporary_workbook.exists())
             self.assertFalse(temporary_html.exists())
 
@@ -471,8 +659,61 @@ class ProducerFilenameTests(unittest.TestCase):
 
 
 class HtmlReportTests(unittest.TestCase):
+    def test_canonical_template_is_the_only_html_asset_and_empty_payload_fails(self) -> None:
+        self.assertTrue(TEMPLATE_ASSET_PATH.is_file())
+        self.assertEqual(
+            list(TEMPLATE_ASSET_PATH.parent.glob("*.html")),
+            [TEMPLATE_ASSET_PATH],
+        )
+        with self.assertRaisesRegex(AuditError, "没有可展示的核销场景"):
+            _render_template({"sheets": []})
+
+    def test_row_sections_and_actual_application_are_deterministic(self) -> None:
+        self.assertEqual(_row_kind(["实际申请金额", "", "", "", "", ""]), "summary")
+        self.assertEqual(_row_kind(["活动概况", "", "", "", "", ""]), "summary")
+        self.assertEqual(_row_kind(["合同销售附件", "", "", "", "", ""]), "summary")
+        for scenario in ("personnel_incentive", "promotional_display"):
+            self.assertEqual(_row_section("record", scenario), "detail")
+            self.assertEqual(_row_section("summary", scenario), "settlement")
+        self.assertEqual(
+            _row_section(
+                "summary",
+                "promotional_display",
+                ["活动概况", "", "", "", "", ""],
+            ),
+            "overview",
+        )
+        self.assertEqual(
+            _row_section(
+                "summary",
+                "promotional_display",
+                ["合同销售附件", "", "", "", "", ""],
+            ),
+            "overview",
+        )
+
+    def test_display_attachment_rows_keep_overview_detail_and_settlement_separate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workbook_path = Path(temporary) / "result.xlsx"
+            create_combined_report([_display_result_with_attachment()], workbook_path)
+            payload = _workbook_payload(workbook_path)
+            self.assertEqual(len(payload["sheets"]), 1)
+            rows = payload["sheets"][0]["rows"]
+            self.assertEqual(
+                [row["section"] for row in rows],
+                ["overview", "overview", "detail", "settlement"],
+            )
+            self.assertTrue(rows[0]["heading"].startswith("活动概况"))
+            self.assertTrue(rows[1]["heading"].startswith("合同销售附件"))
+            self.assertTrue(rows[2]["heading"].startswith("示例门店"))
+            self.assertTrue(rows[3]["heading"].startswith("合计金额"))
+
     def test_summary_row_with_a_concrete_resubmission_is_still_an_issue(self) -> None:
         values = ["收款人与日期", "", "", "", "", "置信度：低\n要重新提交：补拍转账截图"]
+        self.assertEqual(_row_status(values, "summary"), "issue")
+        values[5] = "暂不能核销"
+        self.assertEqual(_row_status(values, "summary"), "issue")
+        values[5] = "完全不匹配，需补材料"
         self.assertEqual(_row_status(values, "summary"), "issue")
         values[5] = "置信度：高\n身份与日期均可确认，无需重新提交"
         self.assertEqual(_row_status(values, "summary"), "summary")
@@ -523,21 +764,94 @@ class HtmlReportTests(unittest.TestCase):
                 ["人员激励核销", "堆头核销"],
             )
             self.assertEqual(verification["external_dependency_count"], 0)
-            self.assertEqual(verification["button_count"], 7)
+            self.assertEqual(verification["button_count"], 6)
             self.assertTrue(verification["workbook_content_equal"])
+            self.assertTrue(verification["static_template_equal"])
+            self.assertEqual(verification["template_version"], "2.0.0")
+            self.assertRegex(verification["style_sha256"], r"^[0-9a-f]{64}$")
+            self.assertRegex(verification["shell_sha256"], r"^[0-9a-f]{64}$")
+
+            payload = _workbook_payload(workbook_path)
+            for sheet in payload["sheets"]:
+                for row in sheet["rows"]:
+                    expected = _row_section(
+                        row["kind"],
+                        sheet["scenario"],
+                        row["values"],
+                    )
+                    self.assertEqual(row["section"], expected)
 
             html = html_path.read_text(encoding="utf-8")
             self.assertIn("只看待补", html)
             self.assertIn("展开全部", html)
+            self.assertIn('id="homeView"', html)
+            self.assertIn('id="scenarioView"', html)
+            self.assertIn('id="scenarioOverview"', html)
+            self.assertIn('id="homeButton"', html)
+            self.assertIn('data-enter-sheet="${index}"', html)
+            self.assertIn("核销总览", html)
+            self.assertIn("进入${escapeHtml(sheet.name)}", html)
+            self.assertNotIn("__CANBAN_STYLE_SHA256__", html)
+            self.assertNotIn("__CANBAN_SHELL_SHA256__", html)
+            self.assertNotIn("__AUDIT_DATA__", html)
+            self.assertNotIn('class="compact"', html)
+            self.assertNotIn(".compact ", html)
+            self.assertNotIn("densityButton", html)
+            self.assertNotIn("紧凑显示", html)
+            self.assertNotIn("舒展显示", html)
+            self.assertNotIn("state.compact", html)
+            self.assertNotIn("classList.toggle('compact'", html)
+            self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", html)
+            self.assertIn("-webkit-line-clamp: 1;", html)
             self.assertNotIn("打印 / 存 PDF", html)
             self.assertNotIn('id="printButton"', html)
             self.assertNotIn("window.print()", html)
-            self.assertIn("打开同版 Excel", html)
+            self.assertNotIn("打开同版 Excel", html)
+            self.assertNotIn('id="excelLink"', html)
+            self.assertNotIn("setExcelLink", html)
+            self.assertNotIn('id="fileName"', html)
+            self.assertNotIn("页面可离线打开", html)
+            self.assertNotIn("内容与同名 Excel 保持一致", html)
+            self.assertNotIn("本页用于", html)
+            self.assertNotIn("点击记录", html)
+            self.assertNotIn("复制本条结论", html)
+            self.assertNotIn("data-copy-row", html)
+            self.assertNotIn("navigator.clipboard", html)
+            self.assertNotIn('id="toast"', html)
+            self.assertNotIn("只看汇总", html)
+            self.assertIn(
+                '<div class="brand-mark" aria-label="参半 CANBAN"><strong>参半</strong><small>CANBAN</small></div>',
+                html,
+            )
+            self.assertNotIn('class="metric-hint"', html)
+            self.assertNotIn('class="panel-tag"', html)
+            self.assertNotIn('id="listEyebrow"', html)
+            self.assertNotIn('data-status="summary"', html)
             self.assertIn("现场商品1（知识库）", html)
             self.assertIn("对应销售Excel第2行", html)
             self.assertIn('class="identity-table"', html)
+            self.assertIn('class="photo-product-table"', html)
+            self.assertIn('data-photo-products="true"', html)
+            self.assertIn('data-knowledge-comparison="true"', html)
+            self.assertIn('class="knowledge-comparison-table"', html)
+            self.assertIn("consumed !== content.length", html)
+            self.assertIn("renderPersonnelKnowledgeComparison", html)
+            for semantic_class in (
+                "semantic-code",
+                "semantic-quantity",
+                "semantic-pass",
+                "semantic-issue",
+                "semantic-review",
+                "semantic-settlement",
+                "semantic-source",
+            ):
+                self.assertIn(f".{semantic_class}", html)
+            self.assertIn('field-${cellIndex}', html)
             self.assertIn('class="side-panel"', html)
             self.assertIn('class="workspace"', html)
+            self.assertIn('class="brand-mark"', html)
+            self.assertIn('data-business-section="settlement"', html)
+            self.assertIn('data-business-section="overview"', html)
             self.assertIn("IntersectionObserver", html)
             self.assertIn("@media (prefers-reduced-motion: reduce)", html)
             self.assertNotIn("Offline activity verification", html)
@@ -549,6 +863,64 @@ class HtmlReportTests(unittest.TestCase):
             self.assertNotIn('class="record-number"', html)
             self.assertNotIn("—", html)
             self.assertNotRegex(html, r'<(?:script|link)\b[^>]*(?:src|href)=["\']https?://')
+
+    def test_html_rejects_density_toggle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workbook_path = root / "20260818-codex.xlsx"
+            html_path = root / "20260818-codex.html"
+            create_combined_report([_personnel_result(), _display_result()], workbook_path)
+            create_html_report_from_workbook(workbook_path, html_path)
+            html = html_path.read_text(encoding="utf-8").replace(
+                "</body>",
+                '<button id="densityButton">紧凑显示</button></body>',
+            )
+            html_path.write_text(html, encoding="utf-8")
+            with self.assertRaisesRegex(AuditError, "紧凑/宽松"):
+                verify_html_report(
+                    html_path,
+                    ["personnel_incentive", "promotional_display"],
+                    workbook_path=workbook_path,
+                )
+
+    def test_html_rejects_removed_meta_and_copy_controls(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workbook_path = root / "result.xlsx"
+            html_path = root / "result.html"
+            create_combined_report([_personnel_result(), _display_result()], workbook_path)
+            create_html_report_from_workbook(workbook_path, html_path)
+            html = html_path.read_text(encoding="utf-8").replace(
+                "</body>",
+                '<button data-copy-row="4">复制本条结论</button></body>',
+            )
+            html_path.write_text(html, encoding="utf-8")
+            with self.assertRaisesRegex(AuditError, "无效页面文案或功能"):
+                verify_html_report(
+                    html_path,
+                    ["personnel_incentive", "promotional_display"],
+                    workbook_path=workbook_path,
+                )
+
+    def test_html_rejects_static_style_drift_from_canonical_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workbook_path = root / "result.xlsx"
+            html_path = root / "result.html"
+            create_combined_report([_personnel_result(), _display_result()], workbook_path)
+            create_html_report_from_workbook(workbook_path, html_path)
+            html = html_path.read_text(encoding="utf-8").replace(
+                "background: var(--page);",
+                "background: #ffffff;",
+                1,
+            )
+            html_path.write_text(html, encoding="utf-8")
+            with self.assertRaisesRegex(AuditError, "静态模板"):
+                verify_html_report(
+                    html_path,
+                    ["personnel_incentive", "promotional_display"],
+                    workbook_path=workbook_path,
+                )
 
     def test_html_keeps_every_workbook_row_without_top_n_truncation(self) -> None:
         result = deepcopy(_display_result())
@@ -658,6 +1030,55 @@ class DisplayContractTests(unittest.TestCase):
         self.assertEqual(result["status"], "fail")
         self.assertEqual(result["period_status"], "mismatch")
 
+    def test_contract_attachment_36_rows_match_sales_excel(self) -> None:
+        contract, sales = _attachment_contract_and_sales()
+        result = _contract_attachment_sales_reconciliation(contract, sales)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["record_count"], 36)
+        self.assertEqual(result["matched_count"], 36)
+        self.assertEqual(result["problem_count"], 0)
+        self.assertEqual(result["quantity_status"], "exact")
+        self.assertEqual(result["amount_status"], "exact")
+        self.assertTrue(
+            all(
+                comparison["status"] in {"exact", "fuzzy"}
+                for record in result["records"]
+                for comparison in record["field_comparisons"]
+            )
+        )
+
+    def test_contract_attachment_reports_each_mismatched_field(self) -> None:
+        cases = {
+            "product_code": ("product_code", "CP-WRONG-0001"),
+            "barcode_69": ("barcode", "6900000000000"),
+            "unit": ("unit", "盒"),
+            "quantity": ("quantity", 999),
+            "retail_price": ("retail_price", 999),
+            "total_amount": ("total_amount", 999),
+        }
+        for expected_field, (sales_field, wrong_value) in cases.items():
+            with self.subTest(field=expected_field):
+                contract, sales = _attachment_contract_and_sales(row_count=1)
+                sales["records"][0][sales_field] = wrong_value
+                result = _contract_attachment_sales_reconciliation(contract, sales)
+                self.assertEqual(result["status"], "fail")
+                comparison = next(
+                    item
+                    for item in result["records"][0]["field_comparisons"]
+                    if item["field"] == expected_field
+                )
+                self.assertEqual(comparison["status"], "mismatch")
+                self.assertIn(expected_field, result["records"][0]["basis"])
+
+    def test_contract_attachment_absence_is_not_applicable(self) -> None:
+        result = _contract_attachment_sales_reconciliation(
+            {"sales_attachment": {"present": False}},
+            {"records": []},
+        )
+        self.assertEqual(result["status"], "not_applicable")
+        self.assertEqual(result["record_count"], 0)
+        self.assertEqual(result["problem_count"], 0)
+
     def test_workbook_separates_display_standard_and_photo_reuse(self) -> None:
         validate_json(
             _display_result(),
@@ -709,19 +1130,26 @@ class DisplayContractTests(unittest.TestCase):
                     if personnel_sheet.cell(row_index, 1).value == "实际申请金额"
                 )
                 self.assertEqual(personnel_sheet.cell(claim_row, 2).value, "不适用")
-                contract_text = str(workbook["堆头核销"]["A4"].value)
+                display_sheet = workbook["堆头核销"]
+                activity_row = _row_with_first_cell_prefix(display_sheet, "活动概况")
+                detail_row = _display_detail_row(display_sheet)
+                total_row = _row_with_first_cell_prefix(display_sheet, "合计金额")
+                contract_text = str(display_sheet.cell(activity_row, 1).value)
                 self.assertIn("水印：是\n盖章：是\n陈列：", contract_text)
                 self.assertNotIn("水印：是；盖章：是", contract_text)
                 self.assertNotIn("商品：未限定具体商品", contract_text)
                 self.assertNotIn("促销：未要求特定促销形式", contract_text)
                 self.assertNotIn("\n商品：", contract_text)
                 self.assertNotIn("\n促销：", contract_text)
-                photo_text = str(workbook["堆头核销"]["B4"].value)
-                sales_text = str(workbook["堆头核销"]["C4"].value)
-                comparison_text = str(workbook["堆头核销"]["D4"].value)
-                self.assertIn("客户：示例客户", sales_text)
-                self.assertIn("业务日期：2026-08", sales_text)
-                self.assertIn("销售汇总：1行；数量20；金额398元", sales_text)
+                activity_sales_text = str(display_sheet.cell(activity_row, 3).value)
+                photo_text = str(display_sheet.cell(detail_row, 2).value)
+                sales_text = str(display_sheet.cell(detail_row, 3).value)
+                comparison_text = str(display_sheet.cell(detail_row, 4).value)
+                self.assertIn("客户：示例客户", activity_sales_text)
+                self.assertIn("业务日期：2026-08", activity_sales_text)
+                self.assertIn("商品明细：1行", activity_sales_text)
+                self.assertIn("数量：20", activity_sales_text)
+                self.assertIn("合计金额：398元", activity_sales_text)
                 self.assertIn(
                     "现场商品1（知识库）\n商品编码：CP-KQ-YG-0001\n"
                     "商品名称：示例商品原名\n69码：6970356167341",
@@ -751,18 +1179,17 @@ class DisplayContractTests(unittest.TestCase):
                     photo_text,
                 )
                 self.assertIn(
-                    "合同 ↔ 销售：置信度：高"
+                    "合同主体与周期 ↔ 销售Excel：置信度：高"
                     "（主体一致；日期在合同期内；水印/盖章可核验）",
-                    comparison_text,
+                    str(display_sheet.cell(activity_row, 4).value),
                 )
                 self.assertIn(
                     "合同 ↔ 现场：置信度：高"
                     "（门店一致；日期一致；陈列符合",
                     comparison_text,
                 )
-                self.assertIn("合同商品不适用", comparison_text)
                 self.assertIn(
-                    "现场 ↔ 销售：置信度：高"
+                    "商品知识库 ↔ 销售Excel：置信度：高"
                     "（商品编码一致；商品名称精确匹配；69码一致）",
                     comparison_text,
                 )
@@ -770,10 +1197,10 @@ class DisplayContractTests(unittest.TestCase):
                 self.assertIn("视觉依据：画面中可清楚数出4列纵向陈列。", photo_text)
                 self.assertIn("可见纵列数：4", photo_text)
                 self.assertIn("照片复用检查：未发现跨门店照片复用", photo_text)
-                self.assertIn("计算：1 × 1000元", str(workbook["堆头核销"]["E4"].value))
-                self.assertIn("本店支持：1000元", str(workbook["堆头核销"]["E4"].value))
+                self.assertIn("计算：1 × 1000元", str(display_sheet.cell(detail_row, 5).value))
+                self.assertIn("本店支持：1000元", str(display_sheet.cell(detail_row, 5).value))
                 self.assertEqual(
-                    str(workbook["堆头核销"]["F4"].value),
+                    str(display_sheet.cell(detail_row, 6).value),
                     "结论：通过\n无需重新提交",
                 )
                 self.assertNotIn("陈列重复", photo_text + comparison_text)
@@ -784,7 +1211,6 @@ class DisplayContractTests(unittest.TestCase):
                     for cell in row_cells
                 )
                 self.assertNotIn("匹配结果：", visible_text)
-                display_sheet = workbook["堆头核销"]
                 self.assertEqual(
                     [display_sheet.cell(3, column).value for column in range(1, 7)],
                     [
@@ -796,9 +1222,9 @@ class DisplayContractTests(unittest.TestCase):
                         "结论 / 要重新提交什么",
                     ],
                 )
-                self.assertEqual(display_sheet.max_row, 5)
-                self.assertEqual(display_sheet.auto_filter.ref, "A3:F5")
-                self.assertTrue(str(display_sheet["A5"].value).startswith("合计：合同1家"))
+                self.assertEqual(display_sheet.max_row, 6)
+                self.assertEqual(display_sheet.auto_filter.ref, "A3:F6")
+                self.assertTrue(str(display_sheet.cell(total_row, 1).value).startswith("合计金额"))
                 forbidden_sections = {
                     "销售Excel ↔ 商品知识库逐行明细",
                     "销售Excel原始三字段",
@@ -884,13 +1310,15 @@ class DisplayContractTests(unittest.TestCase):
             create_combined_report([result], target)
             workbook = load_workbook(target, data_only=False)
             try:
-                sales_text = str(workbook["堆头核销"]["C4"].value)
+                sheet = workbook["堆头核销"]
+                detail_row = _display_detail_row(sheet)
+                sales_text = str(sheet.cell(detail_row, 3).value)
                 self.assertIn("Excel第2行", sales_text)
                 self.assertNotIn("Excel第3行", sales_text)
                 self.assertNotIn("完全不在知识库的商品", sales_text)
                 self.assertNotIn("审计JSON", sales_text)
                 self.assertEqual(
-                    str(workbook["堆头核销"]["F4"].value),
+                    str(sheet.cell(detail_row, 6).value),
                     "结论：通过\n无需重新提交",
                 )
             finally:
@@ -943,7 +1371,9 @@ class DisplayContractTests(unittest.TestCase):
             create_combined_report([result], target)
             workbook = load_workbook(target, data_only=False)
             try:
-                sales_text = str(workbook["堆头核销"]["C4"].value)
+                sheet = workbook["堆头核销"]
+                detail_row = _display_detail_row(sheet)
+                sales_text = str(sheet.cell(detail_row, 3).value)
                 self.assertIn(
                     "对应销售Excel第2行\n商品编码：020260011\n"
                     "商品名称：参半示例商品\n69码：6970356167341\n数量：20",
@@ -957,7 +1387,7 @@ class DisplayContractTests(unittest.TestCase):
                     "本行结论：置信度：低",
                     sales_text,
                 )
-                conclusion = str(workbook["堆头核销"]["F4"].value)
+                conclusion = str(sheet.cell(detail_row, 6).value)
                 self.assertIn("主要问题：现场与销售商品", conclusion)
                 self.assertIn(
                     "第2行重新导出时：商品编码改为CP-KQ-YG-0001；商品名称、69码不用改",
@@ -1030,7 +1460,9 @@ class DisplayContractTests(unittest.TestCase):
             create_combined_report([result], target)
             workbook = load_workbook(target, data_only=False)
             try:
-                sales_text = str(workbook["堆头核销"]["C4"].value)
+                sheet = workbook["堆头核销"]
+                detail_row = _display_detail_row(sheet)
+                sales_text = str(sheet.cell(detail_row, 3).value)
                 self.assertIn(
                     "对应销售Excel：未找到69码为6970356164265且商品名称能够对应",
                     sales_text,
@@ -1040,7 +1472,7 @@ class DisplayContractTests(unittest.TestCase):
                     sales_text,
                 )
                 self.assertNotIn("Excel第6行", sales_text)
-                conclusion = str(workbook["堆头核销"]["F4"].value)
+                conclusion = str(sheet.cell(detail_row, 6).value)
                 self.assertIn("不要把其他商品行改成这一商品", conclusion)
                 self.assertNotIn("第6行", conclusion)
             finally:
@@ -1078,13 +1510,15 @@ class DisplayContractTests(unittest.TestCase):
             create_combined_report([result], target)
             workbook = load_workbook(target, data_only=False)
             try:
-                sales_text = str(workbook["堆头核销"]["C4"].value)
+                sheet = workbook["堆头核销"]
+                detail_row = _display_detail_row(sheet)
+                sales_text = str(sheet.cell(detail_row, 3).value)
                 self.assertIn(
                     "本行结论：置信度：中",
                     sales_text,
                 )
                 self.assertEqual(
-                    str(workbook["堆头核销"]["F4"].value),
+                    str(sheet.cell(detail_row, 6).value),
                     "结论：通过\n无需重新提交",
                 )
             finally:
@@ -1119,7 +1553,9 @@ class DisplayContractTests(unittest.TestCase):
             create_combined_report([result], target)
             workbook = load_workbook(target, data_only=False)
             try:
-                sales_text = str(workbook["堆头核销"]["C4"].value)
+                sheet = workbook["堆头核销"]
+                detail_row = _display_detail_row(sheet)
+                sales_text = str(sheet.cell(detail_row, 3).value)
                 for excel_row in range(2, 7):
                     self.assertIn(f"Excel第{excel_row}行", sales_text)
                 self.assertNotIn("其余", sales_text)

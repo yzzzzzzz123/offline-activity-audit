@@ -30,6 +30,7 @@ DISPLAY_HEADERS = {
     "product_code": {"商品编码", "产品编码"},
     "product": {"商品名称", "名称", "产品名称"},
     "barcode": {"条形码", "条码"},
+    "unit": {"单位", "销售单位"},
     "quantity": {"数量", "销售数量", "销量"},
     "retail_price": {"零售价", "销售单价"},
     "total": {"合计金额", "零售金额", "金额"},
@@ -204,6 +205,9 @@ def read_display_sales(path: str | Path) -> dict[str, Any]:
                 "product_code": str(formula_ws.cell(row, columns.get("product_code", 0)).value or ""),
                 "barcode": barcode_text(formula_ws.cell(row, columns.get("barcode", 0)).value),
                 "product_name": str(product).strip(),
+                "unit": str(
+                    formula_ws.cell(row, columns.get("unit", 0)).value or ""
+                ).strip(),
                 "quantity": _json_quantity(quantity),
                 "retail_price": (
                     _number(value_ws.cell(row, columns["retail_price"]).value)
