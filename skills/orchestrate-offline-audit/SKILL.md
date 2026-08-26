@@ -93,6 +93,12 @@ catalog product's complete authoritative name as the heading when uniquely resol
 reason to resubmit when strict 69 code, quantity, reward, recipient/store correspondence, and complete
 date pass.
 
+Render `销售Excel + 商品知识库（代码核验）` as one six-column source-comparison table: 来源、商品名称、
+商品编码、69码、数量 / 奖励、匹配结果. Put the Excel quantity and calculated reward in the shared
+quantity/reward column, and put the name/barcode comparison and knowledge confidence in the two source
+rows of the shared result column. The desktop table must wrap inside its panel without horizontal
+scrolling; below 780 px it must become labeled source blocks, and below 520 px a single-column block.
+
 Keep these promotional-display meanings separate:
 
 - core contract terms establish parties, activity period, display/promotion obligations, fee basis,

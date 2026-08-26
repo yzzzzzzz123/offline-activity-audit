@@ -1100,12 +1100,12 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             if sales_internal_status == "fail"
             else "无法完整核对"
         )
-        + (
-            f"（问题行：{_row_ranges([int(value) for value in sales_internal_problem_rows])}）"
-            if sales_internal_problem_rows
-            else ""
-        )
     )
+    if sales_internal_problem_rows:
+        sales_internal_text += (
+            f"（问题行："
+            f"{_row_ranges([int(value) for value in sales_internal_problem_rows])}）"
+        )
 
     row = 4
     activity_requests: list[str] = []

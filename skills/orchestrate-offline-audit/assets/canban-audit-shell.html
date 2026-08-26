@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="canban-template-version" content="2.0.0">
+  <meta name="canban-template-version" content="2.0.1">
   <meta name="canban-style-sha256" content="__CANBAN_STYLE_SHA256__">
   <meta name="canban-shell-sha256" content="__CANBAN_SHELL_SHA256__">
   <title>参半渠道活动核销</title>
@@ -381,10 +381,11 @@
     .photo-products, .identity-card, .knowledge-comparison { margin: 8px 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-small); }
     .photo-products-title, .identity-title { padding: 7px 9px; color: #007dbd; background: var(--accent-soft); border-bottom: 1px solid #ccecff; font-size: 11px; font-weight: 760; }
     .table-scroll { width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+    .knowledge-comparison .table-scroll { overflow-x: visible; }
     .photo-product-table, .identity-table, .knowledge-comparison-table { width: 100%; border-collapse: collapse; }
     .photo-product-table { min-width: 620px; table-layout: fixed; }
     .identity-table { min-width: 360px; table-layout: fixed; }
-    .knowledge-comparison-table { min-width: 920px; table-layout: fixed; }
+    .knowledge-comparison-table { min-width: 0; table-layout: fixed; }
     .photo-product-table th, .photo-product-table td, .identity-table th, .identity-table td,
     .knowledge-comparison-table th, .knowledge-comparison-table td { padding: 6px 8px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--line); }
     .photo-product-table tr:last-child td, .identity-table tr:last-child th, .identity-table tr:last-child td { border-bottom: 0; }
@@ -398,17 +399,17 @@
     .identity-table td { color: var(--ink); font-weight: 650; }
     .knowledge-comparison-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 9px; color: #007dbd; background: var(--accent-soft); border-bottom: 1px solid #ccecff; font-size: 11px; font-weight: 760; }
     .knowledge-comparison-head small { max-width: 54%; font-size: 9px; overflow-wrap: anywhere; text-align: right; }
-    .knowledge-comparison-table thead th { color: var(--ink-soft); background: var(--surface-soft); font-size: 10px; font-weight: 700; white-space: nowrap; }
-    .knowledge-comparison-table tbody th { color: var(--ink); font-size: 11px; font-weight: 760; white-space: nowrap; }
+    .knowledge-comparison-table thead th { color: var(--ink-soft); background: var(--surface-soft); font-size: 10px; font-weight: 700; }
+    .knowledge-comparison-table tbody th { color: var(--ink); font-size: 11px; font-weight: 760; }
+    .knowledge-comparison-table th, .knowledge-comparison-table td { overflow-wrap: anywhere; }
     .knowledge-comparison-table td { color: var(--ink); font-size: 11px; font-weight: 650; }
     .knowledge-comparison-table tr:last-child th, .knowledge-comparison-table tr:last-child td { border-bottom: 0; }
-    .knowledge-comparison-table th:nth-child(1) { width: 14%; }
-    .knowledge-comparison-table th:nth-child(2) { width: 21%; }
-    .knowledge-comparison-table th:nth-child(3) { width: 14%; }
-    .knowledge-comparison-table th:nth-child(4) { width: 14%; }
-    .knowledge-comparison-table th:nth-child(5) { width: 12%; }
+    .knowledge-comparison-table th:nth-child(1) { width: 11%; }
+    .knowledge-comparison-table th:nth-child(2) { width: 27%; }
+    .knowledge-comparison-table th:nth-child(3) { width: 16%; }
+    .knowledge-comparison-table th:nth-child(4) { width: 16%; }
+    .knowledge-comparison-table th:nth-child(5) { width: 13%; }
     .knowledge-comparison-table th:nth-child(6) { width: 17%; }
-    .knowledge-comparison-table th:nth-child(7) { width: 8%; }
     .identity-spacer { height: 2px; }
 
     .empty-state { padding: 42px 20px; text-align: center; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); }
@@ -440,6 +441,15 @@
       .toolbar { grid-template-columns: 1fr; }
       .evidence-grid, .settlement-fields { grid-template-columns: 1fr; }
       .record-body .evidence-cell { grid-column: auto; }
+      .knowledge-comparison-head { align-items: flex-start; flex-direction: column; gap: 2px; }
+      .knowledge-comparison-head small { max-width: 100%; text-align: left; }
+      .knowledge-comparison-table, .knowledge-comparison-table tbody { display: block; }
+      .knowledge-comparison-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+      .knowledge-comparison-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+      .knowledge-comparison-table tbody tr:last-child { border-bottom: 0; }
+      .knowledge-comparison-table tbody th, .knowledge-comparison-table tbody td { display: block; min-width: 0; padding: 7px 8px; border: 0; }
+      .knowledge-comparison-table tbody tr > th:nth-child(n), .knowledge-comparison-table tbody tr > td:nth-child(n) { width: 100%; }
+      .knowledge-comparison-table tbody th::before, .knowledge-comparison-table tbody td::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--ink-soft); font-size: 9px; font-weight: 650; }
     }
     @media (max-width: 520px) {
       .brand-mark strong { font-size: 24px; }
@@ -468,6 +478,7 @@
       .record-body { padding: 7px; }
       .evidence-label { align-items: flex-start; flex-direction: column; }
       .evidence-label small { max-width: 100%; text-align: left; }
+      .knowledge-comparison-table tbody tr { grid-template-columns: 1fr; }
       .back-top { right: 10px; bottom: 10px; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -671,10 +682,10 @@
         return `<section class="knowledge-comparison" data-knowledge-comparison="true">
           <div class="knowledge-comparison-head"><span>销售Excel + 商品知识库（代码核验）</span>${meta.source ? `<small class="semantic-source">${escapeHtml(meta.source)}</small>` : ''}</div>
           <div class="table-scroll"><table class="knowledge-comparison-table">
-            <thead><tr><th>来源</th><th>商品名称</th><th>商品编码</th><th>69码</th><th>数量 / 奖励</th><th>匹配结果</th><th>置信度</th></tr></thead>
+            <thead><tr><th>来源</th><th>商品名称</th><th>商品编码</th><th>69码</th><th>数量 / 奖励</th><th>匹配结果</th></tr></thead>
             <tbody>
-              <tr><th scope="row">销售Excel</th><td>Excel商品：${escapeHtml(excelProduct[1])}</td><td>&nbsp;</td><td class="semantic-code">条码：${escapeHtml(barcodeQuantity[1])}</td><td class="semantic-quantity">数量：${escapeHtml(barcodeQuantity[2])}</td><td rowspan="2">${renderSemanticText(matchText)}</td><td rowspan="2" class="${confidenceClass}">知识库结论：置信度：${escapeHtml(confidence[1])}</td></tr>
-              <tr><th scope="row">商品知识库</th><td>知识库商品：${escapeHtml(knowledgeName)}</td><td class="semantic-code">${knowledgeCode ? `商品编码：${escapeHtml(knowledgeCode)}` : '&nbsp;'}</td><td class="semantic-code">${knowledgeBarcode ? `69码：${escapeHtml(knowledgeBarcode)}` : '&nbsp;'}</td><td class="semantic-settlement">计算奖励：${escapeHtml(reward[1])}</td></tr>
+              <tr><th scope="row" data-label="来源">销售Excel</th><td data-label="商品名称">Excel商品：${escapeHtml(excelProduct[1])}</td><td data-label="商品编码">&nbsp;</td><td data-label="69码" class="semantic-code">条码：${escapeHtml(barcodeQuantity[1])}</td><td data-label="数量 / 奖励" class="semantic-quantity">数量：${escapeHtml(barcodeQuantity[2])}</td><td data-label="匹配结果">${renderSemanticText(matchText)}</td></tr>
+              <tr><th scope="row" data-label="来源">商品知识库</th><td data-label="商品名称">知识库商品：${escapeHtml(knowledgeName)}</td><td data-label="商品编码" class="semantic-code">${knowledgeCode ? `商品编码：${escapeHtml(knowledgeCode)}` : '&nbsp;'}</td><td data-label="69码" class="semantic-code">${knowledgeBarcode ? `69码：${escapeHtml(knowledgeBarcode)}` : '&nbsp;'}</td><td data-label="数量 / 奖励" class="semantic-settlement">计算奖励：${escapeHtml(reward[1])}</td><td data-label="匹配结果" class="${confidenceClass}">知识库结论：置信度：${escapeHtml(confidence[1])}</td></tr>
             </tbody>
           </table></div>
         </section>`;

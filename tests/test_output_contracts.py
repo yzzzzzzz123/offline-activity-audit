@@ -767,7 +767,7 @@ class HtmlReportTests(unittest.TestCase):
             self.assertEqual(verification["button_count"], 6)
             self.assertTrue(verification["workbook_content_equal"])
             self.assertTrue(verification["static_template_equal"])
-            self.assertEqual(verification["template_version"], "2.0.0")
+            self.assertEqual(verification["template_version"], "2.0.1")
             self.assertRegex(verification["style_sha256"], r"^[0-9a-f]{64}$")
             self.assertRegex(verification["shell_sha256"], r"^[0-9a-f]{64}$")
 
@@ -834,6 +834,10 @@ class HtmlReportTests(unittest.TestCase):
             self.assertIn('data-photo-products="true"', html)
             self.assertIn('data-knowledge-comparison="true"', html)
             self.assertIn('class="knowledge-comparison-table"', html)
+            self.assertNotIn("min-width: 920px", html)
+            self.assertIn('<th>数量 / 奖励</th><th>匹配结果</th></tr>', html)
+            self.assertIn('data-label="匹配结果"', html)
+            self.assertIn(".knowledge-comparison-table tbody tr { grid-template-columns: 1fr; }", html)
             self.assertIn("consumed !== content.length", html)
             self.assertIn("renderPersonnelKnowledgeComparison", html)
             for semantic_class in (

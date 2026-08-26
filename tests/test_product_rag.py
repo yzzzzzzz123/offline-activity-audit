@@ -340,14 +340,14 @@ class ProductRagTests(unittest.TestCase):
                 "excel_row": 2,
                 "quantity": 1,
                 "product_name": "参半oralshark玫瑰清茶味净清新牙膏(180g)-线下",
-                "product_code": "SP-1",
+                "product_code": "CP-KQ-YG-0085",
                 "barcode": "6970356167341",
             },
             {
                 "excel_row": 3,
                 "quantity": 1,
                 "product_name": "文字非常相似但条码不同的参半净清新牙膏",
-                "product_code": "SP-1",
+                "product_code": "CP-KQ-YG-0085",
                 "barcode": "6970356164241",
             },
         ]
@@ -457,7 +457,7 @@ class ProductRagTests(unittest.TestCase):
                     "excel_row": 9,
                     "quantity": 5,
                     "product_name": "参半oralshark玫瑰清茶味净清新牙膏(180g)-线下",
-                    "product_code": "SP-1",
+                    "product_code": "CP-KQ-YG-0085",
                     "barcode": "6970356167341",
                 },
             ],
@@ -579,7 +579,11 @@ class ProductRagTests(unittest.TestCase):
         second_fields = {item["field"]: item for item in second["field_comparisons"]}
         self.assertEqual(second_fields["product_code"]["comparison"], "not_found")
         self.assertEqual(second_fields["product_name"]["comparison"], "not_found")
-        self.assertEqual(second_fields["barcode_69"]["comparison"], "matched")
+        self.assertEqual(second_fields["barcode_69"]["comparison"], "conflict")
+        self.assertEqual(
+            second_fields["barcode_69"]["matching_products"][0]["product_code"],
+            "CP-KQ-YG-0084",
+        )
 
     def test_sales_name_may_be_fuzzy_only_after_code_and_barcode_are_strict(self) -> None:
         reconciliation = _sales_catalog_reconciliation(
@@ -588,7 +592,7 @@ class ProductRagTests(unittest.TestCase):
                     "excel_row": 8,
                     "quantity": 1,
                     "product_name": "参半玫瑰清茶净清新牙膏180g",
-                    "product_code": "SP-1",
+                    "product_code": "CP-KQ-YG-0085",
                     "barcode": "6970356167341",
                 }
             ],
@@ -640,7 +644,7 @@ class ProductRagTests(unittest.TestCase):
         self.assertIn("product_name", item["matched_fields"])
         self.assertIn("barcode_69", item["matched_fields"])
 
-    def test_packaging_code_alias_still_retrieves_and_matches_sales(self) -> None:
+    def test_packaging_code_alias_retrieves_photo_but_not_formal_sales_code(self) -> None:
         alias_query = {
             "photo_queries": [
                 {
@@ -673,8 +677,12 @@ class ProductRagTests(unittest.TestCase):
             )["records"],
             resolved,
         )
-        self.assertEqual(result["status"], "exact")
-        self.assertIn("商品编码、商品名称和69码均严格一致", result["basis"])
+        self.assertEqual(result["status"], "unmatched")
+        check = result["product_checks"][0]
+        self.assertEqual(check["product_code_match"], "mismatch")
+        self.assertEqual(check["name_match"], "exact")
+        self.assertEqual(check["barcode_match"], "exact")
+        self.assertIn("商品编码不一致", check["basis"])
 
     def test_newly_registered_controlled_product_is_exposed_to_runtime_catalog(self) -> None:
         raw = {
