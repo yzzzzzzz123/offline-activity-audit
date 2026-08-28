@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/audit-promotional-display/contract-product-cells.schema.json",
+  "title": "Focused contract attachment product-cell reread",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["records", "extraction_notes"],
+  "properties": {
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "line_no",
+          "source_page",
+          "product_code",
+          "product_name",
+          "barcode_69"
+        ],
+        "properties": {
+          "line_no": {"type": "integer", "minimum": 1},
+          "source_page": {"type": "integer", "minimum": 1},
+          "product_code": {"type": ["string", "null"], "minLength": 1},
+          "product_name": {"type": ["string", "null"], "minLength": 1},
+          "barcode_69": {
+            "type": ["string", "null"],
+            "pattern": "^69[0-9]{11}$"
+          }
+        }
+      }
+    },
+    "extraction_notes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

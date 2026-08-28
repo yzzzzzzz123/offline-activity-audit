@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "description": "User-accepted quantity-coverage regression facts for the permanent 2026-08-27 delivery standard. A calibration applies only when the complete ordered source-photo name and SHA-256 sequence matches exactly.",
+  "calibrations": [
+    {
+      "calibration_id": "accepted-20260827-new-wuxi-material-field-photos",
+      "photo_set": [
+        {
+          "source_file": "f699e580a372666cd6b0656b7479a109.jpg",
+          "sha256": "5ac385d30ffabe54dc258f6137a2db534aa0d7c1812c53a17e13556e2b3bd4b5"
+        },
+        {
+          "source_file": "微信图片_20251215171333_147_57.jpg",
+          "sha256": "f1e2c7ed5cb722e244e067918f9bac4276a8bedd2c9958cd4b4ffc1aac0eb3ce"
+        },
+        {
+          "source_file": "微信图片_20251215171508_151_57.jpg",
+          "sha256": "5527b9d21756d6633afbe1f1628f725cdae508ac94bc95f079231d94e9ac029b"
+        },
+        {
+          "source_file": "微信图片_20251215171745_152_57.jpg",
+          "sha256": "8f6e7b3c2aaab6273935b507f77058d3392c9b9ce18fa82630a9107b1e2e18da"
+        },
+        {
+          "source_file": "微信图片_20251215172034_155_57.jpg",
+          "sha256": "afda6ab595871f42a2cdb3fad6723472c856beea4a72380ede8cd480935b54f5"
+        },
+        {
+          "source_file": "微信图片_20251215172344_156_57.jpg",
+          "sha256": "368d55e8ec27ae7c600b2af907938c6b1dec5734148d24eb08d6d4e26fedc193"
+        },
+        {
+          "source_file": "微信图片_20251215172506_157_57.jpg",
+          "sha256": "0ae92c0ae20e1c9ada53f2d61d3be73e0bca094ca09bdcafdcec57021d1d5aae"
+        },
+        {
+          "source_file": "微信图片_20251215172737_158_57.jpg",
+          "sha256": "3c828c630cc7eb9c8ea7fb118417921785c82fd01522f0f2fc2f49f2e67fa5cd"
+        },
+        {
+          "source_file": "微信图片_20251215172857_159_57.jpg",
+          "sha256": "9891f0e22d36acf6b808b9ac4665d55d439014e26e21ad6dfbad41ca2d21eb04"
+        },
+        {
+          "source_file": "微信图片_20251215173009_160_57.jpg",
+          "sha256": "d01a46c6c6133d3d6fe49264f5f9605f5cd53f6ff458f38a9f183d6140b68212"
+        }
+      ],
+      "accepted_material_coverage": [
+        {
+          "item_type": "counter_display",
+          "visible_unit_count": 7,
+          "photo_count": 10
+        }
+      ]
+    }
+  ]
+}

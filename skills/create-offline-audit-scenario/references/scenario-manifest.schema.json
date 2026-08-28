@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/offline-activity-audit/scenario-manifest.schema.json",
+  "title": "Offline audit scenario manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "skill_name",
+    "display_name",
+    "aliases",
+    "order",
+    "provenance",
+    "scope",
+    "evidence_roles",
+    "ai_stages",
+    "authority_edges",
+    "forbidden_edges",
+    "controls",
+    "amount_policy",
+    "output",
+    "dependencies"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "scenario_id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"},
+    "skill_name": {"type": "string", "pattern": "^audit-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "display_name": {"type": "string", "minLength": 1},
+    "aliases": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "order": {"type": "integer", "minimum": 1},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_zip_basename", "source_zip_sha256", "source_zip_size", "generator_skill_version", "business_requirements_summary"],
+      "properties": {
+        "source_zip_basename": {"type": "string", "minLength": 1},
+        "source_zip_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "source_zip_size": {"type": "integer", "minimum": 1},
+        "generator_skill_version": {"type": "string", "const": "1.0"},
+        "business_requirements_summary": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["in_scope", "excluded", "audit_object"],
+      "properties": {
+        "in_scope": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "excluded": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "audit_object": {"type": "string", "minLength": 1}
+      }
+    },
+    "evidence_roles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidence_role"}
+    },
+    "ai_stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/ai_stage"}
+    },
+    "authority_edges": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/edge"}
+    },
+    "forbidden_edges": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/edge"}
+    },
+    "controls": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/control"}
+    },
+    "amount_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_source", "supported_amount_rule", "rounding", "blocked_rule", "conclusions"],
+      "properties": {
+        "claim_source": {"type": "string", "minLength": 1},
+        "supported_amount_rule": {"type": "string", "minLength": 1},
+        "rounding": {"type": "string", "minLength": 1},
+        "blocked_rule": {"type": "string", "minLength": 1},
+        "conclusions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sheet_name", "html_mode", "count_unit", "required_facts", "prohibited_terms"],
+      "properties": {
+        "sheet_name": {"type": "string", "minLength": 1, "maxLength": 31},
+        "html_mode": {"type": "string", "enum": ["full", "error_only"]},
+        "count_unit": {"type": "string", "minLength": 1},
+        "required_facts": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "prohibited_terms": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "purpose"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evidence_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role_id", "description", "extensions", "minimum", "maximum", "nested_in", "name_markers", "ai_visible", "required", "binding_rule"],
+      "properties": {
+        "role_id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"},
+        "description": {"type": "string", "minLength": 1},
+        "extensions": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^\\.[a-z0-9]+$"}},
+        "minimum": {"type": "integer", "minimum": 0},
+        "maximum": {"type": ["integer", "null"], "minimum": 1},
+        "nested_in": {"type": ["string", "null"]},
+        "name_markers": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "ai_visible": {"type": "boolean"},
+        "required": {"type": "boolean"},
+        "binding_rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "ai_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage_id", "input_roles", "reference_scope", "schema_file", "source_coverage_rule"],
+      "properties": {
+        "stage_id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"},
+        "input_roles": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "reference_scope": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "schema_file": {"type": "string", "minLength": 1},
+        "source_coverage_rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "purpose"],
+      "properties": {
+        "from": {"type": "string", "minLength": 1},
+        "to": {"type": "string", "minLength": 1},
+        "purpose": {"type": "string", "minLength": 1}
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["control_id", "source", "object", "expectation", "comparison", "blocking", "error_group", "resubmission"],
+      "properties": {
+        "control_id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"},
+        "source": {"type": "string", "minLength": 1},
+        "object": {"type": "string", "minLength": 1},
+        "expectation": {"type": "string", "minLength": 1},
+        "comparison": {"type": "string", "enum": ["visible", "exact", "unique_fuzzy", "deterministic", "not_applicable"]},
+        "blocking": {"type": "boolean"},
+        "error_group": {"type": "string", "minLength": 1},
+        "resubmission": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

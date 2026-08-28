@@ -1,0 +1,4 @@
+interface:
+  display_name: "维护费用核销"
+  short_description: "核验维护费用的 POS、合同、结算和活动资料"
+  default_prompt: "Use $audit-maintenance-fee to audit one registered maintenance_fee package through the parent orchestrator and return the verified self-contained HTML."

@@ -1,0 +1,163 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "maintenance_fee",
+  "skill_name": "audit-maintenance-fee",
+  "display_name": "维护费用",
+  "aliases": ["维护费", "渠道维护费用", "经销商维护费用"],
+  "order": 5,
+  "provenance": {
+    "source_zip_basename": "SQ202512090079-HX202601160053-维护费用.zip",
+    "source_zip_sha256": "7006d635e56f7e96cb68bfb96ca2d0554615d8e893945617333e918d7ef01dc5",
+    "source_zip_size": 369353,
+    "generator_skill_version": "1.0",
+    "business_requirements_summary": [
+      "提供经销商盖章的POS数据，并同时提供POS数据电子表。",
+      "根据具体费用类型提供合同、协议、相关文件及活动周期内的活动照片等资料。",
+      "结算单使用公司统一模板，由经销商盖章并详细记录费用明细、计算方式和金额。",
+      "提供签章后的促销合同。",
+      "维护费用是独立核销方式，不是直营，也不替代其他费用。"
+    ]
+  },
+  "scope": {
+    "in_scope": [
+      "以经销商POS及合同约定计算方式为基础的维护费用核销",
+      "维护活动合同、结算、POS和类型专项资料的完整性与一致性审核"
+    ],
+    "excluded": [
+      "直营不是本场景名称或分类依据",
+      "其他费用特殊审批通道仍按other_expense独立审核",
+      "人员激励的销售Excel、逐SKU奖励和转账凭证链仍按personnel_incentive独立审核"
+    ],
+    "audit_object": "一份维护费用申报包及其分组阻断问题"
+  },
+  "evidence_roles": [
+    {
+      "role_id": "stamped_pos_data",
+      "description": "经销商盖章的POS可视数据",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 1,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["POS", "pos", "销售数据"],
+      "ai_visible": true,
+      "required": true,
+      "binding_rule": "外层归档中的POS可视文件全部绑定，文件名只用于候选角色，盖章和内容由可见事实确认。"
+    },
+    {
+      "role_id": "pos_data_spreadsheet",
+      "description": "与盖章POS对应的电子表",
+      "extensions": [".xlsx", ".xlsm"],
+      "minimum": 1,
+      "maximum": 1,
+      "nested_in": null,
+      "name_markers": ["POS", "pos", "销售数据"],
+      "ai_visible": false,
+      "required": true,
+      "binding_rule": "唯一Excel由确定性代码读取；缺失形成审核问题，多份候选因无法唯一绑定而停止。"
+    },
+    {
+      "role_id": "signed_promotional_contract",
+      "description": "签章后的促销合同",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 1,
+      "maximum": 1,
+      "nested_in": null,
+      "name_markers": ["促销合同"],
+      "ai_visible": true,
+      "required": true,
+      "binding_rule": "只绑定名称明确指向促销合同的唯一视觉文件；签章状态以可见内容为准。"
+    },
+    {
+      "role_id": "settlement",
+      "description": "公司统一模板且经销商盖章的结算单",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 1,
+      "maximum": 1,
+      "nested_in": null,
+      "name_markers": ["结算单", "结算表"],
+      "ai_visible": true,
+      "required": true,
+      "binding_rule": "唯一结算候选绑定为申报金额来源；模板、盖章、明细和计算方法由可见事实确认。"
+    },
+    {
+      "role_id": "supporting_document",
+      "description": "费用类型对应的协议、合同或相关文件",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 0,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["协议", "相关文件", "维护", "合同"],
+      "ai_visible": true,
+      "required": false,
+      "binding_rule": "排除促销合同、结算和POS后，按名称与可见文件性质绑定；与活动照片合计至少一份专项支持。"
+    },
+    {
+      "role_id": "activity_photo",
+      "description": "活动周期内的现场或活动照片",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp"],
+      "minimum": 0,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["活动照片", "现场照片", "返图", "活动"],
+      "ai_visible": true,
+      "required": false,
+      "binding_rule": "排除单据后绑定现场照片；合同要求现场执行时为必交，否则与其他专项支持共同证明费用发生。"
+    }
+  ],
+  "ai_stages": [
+    {
+      "stage_id": "maintenance_visual_facts",
+      "input_roles": ["stamped_pos_data", "signed_promotional_contract", "settlement", "supporting_document", "activity_photo"],
+      "reference_scope": [],
+      "schema_file": "references/evidence.schema.json",
+      "source_coverage_rule": "每个已绑定视觉源文件必须且只能返回一次，来源名和角色必须与确定性清单完全一致。"
+    }
+  ],
+  "authority_edges": [
+    {"from": "signed_promotional_contract", "to": "settlement", "purpose": "核对费用性质、活动周期、计算方法、比例和金额上限"},
+    {"from": "signed_promotional_contract", "to": "pos_data_spreadsheet", "purpose": "限定合格POS期间、商品或销售范围"},
+    {"from": "stamped_pos_data", "to": "pos_data_spreadsheet", "purpose": "核对逐项和合计数量、销售金额"},
+    {"from": "pos_data_spreadsheet", "to": "settlement", "purpose": "复算结算单使用的POS基数和费用金额"},
+    {"from": "supporting_document/activity_photo", "to": "signed_promotional_contract", "purpose": "证明合同范围内的具体维护活动已发生"},
+    {"from": "settlement", "to": "claim_amount", "purpose": "确定本次申报金额"}
+  ],
+  "forbidden_edges": [
+    {"from": "archive_or_filename", "to": "fee_nature", "purpose": "文件名不能证明正文费用性质"},
+    {"from": "stamped_pos_data", "to": "missing_pos_data_spreadsheet", "purpose": "盖章图片不能替代可计算电子表"},
+    {"from": "settlement", "to": "missing_signed_promotional_contract", "purpose": "结算单不能补足合同权威规则"},
+    {"from": "matching_total", "to": "missing_line_identity", "purpose": "总额一致不能修复明细或商品冲突"},
+    {"from": "activity_photo", "to": "missing_period_or_formula", "purpose": "现场照片不能补足合同周期或金额计算规则"}
+  ],
+  "controls": [
+    {"control_id": "required_materials", "source": "全部绑定角色", "object": "维护费用申报包", "expectation": "POS盖章数据、POS电子表、签章促销合同、盖章统一模板结算单及专项资料齐全", "comparison": "deterministic", "blocking": true, "error_group": "资料完整性", "resubmission": "按缺失清单补交原始资料。"},
+    {"control_id": "fee_nature", "source": "合同、结算与专项资料", "object": "费用类型", "expectation": "正文明确属于维护费用且不与其他核销方式冲突", "comparison": "visible", "blocking": true, "error_group": "费用类型", "resubmission": "提交正文费用性质与维护费用一致的合同和结算资料，或按实际类型另行申报。"},
+    {"control_id": "pos_visual_seal", "source": "盖章POS数据", "object": "经销商确认", "expectation": "POS数据清晰且有经销商印章", "comparison": "visible", "blocking": true, "error_group": "POS盖章", "resubmission": "补交清晰、完整并经经销商盖章的POS数据。"},
+    {"control_id": "pos_spreadsheet", "source": "POS电子表", "object": "销售明细", "expectation": "电子表可读、明细完整且无外部公式依赖", "comparison": "deterministic", "blocking": true, "error_group": "POS电子表", "resubmission": "补交可直接读取、数据完整且无外部依赖的POS电子表。"},
+    {"control_id": "pos_correspondence", "source": "POS盖章数据与电子表", "object": "商品、数量和销售金额", "expectation": "逐项唯一对应且合计数量、金额一致", "comparison": "unique_fuzzy", "blocking": true, "error_group": "POS对应", "resubmission": "更正纸质盖章POS或电子表，使逐项及合计完全一致。"},
+    {"control_id": "promotional_contract", "source": "签章促销合同", "object": "活动和金额基线", "expectation": "双方、周期、维护范围、POS范围、公式、比例和上限完整并已签章", "comparison": "visible", "blocking": true, "error_group": "促销合同", "resubmission": "补交信息完整且双方签章的促销合同。"},
+    {"control_id": "settlement", "source": "结算单", "object": "经销商申报", "expectation": "使用公司统一模板、经销商盖章，并列明费用明细、计算方式和金额", "comparison": "visible", "blocking": true, "error_group": "结算单", "resubmission": "按公司统一模板补交明细、计算和金额完整且经销商盖章的结算单。"},
+    {"control_id": "party_alignment", "source": "POS、合同、结算和电子表", "object": "经销商身份", "expectation": "各资料主体唯一对应", "comparison": "unique_fuzzy", "blocking": true, "error_group": "主体一致性", "resubmission": "补正主体不一致资料并保留完整法定名称。"},
+    {"control_id": "period_alignment", "source": "合同、POS、结算和活动资料", "object": "活动周期", "expectation": "POS和执行事实位于合同活动期内且结算周期不超出合同", "comparison": "deterministic", "blocking": true, "error_group": "活动周期", "resubmission": "补交周期清楚且相互一致的合同、POS、结算或活动资料。"},
+    {"control_id": "type_specific_support", "source": "协议、相关文件和活动照片", "object": "具体维护活动", "expectation": "至少一份专项资料证明费用发生；约定现场执行时照片位于活动期内", "comparison": "deterministic", "blocking": true, "error_group": "专项资料", "resubmission": "按具体维护内容补交协议、相关文件及活动期内现场照片。"},
+    {"control_id": "amount_recalculation", "source": "促销合同、POS电子表和结算单", "object": "申报金额", "expectation": "按合同明确规则复算后与盖章结算单精确一致", "comparison": "deterministic", "blocking": true, "error_group": "金额复算", "resubmission": "补正合同公式、POS范围或结算金额，使全链路可复算并一致。"}
+  ],
+  "amount_policy": {
+    "claim_source": "经销商盖章结算单的申报金额",
+    "supported_amount_rule": "全部阻断控制通过且按签章促销合同对POS电子表复算金额与结算申报精确一致时，支持金额等于申报金额；否则为0。",
+    "rounding": "人民币元，ROUND_HALF_UP保留两位小数",
+    "blocked_rule": "任一阻断项失败时全额暂缓并转人工补正",
+    "conclusions": ["pass", "human_review"]
+  },
+  "output": {
+    "sheet_name": "维护费用核销",
+    "html_mode": "error_only",
+    "count_unit": "个问题",
+    "required_facts": ["问题来源", "可见或确定性识别内容", "规则要求", "核销影响", "补交动作", "申报金额与暂缓金额"],
+    "prohibited_terms": ["prompt", "schema", "模型推理", "临时目录", "系统内部路径"]
+  },
+  "dependencies": [
+    {"name": "openpyxl", "purpose": "由确定性代码读取POS电子表、检查公式依赖并计算逐项与合计。"},
+    {"name": "jsonschema", "purpose": "校验视觉证据、场景manifest和最终结果结构。"},
+    {"name": "canonical HTML shell", "purpose": "将维护费用错误清单合并到唯一自包含核销HTML。"}
+  ]
+}

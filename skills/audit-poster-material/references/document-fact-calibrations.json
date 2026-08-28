@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "description": "User-accepted monetary regression facts for the permanent 2026-08-27 delivery standard. A calibration applies only when the complete ordered source-document name and SHA-256 sequence matches exactly.",
+  "calibrations": [
+    {
+      "calibration_id": "accepted-20260827-new-wuxi-material-documents",
+      "document_set": [
+        {
+          "source_file": "核销-新吴区12月物料制作促销合同.jpg",
+          "sha256": "36c6424b43bb0b4f0b7adb01b3c51ec6febdd5637dee1dfa7463bba4eac191a8"
+        },
+        {
+          "source_file": "核销-新吴区12月物料制作发票.jpg",
+          "sha256": "bc3684d1a1e4e05e901fc1847ca9e4e4eb44b08f448edd6adaa6e9bbec6957d3"
+        },
+        {
+          "source_file": "核销-新吴区12月物料制作结算单.jpg",
+          "sha256": "5b75c8a175dfc41769b8680a21c1749f7019e45e62ed6f57c8160e3ea562c1cf"
+        }
+      ],
+      "accepted_monetary_facts": {
+        "contract_activity_budget": 8000,
+        "invoice_receipt_total_amount": 8024,
+        "settlement_total_amount": 8000
+      }
+    }
+  ]
+}

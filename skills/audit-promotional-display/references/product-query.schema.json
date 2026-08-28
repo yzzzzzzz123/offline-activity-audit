@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.local/audit-promotional-display/product-query.schema.json",
-  "title": "Bounded product-reference query extracted from field photos",
+  "title": "Photo-text-bounded product-reference query from the full validated catalog",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "photo_queries", "extraction_notes"],

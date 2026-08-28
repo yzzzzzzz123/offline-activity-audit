@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="canban-template-version" content="2.1.0">
+  <meta name="canban-template-version" content="3.2.0">
   <meta name="canban-style-sha256" content="__CANBAN_STYLE_SHA256__">
   <meta name="canban-shell-sha256" content="__CANBAN_SHELL_SHA256__">
   <title>参半渠道活动核销</title>
@@ -153,7 +153,7 @@
       background: linear-gradient(112deg, rgba(255, 255, 255, .98), rgba(239, 244, 246, .97));
       filter: drop-shadow(0 12px 10px rgba(31, 48, 57, .10));
       clip-path: polygon(0 0, calc(100% - 21px) 0, 100% 21px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
-      grid-template-columns: minmax(265px, .92fr) minmax(390px, 1.3fr) minmax(220px, .67fr);
+      grid-template-columns: minmax(265px, .82fr) minmax(620px, 1.8fr);
       isolation: isolate;
     }
     .home-cockpit::before {
@@ -221,7 +221,7 @@
       min-width: 0;
       align-self: stretch;
       background: rgba(250, 252, 253, .76);
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
     .home-overview-metric {
       position: relative;
@@ -247,44 +247,7 @@
     }
     .home-overview-metric.accent strong { color: var(--accent-strong); }
     .home-overview-metric.pass strong { color: var(--success); }
-    .home-issue-anchor {
-      position: relative;
-      display: flex;
-      min-width: 0;
-      padding: 25px clamp(20px, 2vw, 30px);
-      flex-direction: column;
-      justify-content: center;
-      color: #fff;
-      background: linear-gradient(145deg, #22323a, #152127);
-    }
-    .home-issue-anchor::before {
-      position: absolute;
-      top: 25px;
-      left: 0;
-      width: 3px;
-      height: 42px;
-      background: var(--accent);
-      content: "";
-    }
-    .home-issue-anchor > span { color: #b9c8cf; font-size: 11px; font-weight: 720; }
-    .home-issue-anchor strong {
-      display: block;
-      margin-top: 5px;
-      font-family: var(--font-number);
-      font-size: clamp(40px, 4vw, 58px);
-      font-weight: 720;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: -.06em;
-      line-height: .95;
-    }
-    .home-issue-anchor p {
-      max-width: 220px;
-      margin: 13px 0 0;
-      color: #9fb0b8;
-      font-size: 10px;
-      font-weight: 650;
-      line-height: 1.65;
-    }
+    .home-overview-metric.issue strong { color: var(--danger); }
     .home-scenarios { min-width: 0; }
     .home-section-head {
       display: flex;
@@ -314,6 +277,8 @@
     .scenario-entry:hover { border-color: #b8c8cf; filter: drop-shadow(0 8px 8px rgba(31, 48, 57, .10)); }
     .scenario-entry.personnel { --scenario-tone: var(--purple); --scenario-wash: #f6f1fb; }
     .scenario-entry.display { --scenario-tone: var(--amber); --scenario-wash: #fff8ed; }
+    .scenario-entry.other { --scenario-tone: #7b5aa6; --scenario-wash: #f6f1fb; }
+    .scenario-entry.maintenance { --scenario-tone: #2f75b5; --scenario-wash: #eef6fd; }
     .scenario-entry-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; padding: 21px 20px 14px; }
     .scenario-entry-head h3 { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.35; letter-spacing: -.025em; }
     .scenario-kind { display: inline-flex; margin-top: 5px; color: var(--scenario-tone); font-size: 11px; font-weight: 720; }
@@ -337,7 +302,7 @@
     .scenario-entry.personnel .scenario-status.issue { border-color: #ded1eb; }
     .scenario-entry.display .scenario-status.issue { border-color: #efd8b7; }
     .scenario-entry-body { min-width: 0; padding: 0 20px 17px; }
-    .scenario-overview-stats { display: grid; overflow: hidden; border: 1px solid #e0e7ea; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .scenario-overview-stats { display: grid; overflow: hidden; border: 1px solid #e0e7ea; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .scenario-overview-stat { min-width: 0; padding: 10px; border-right: 1px solid #e0e7ea; background: #fafcfc; }
     .scenario-overview-stat:last-child { border-right: 0; }
     .scenario-overview-stat span { display: block; min-height: 2.7em; color: var(--ink-soft); font-size: 10px; font-weight: 690; line-height: 1.35; }
@@ -345,7 +310,6 @@
     .scenario-overview-stat:nth-child(1) strong { color: #33434b; }
     .scenario-overview-stat:nth-child(2) strong { color: var(--success); }
     .scenario-overview-stat:nth-child(3) strong { color: var(--danger); }
-    .scenario-overview-stat:nth-child(4) strong { color: var(--scenario-tone); }
     .scenario-progress { margin-top: 14px; }
     .scenario-progress-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #65747b; font-size: 10px; font-weight: 700; }
     .scenario-progress-copy strong { color: var(--scenario-tone); font-family: var(--font-number); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -369,7 +333,7 @@
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(var(--metric-count, 4), minmax(0, 1fr));
       margin-bottom: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
@@ -389,9 +353,10 @@
     .metric.issue { border-top-color: var(--danger); }
     .metric.settlement { border-top-color: var(--purple); }
     .metric.settlement .metric-label, .metric.settlement .metric-value { color: var(--purple); }
+    .summary-grid.three { --metric-count: 3; }
 
-    .context-panels { display: grid; gap: 10px; margin-bottom: 14px; }
-    .business-panel { overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+    .context-panels { display: grid; gap: 10px; min-width: 0; margin-bottom: 14px; }
+    .business-panel { overflow: hidden; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
     .panel-head {
       display: flex;
       align-items: center;
@@ -402,16 +367,49 @@
       background: var(--surface-soft);
       border-bottom: 1px solid var(--line);
     }
-    .panel-head h3 { margin: 0; font-size: 15px; font-weight: 780; }
-    .panel-body { padding: 10px; }
+    details.business-panel > summary.panel-head {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+    }
+    details.business-panel > summary.panel-head::-webkit-details-marker { display: none; }
+    details.business-panel:not([open]) > summary.panel-head { border-bottom-color: transparent; }
+    details.business-panel > summary.panel-head:focus-visible {
+      outline: 3px solid var(--accent-soft);
+      outline-offset: -3px;
+    }
+    .panel-head h3 { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 15px; font-weight: 780; }
+    .panel-collapse-meta { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+    .panel-toggle {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      background: var(--surface);
+    }
+    .panel-toggle::before, .panel-toggle::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 9px;
+      height: 1.5px;
+      background: var(--ink-soft);
+      transform: translate(-50%, -50%);
+      transition: transform 160ms ease, opacity 160ms ease;
+    }
+    .panel-toggle::after { transform: translate(-50%, -50%) rotate(90deg); }
+    details.business-panel[open] .panel-toggle::after { opacity: 0; transform: translate(-50%, -50%) rotate(0); }
+    .panel-body { min-width: 0; padding: 10px; }
     .overview-panel { border-top: 2px solid var(--amber); }
     .overview-panel .panel-head h3 { color: var(--amber); }
     .settlement-panel { border-top: 2px solid var(--purple); }
     .settlement-panel .panel-head h3 { color: var(--purple); }
     .overview-body .evidence-cell { border: 0; padding: 4px; }
     .overview-body .evidence-label { margin-bottom: 8px; }
-    .settlement-stack { display: grid; gap: 8px; }
-    .settlement-item { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-small); }
+    .settlement-stack { display: grid; gap: 8px; min-width: 0; }
+    .settlement-item { overflow: hidden; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-small); }
     .settlement-item.issue { border-color: #f1caca; }
     .settlement-item-head {
       display: flex;
@@ -423,7 +421,7 @@
       background: #fbfcfd;
       border-bottom: 1px solid var(--line);
     }
-    .settlement-item-head h4 { margin: 0; font-size: 13px; font-weight: 760; }
+    .settlement-item-head h4 { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 13px; font-weight: 760; }
     .settlement-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 8px; }
 
     .list-section { min-width: 0; }
@@ -500,7 +498,7 @@
     .record-card { overflow: clip; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: var(--radius); }
     .record-card.pass { border-left-color: var(--success); }
     .record-card.issue { border-left-color: var(--danger); }
-    .record-card details > summary {
+    .record-card > details > summary {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto 18px;
       gap: 11px;
@@ -522,6 +520,59 @@
     .chevron::before { content: "+"; }
     details[open] .chevron::before { content: "-"; }
     .record-body { padding: 10px; background: #fbfcfd; border-top: 1px solid var(--line); }
+    .display-record > details > summary {
+      grid-template-columns: minmax(0, 1fr) auto 92px 18px;
+      min-height: 76px;
+      padding: 11px 13px;
+    }
+    .display-record .record-title p { -webkit-line-clamp: 2; }
+    .store-amount {
+      min-width: 78px;
+      padding-left: 12px;
+      border-left: 1px solid var(--line);
+      text-align: right;
+    }
+    .store-amount small { display: block; color: var(--ink-faint); font-size: 9px; font-weight: 680; }
+    .store-amount strong { display: block; color: var(--purple); font-family: var(--font-number); font-size: 19px; font-weight: 780; font-variant-numeric: tabular-nums; }
+    .display-reader { display: grid; gap: 9px; }
+    .display-decision-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(250px, .75fr); gap: 9px; }
+    .display-decision-block { min-width: 0; padding: 11px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-small); }
+    .display-decision-block h4 { margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 780; }
+    .display-result-block { background: #faf8fd; border-color: #e0d5ed; }
+    .display-result-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+    .display-result-line:last-child { margin-bottom: 0; }
+    .display-result-line span { color: var(--ink-soft); font-size: 11px; }
+    .display-result-line strong { color: var(--ink); text-align: right; font-size: 13px; font-weight: 780; }
+    .display-result-line.amount strong { color: var(--purple); font-family: var(--font-number); font-size: 19px; }
+    .display-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; }
+    .display-fact { min-width: 0; }
+    .display-fact.wide { grid-column: 1 / -1; }
+    .display-fact span { display: block; margin-bottom: 2px; color: var(--ink-faint); font-size: 9px; font-weight: 700; }
+    .display-fact strong { display: block; color: #34404a; font-size: 11px; font-weight: 680; overflow-wrap: anywhere; }
+    .display-product-block { padding: 11px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-small); }
+    .display-product-block h4, .display-resubmit h4 { margin: 0 0 7px; font-size: 12px; font-weight: 780; }
+    .display-product-block .photo-products { margin: 0; }
+    .display-resubmit { padding: 11px; background: var(--danger-soft); border: 1px solid #f0cccc; border-radius: var(--radius-small); }
+    .display-resubmit ul { display: grid; gap: 5px; margin: 0; padding-left: 20px; color: #7f3131; font-size: 11px; }
+    .display-resubmit .no-action { margin: 0; color: var(--success); font-size: 11px; font-weight: 740; }
+    .record-evidence { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-small); background: var(--surface); }
+    .record-evidence > summary {
+      display: flex;
+      min-height: 40px;
+      padding: 8px 11px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--ink-soft);
+      background: var(--surface-soft);
+      cursor: pointer;
+      list-style: none;
+      font-size: 11px;
+      font-weight: 720;
+    }
+    .record-evidence > summary::after { color: var(--ink-faint); content: "+"; font-family: var(--font-number); font-size: 16px; }
+    .record-evidence[open] > summary::after { content: "-"; }
+    .record-evidence > .evidence-grid { padding: 8px; border-top: 1px solid var(--line); }
     .evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .evidence-cell { min-width: 0; padding: 9px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-small); }
     .record-body .field-1, .record-body .field-2, .record-body .field-5 { grid-column: span 2; }
@@ -574,6 +625,8 @@
     .knowledge-comparison-table th:nth-child(4) { width: 16%; }
     .knowledge-comparison-table th:nth-child(5) { width: 13%; }
     .knowledge-comparison-table th:nth-child(6) { width: 17%; }
+    .knowledge-calculation { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; padding: 6px 9px; color: var(--ink-soft); background: #faf8fd; border-top: 1px solid var(--line); font-size: 10px; font-weight: 700; }
+    .knowledge-calculation strong { color: var(--purple); font-family: var(--font-number); font-size: 12px; font-weight: 780; }
     .identity-spacer { height: 2px; }
 
     .empty-state { padding: 42px 20px; text-align: center; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); }
@@ -585,20 +638,7 @@
     @media (max-width: 1100px) {
       .app-shell, .topbar-inner { width: min(100% - 28px, 1600px); }
       .app-shell { grid-template-columns: 210px minmax(0, 1fr); gap: 14px; }
-      .home-cockpit { grid-template-columns: minmax(240px, .9fr) minmax(360px, 1.35fr); }
-      .home-issue-anchor {
-        display: grid;
-        min-height: 92px;
-        padding: 16px 24px;
-        align-content: center;
-        align-items: center;
-        column-gap: 24px;
-        grid-column: 1 / -1;
-        grid-template-columns: minmax(100px, .35fr) auto minmax(240px, 1fr);
-      }
-      .home-issue-anchor::before { top: 25px; height: 42px; }
-      .home-issue-anchor strong { margin: 0; font-size: 42px; }
-      .home-issue-anchor p { max-width: none; margin: 0; }
+      .home-cockpit { grid-template-columns: minmax(240px, .8fr) minmax(520px, 1.8fr); }
       .evidence-grid, .settlement-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 780px) {
@@ -619,24 +659,15 @@
       .home-summary-grid { min-height: 88px; }
       .home-overview-metric { min-height: 88px; padding: 16px; }
       .home-overview-metric strong { margin-top: 5px; font-size: 32px; }
-      .home-issue-anchor {
-        display: grid;
-        min-height: 92px;
-        padding: 14px 20px;
-        column-gap: 18px;
-        grid-column: auto;
-        grid-template-columns: minmax(90px, .4fr) auto minmax(200px, 1fr);
-      }
-      .home-issue-anchor::before { top: 24px; height: 40px; }
-      .home-issue-anchor strong { margin: 0; font-size: 38px; }
-      .home-issue-anchor p { max-width: none; margin: 0; }
       .scenario-overview-grid { grid-template-columns: 1fr; }
+      .summary-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .metric { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
       .metric:nth-child(2n) { border-right: 0; }
       .metric:nth-last-child(-n + 2) { border-bottom: 0; }
       .toolbar { grid-template-columns: 1fr; }
       .evidence-grid, .settlement-fields { grid-template-columns: 1fr; }
       .record-body .evidence-cell { grid-column: auto; }
+      .display-decision-grid { grid-template-columns: 1fr; }
       .knowledge-comparison-head { align-items: flex-start; flex-direction: column; gap: 2px; }
       .knowledge-comparison-head small { max-width: 100%; text-align: left; }
       .knowledge-comparison-table, .knowledge-comparison-table tbody { display: block; }
@@ -646,6 +677,7 @@
       .knowledge-comparison-table tbody th, .knowledge-comparison-table tbody td { display: block; min-width: 0; padding: 7px 8px; border: 0; }
       .knowledge-comparison-table tbody tr > th:nth-child(n), .knowledge-comparison-table tbody tr > td:nth-child(n) { width: 100%; }
       .knowledge-comparison-table tbody th::before, .knowledge-comparison-table tbody td::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--ink-soft); font-size: 9px; font-weight: 650; }
+      .knowledge-comparison-table td.empty-value { display: none; }
     }
     @media (max-width: 520px) {
       .brand-mark strong { font-size: 24px; }
@@ -664,24 +696,12 @@
       .home-overview-metric { min-height: 72px; padding: 11px 9px; }
       .home-overview-metric span { font-size: 10px; }
       .home-overview-metric strong { font-size: 27px; }
-      .home-issue-anchor {
-        min-height: 78px;
-        padding: 11px 16px;
-        column-gap: 12px;
-        grid-template-columns: 1fr auto;
-      }
-      .home-issue-anchor::before { top: 19px; height: 38px; }
-      .home-issue-anchor strong { grid-column: 2; grid-row: 1; font-size: 34px; }
-      .home-issue-anchor p { grid-column: 1 / -1; grid-row: 2; margin-top: 3px; font-size: 9px; line-height: 1.45; }
       .home-section-head { min-height: 36px; padding-bottom: 7px; }
       .scenario-entry-head { padding: 17px 14px 11px; }
       .scenario-entry-head h3 { font-size: 16px; }
       .scenario-status { max-width: 62%; font-size: 9px; }
       .scenario-entry-body { padding: 0 14px 13px; }
-      .scenario-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .scenario-overview-stat { border-bottom: 1px solid var(--line); }
-      .scenario-overview-stat:nth-child(2n) { border-right: 0; }
-      .scenario-overview-stat:nth-last-child(-n + 2) { border-bottom: 0; }
+      .scenario-overview-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .scenario-overview-stat span { min-height: auto; }
       .scenario-overview-actions { padding: 9px 12px; }
       .metric { min-height: 69px; padding: 9px; }
@@ -691,9 +711,15 @@
       .settlement-fields { padding: 6px; gap: 6px; }
       .segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .filter-button { width: 100%; padding-inline: 5px; }
-      .record-card details > summary { grid-template-columns: minmax(0, 1fr) 16px; gap: 7px; padding: 9px 10px; }
+      .record-card > details > summary { grid-template-columns: minmax(0, 1fr) 16px; gap: 7px; padding: 9px 10px; }
       .status-pill { grid-column: 1; justify-self: start; }
       .chevron { grid-column: 2; grid-row: 1 / span 2; }
+      .display-record > details > summary { grid-template-columns: minmax(0, 1fr) auto 16px; }
+      .display-record .status-pill { grid-column: 2; grid-row: 1; align-self: start; }
+      .display-record .store-amount { grid-column: 1; grid-row: 2; padding: 0; border-left: 0; text-align: left; }
+      .display-record .chevron { grid-column: 3; grid-row: 1 / span 2; }
+      .display-facts { grid-template-columns: 1fr; }
+      .display-fact.wide { grid-column: auto; }
       .record-body { padding: 7px; }
       .evidence-label { align-items: flex-start; flex-direction: column; }
       .evidence-label small { max-width: 100%; text-align: left; }
@@ -735,11 +761,6 @@
             </div>
           </header>
           <section class="home-summary-grid" id="homeSummaryGrid" aria-label="整体业务统计"></section>
-          <aside class="home-issue-anchor" aria-label="待补记录">
-            <span>待补记录</span>
-            <strong id="homeIssueTotal">0</strong>
-            <p id="homeIssueBreakdown">对象待补 0 · 汇总/结算待补 0</p>
-          </aside>
         </section>
         <section class="home-scenarios" aria-labelledby="homeScenarioTitle">
           <div class="home-section-head"><h3 id="homeScenarioTitle">核销场景</h3></div>
@@ -832,8 +853,40 @@
         return '';
       };
 
+      const humanizeVisibleText = (value) => {
+        let text = String(value ?? '');
+        const replacements = [
+          ['barcode_69', '69码'],
+          ['customer_name', '客户名称'],
+          ['business_date', '业务日期'],
+          ['product_code', '商品编码'],
+          ['product_name', '商品名称'],
+          ['retail_price', '零售价'],
+          ['total_amount', '合计金额'],
+          ['quantity', '数量'],
+          ['不一致或无法核对字段：', '需要核对：'],
+        ];
+        replacements.forEach(([source, target]) => { text = text.split(source).join(target); });
+        const knowledgeMarker = '合同商品对应知识库：';
+        const markerIndex = text.indexOf(knowledgeMarker);
+        if (markerIndex >= 0) {
+          const prefix = text.slice(0, markerIndex);
+          const knowledgeFields = [];
+          const salesFields = [];
+          text.slice(markerIndex).split('、').forEach((part) => {
+            if (part.startsWith(knowledgeMarker)) knowledgeFields.push(part.slice(knowledgeMarker.length));
+            else if (part) salesFields.push(part);
+          });
+          const groups = [];
+          if (knowledgeFields.length) groups.push(`合同商品与知识库：${[...new Set(knowledgeFields)].join('、')}`);
+          if (salesFields.length) groups.push(`合同附件与销售Excel：${[...new Set(salesFields)].join('、')}`);
+          if (groups.length) text = prefix + groups.join('；');
+        }
+        return text;
+      };
+
       const renderSemanticText = (value, defaultClass = '') => {
-        const raw = String(value ?? '');
+        const raw = humanizeVisibleText(value);
         const pieces = [];
         let cursor = 0;
         semanticTokenPattern.lastIndex = 0;
@@ -902,31 +955,74 @@
         const excelProduct = lines[0].match(/^Excel商品：(.*)$/);
         const barcodeQuantity = lines[1].match(/^条码：(.*?)；数量：(.*)$/);
         const knowledgeProduct = lines[2].match(/^知识库商品：(CP-[A-Z0-9-]+)\s*\/\s*(.*?)\s*\/\s*(\d{13})$/);
-        const knowledgeMissing = lines[2] === '知识库商品：未唯一确定';
+        const knowledgeMissing = lines[2] === '知识库商品：未确认';
         const matchText = /^(69码[^；]+)；(产品名.+)$/.test(lines[3]) ? lines[3] : '';
         const confidence = lines[4].match(/^知识库结论：置信度：(高|中|低)$/);
         const reward = lines[5].match(/^计算奖励：(.*元)$/);
         if (!excelProduct || !barcodeQuantity || (!knowledgeProduct && !knowledgeMissing) || !matchText || !confidence || !reward) return '';
 
-        const knowledgeName = knowledgeProduct ? knowledgeProduct[2] : '未唯一确定';
+        const knowledgeName = knowledgeProduct ? knowledgeProduct[2] : '未确认';
         const knowledgeCode = knowledgeProduct ? knowledgeProduct[1] : '';
         const knowledgeBarcode = knowledgeProduct ? knowledgeProduct[3] : '';
         const confidenceClass = confidence[1] === '高' ? 'semantic-pass' : confidence[1] === '低' ? 'semantic-issue' : 'semantic-review';
         return `<section class="knowledge-comparison" data-knowledge-comparison="true">
           <div class="knowledge-comparison-head"><span>销售Excel + 商品知识库（代码核验）</span>${meta.source ? `<small class="semantic-source">${escapeHtml(meta.source)}</small>` : ''}</div>
           <div class="table-scroll"><table class="knowledge-comparison-table">
-            <thead><tr><th>来源</th><th>商品名称</th><th>商品编码</th><th>69码</th><th>数量 / 奖励</th><th>匹配结果</th></tr></thead>
+            <thead><tr><th>来源</th><th>商品名称</th><th>商品编码</th><th>69码</th><th>数量</th><th>匹配结果</th></tr></thead>
             <tbody>
-              <tr><th scope="row" data-label="来源">销售Excel</th><td data-label="商品名称">Excel商品：${escapeHtml(excelProduct[1])}</td><td data-label="商品编码">&nbsp;</td><td data-label="69码" class="semantic-code">条码：${escapeHtml(barcodeQuantity[1])}</td><td data-label="数量 / 奖励" class="semantic-quantity">数量：${escapeHtml(barcodeQuantity[2])}</td><td data-label="匹配结果">${renderSemanticText(matchText)}</td></tr>
-              <tr><th scope="row" data-label="来源">商品知识库</th><td data-label="商品名称">知识库商品：${escapeHtml(knowledgeName)}</td><td data-label="商品编码" class="semantic-code">${knowledgeCode ? `商品编码：${escapeHtml(knowledgeCode)}` : '&nbsp;'}</td><td data-label="69码" class="semantic-code">${knowledgeBarcode ? `69码：${escapeHtml(knowledgeBarcode)}` : '&nbsp;'}</td><td data-label="数量 / 奖励" class="semantic-settlement">计算奖励：${escapeHtml(reward[1])}</td><td data-label="匹配结果" class="${confidenceClass}">知识库结论：置信度：${escapeHtml(confidence[1])}</td></tr>
+              <tr><th scope="row" data-label="来源">销售Excel</th><td data-label="商品名称">Excel商品：${escapeHtml(excelProduct[1])}</td><td data-label="商品编码">&nbsp;</td><td data-label="69码" class="semantic-code">条码：${escapeHtml(barcodeQuantity[1])}</td><td data-label="数量" class="semantic-quantity">数量：${escapeHtml(barcodeQuantity[2])}</td><td data-label="匹配结果">${renderSemanticText(matchText)}</td></tr>
+              <tr><th scope="row" data-label="来源">商品知识库</th><td data-label="商品名称">知识库商品：${escapeHtml(knowledgeName)}</td><td data-label="商品编码" class="semantic-code">${knowledgeCode ? `商品编码：${escapeHtml(knowledgeCode)}` : '&nbsp;'}</td><td data-label="69码" class="semantic-code">${knowledgeBarcode ? `69码：${escapeHtml(knowledgeBarcode)}` : '&nbsp;'}</td><td data-label="数量" class="empty-value">&nbsp;</td><td data-label="匹配结果" class="${confidenceClass}">知识库结论：置信度：${escapeHtml(confidence[1])}</td></tr>
             </tbody>
           </table></div>
+          <div class="knowledge-calculation"><span>核销计算</span><strong>计算奖励：${escapeHtml(reward[1])}</strong></div>
         </section>`;
+      };
+
+      const renderPersonnelComparisonSummary = (value, header) => {
+        const meta = splitHeader(header);
+        if (meta.label !== '具体对比结果') return '';
+        const lines = String(value || '').split('\n');
+        if (
+          lines.length !== 5 ||
+          lines[0] !== 'Excel ↔ 商品知识库' ||
+          lines[2] !== '销售/知识库 ↔ 结算单'
+        ) return '';
+        const confidence = lines[3].match(/^商品：置信度：(高|中|低)$/);
+        const differences = lines[4].match(/^数量差：(.*?)；金额差：(.*?)元$/);
+        if (!confidence || !differences) return '';
+
+        const knowledgeResult = lines[1]
+          .replace('69码精确匹配', '69码一致')
+          .replace('69码完全不匹配', '69码不一致')
+          .replace('产品名精确匹配', '商品名称一致')
+          .replace('产品名模糊匹配', '商品名称对应')
+          .replace('产品名完全不匹配', '商品名称无法对应');
+        const mappingResult = confidence[1] === '高'
+          ? '商品对应（置信度：高）'
+          : confidence[1] === '中'
+            ? '商品对应（置信度：中）'
+            : '商品无法确认（置信度：低）';
+        const isZero = (raw) => /^[-+]?0(?:\.0+)?$/.test(String(raw).trim());
+        const quantityResult = isZero(differences[1])
+          ? '数量一致'
+          : `数量不一致（相差${differences[1]}）`;
+        const amountResult = isZero(differences[2])
+          ? '奖励金额一致'
+          : `奖励金额不一致（相差${differences[2]}元）`;
+        const settlementResult = confidence[1] !== '低' && isZero(differences[1]) && isZero(differences[2])
+          ? `商品、数量、奖励金额全部对应（置信度：${confidence[1]}）`
+          : `${mappingResult}；${quantityResult}；${amountResult}`;
+        return `<div class="personnel-comparison-summary" data-personnel-comparison="true">
+          <p class="cell-line"><b>Excel商品与知识库：</b>${renderSemanticText(knowledgeResult)}</p>
+          <p class="cell-line"><b>结算单与销售记录：</b>${renderSemanticText(settlementResult)}</p>
+        </div>`;
       };
 
       const renderCellBody = (value, header) => {
         const personnelTable = renderPersonnelKnowledgeComparison(value, header);
         if (personnelTable) return personnelTable;
+        const personnelComparison = renderPersonnelComparisonSummary(value, header);
+        if (personnelComparison) return personnelComparison;
         const lines = String(value || '').split('\n');
         const identityHeading = /^(现场商品\d+（知识库）|对应销售Excel第\d+行)$/;
         const identityField = /^(商品编码|商品名称|69码|数量)：(.*)$/;
@@ -1003,6 +1099,65 @@
         return lines.slice(0, 2).join('；');
       };
 
+      const linesOf = (value) => String(value || '').split('\n').map((line) => line.trim()).filter(Boolean);
+      const prefixedLine = (value, prefix) => linesOf(value).find((line) => line.startsWith(prefix)) || '';
+      const withoutPrefix = (value, prefix) => value.startsWith(prefix) ? value.slice(prefix.length).trim() : value;
+      const resubmissionLines = (value) => {
+        const lines = linesOf(value);
+        const marker = lines.indexOf('要重新提交：');
+        return marker >= 0 ? lines.slice(marker + 1).filter((line) => /^\d+\./.test(line)) : [];
+      };
+      const displayRecordProjection = (row) => {
+        const photo = row.values[1] || '';
+        const conclusion = row.values[5] || '';
+        const amount = row.values[4] || '';
+        return {
+          product: prefixedLine(photo, '现场商品：') || '现场商品：未确认',
+          conclusion: prefixedLine(conclusion, '结论：') || (row.status === 'pass' ? '结论：可以核销' : '结论：暂不能核销'),
+          amount: prefixedLine(amount, '本店支持：') || '本店支持：未确定',
+          file: prefixedLine(photo, '文件：'),
+          date: prefixedLine(photo, '识别日期：'),
+          location: prefixedLine(photo, '识别地点：'),
+          display: prefixedLine(photo, '陈列标准核验：'),
+          reuse: prefixedLine(photo, '照片复用检查：'),
+          promotion: prefixedLine(photo, '促销信息：'),
+          resubmissions: resubmissionLines(conclusion),
+        };
+      };
+
+      const renderDisplayFact = (label, line, prefix, wide = false) => line ? `
+        <div class="display-fact ${wide ? 'wide' : ''}"><span>${escapeHtml(label)}</span><strong>${renderSemanticText(withoutPrefix(line, prefix))}</strong></div>` : '';
+
+      const renderDisplayReader = (sheet, row) => {
+        const fact = displayRecordProjection(row);
+        const productTable = renderPhotoProducts(fact.product);
+        const resubmissions = fact.resubmissions.length
+          ? `<ul>${fact.resubmissions.map((line) => `<li>${renderSemanticText(line.replace(/^\d+\.\s*/, ''))}</li>`).join('')}</ul>`
+          : '<p class="no-action">无需重新提交</p>';
+        return `<div class="display-reader" data-display-reader="true">
+          <div class="display-decision-grid">
+            <section class="display-decision-block"><h4>现场确认</h4><div class="display-facts">
+              ${renderDisplayFact('识别日期', fact.date, '识别日期：')}
+              ${renderDisplayFact('陈列', fact.display, '陈列标准核验：')}
+              ${renderDisplayFact('识别地点', fact.location, '识别地点：', true)}
+              ${renderDisplayFact('照片复用', fact.reuse, '照片复用检查：')}
+              ${renderDisplayFact('促销', fact.promotion, '促销信息：')}
+              ${renderDisplayFact('照片文件', fact.file, '文件：', true)}
+            </div></section>
+            <section class="display-decision-block display-result-block"><h4>本店结果</h4>
+              <div class="display-result-line"><span>结论</span><strong class="${row.status === 'pass' ? 'semantic-pass' : 'semantic-issue'}">${renderSemanticText(withoutPrefix(fact.conclusion, '结论：'))}</strong></div>
+              <div class="display-result-line amount"><span>可核销金额</span><strong>${renderSemanticText(withoutPrefix(fact.amount, '本店支持：'))}</strong></div>
+            </section>
+          </div>
+          <section class="display-product-block"><h4>现场商品</h4>${productTable || renderLine(fact.product)}</section>
+          <section class="display-resubmit"><h4>需要补什么</h4>${resubmissions}</section>
+          <details class="record-evidence" data-evidence-detail="true">
+            <summary>查看合同、照片与销售材料</summary>
+            <div class="evidence-grid">${renderEvidence(sheet, row)}</div>
+          </details>
+        </div>`;
+      };
+
       const currentRows = () => {
         const query = state.query.trim().toLocaleLowerCase('zh-CN');
         return detailRows(activeSheet()).filter((row) => {
@@ -1042,42 +1197,45 @@
           objects: result.objects + item.facts.total,
           passed: result.passed + item.facts.passed,
           detailIssues: result.detailIssues + item.facts.issues,
-          summaryIssues: result.summaryIssues + item.facts.overviewIssues + item.facts.settlementIssues,
-          issues: result.issues + item.facts.issues + item.facts.overviewIssues + item.facts.settlementIssues,
-        }), { objects: 0, passed: 0, detailIssues: 0, summaryIssues: 0, issues: 0 });
+          hasContextIssue: result.hasContextIssue || item.facts.overviewIssues > 0 || item.facts.settlementIssues > 0,
+        }), { objects: 0, passed: 0, detailIssues: 0, hasContextIssue: false });
         const metrics = [
           ['核销场景', data.sheets.length, 'accent'],
           ['核验对象', totals.objects, ''],
           ['通过', totals.passed, 'pass'],
+          ['待补对象', totals.detailIssues, 'issue'],
         ];
         const overallStatus = document.getElementById('homeOverallStatus');
-        overallStatus.textContent = totals.issues > 0 ? '存在待补记录' : '全部已通过';
-        overallStatus.classList.toggle('issue', totals.issues > 0);
-        document.getElementById('homeIssueTotal').textContent = totals.issues;
-        document.getElementById('homeIssueBreakdown').textContent = `对象待补 ${totals.detailIssues} · 汇总/结算待补 ${totals.summaryIssues}`;
+        const hasIssue = totals.detailIssues > 0 || totals.hasContextIssue;
+        overallStatus.textContent = hasIssue ? '有材料需要处理' : '全部已通过';
+        overallStatus.classList.toggle('issue', hasIssue);
         homeSummaryGrid.innerHTML = metrics.map(([label, value, tone]) => `
           <div class="home-overview-metric ${tone}"><span>${label}</span><strong>${value}</strong></div>`).join('');
         scenarioOverview.innerHTML = summaries.map(({ sheet, facts }, index) => {
           const personnel = sheet.scenario === 'personnel_incentive';
+          const poster = sheet.scenario === 'poster_material';
+          const other = sheet.scenario === 'other_expense';
+          const maintenance = sheet.scenario === 'maintenance_fee';
+          const errorOnly = poster || other || maintenance;
           const summaryIssues = facts.overviewIssues + facts.settlementIssues;
           const hasIssue = facts.issues > 0 || summaryIssues > 0;
-          const issueParts = personnel
-            ? [summaryIssues > 0 ? `结算待补${summaryIssues}项` : '', facts.issues > 0 ? `商品待补${facts.issues}项` : '']
-            : [facts.issues > 0 ? `门店待补${facts.issues}项` : '', summaryIssues > 0 ? `活动待补${summaryIssues}项` : ''];
-          const statusLabel = hasIssue ? issueParts.filter(Boolean).join(' · ') : '已对齐';
-          const summaryLabel = personnel ? '结算待补' : '活动待补';
+          const objectName = personnel ? '商品' : (errorOnly ? '错误项' : '门店');
+          const objectStatus = facts.issues > 0
+            ? `${objectName}${errorOnly ? '' : '待补'} ${facts.issues}`
+            : `${objectName}${errorOnly ? '为零' : '已通过'}`;
+          const contextStatus = summaryIssues > 0 ? `${personnel ? '结算资料' : '活动资料'}待处理` : '';
+          const statusLabel = hasIssue ? [objectStatus, contextStatus].filter(Boolean).join('；') : '已对齐';
           const progress = facts.total > 0 ? Math.max(0, Math.min(100, Math.round((facts.passed / facts.total) * 100))) : 0;
-          return `<article class="scenario-entry ${personnel ? 'personnel' : 'display'}" data-home-scenario="${escapeHtml(sheet.scenario)}">
+          return `<article class="scenario-entry ${personnel ? 'personnel' : (maintenance ? 'maintenance' : (other ? 'other' : 'display'))}" data-home-scenario="${escapeHtml(sheet.scenario)}">
             <header class="scenario-entry-head">
-              <div><h3>${escapeHtml(sheet.name)}</h3><span class="scenario-kind">${personnel ? '商品核验' : '门店核验'}</span></div>
+              <div><h3>${escapeHtml(sheet.name)}</h3><span class="scenario-kind">${personnel ? '商品核验' : (maintenance ? '资料链核验' : (other ? '特殊审批' : (poster ? '错误清单' : '门店核验')))}</span></div>
               <span class="scenario-status ${hasIssue ? 'issue' : ''}">${statusLabel}</span>
             </header>
             <div class="scenario-entry-body">
               <div class="scenario-overview-stats">
                 <div class="scenario-overview-stat"><span>核验对象</span><strong>${facts.total}</strong></div>
                 <div class="scenario-overview-stat"><span>通过</span><strong>${facts.passed}</strong></div>
-                <div class="scenario-overview-stat"><span>${personnel ? '商品待补' : '门店待补'}</span><strong>${facts.issues}</strong></div>
-                <div class="scenario-overview-stat"><span>${summaryLabel}</span><strong>${summaryIssues}</strong></div>
+                <div class="scenario-overview-stat"><span>${personnel ? '商品待补' : (errorOnly ? '错误/人工项' : '门店待补')}</span><strong>${facts.issues}</strong></div>
               </div>
               <div class="scenario-progress" aria-label="通过进度 ${progress}%">
                 <div class="scenario-progress-copy"><span>通过进度</span><strong>${facts.passed} / ${facts.total}</strong></div>
@@ -1094,12 +1252,16 @@
       const renderIntro = () => {
         const sheet = activeSheet();
         const personnel = sheet.scenario === 'personnel_incentive';
+        const poster = sheet.scenario === 'poster_material';
+        const other = sheet.scenario === 'other_expense';
+        const maintenance = sheet.scenario === 'maintenance_fee';
+        const errorOnly = poster || other || maintenance;
         document.getElementById('sheetTitle').textContent = sheet.title;
-        document.getElementById('listTitle').textContent = personnel ? '商品核验' : '门店核验';
-        document.getElementById('searchLabel').textContent = personnel ? '搜索商品核验' : '搜索门店核验';
+        document.getElementById('listTitle').textContent = personnel ? '商品核验' : (maintenance ? '资料与金额问题' : (other ? '分类与特殊审批' : (poster ? '错误清单' : '门店核验')));
+        document.getElementById('searchLabel').textContent = personnel ? '搜索商品核验' : (errorOnly ? '搜索问题清单' : '搜索门店核验');
         searchInput.placeholder = personnel
           ? '输入商品名称、商品编码、69码或待补问题'
-          : '输入门店、商品、69码、文件名或待补问题';
+          : (errorOnly ? '输入错误、文件名、识别内容、审批或处理要求' : '输入门店、商品、69码、文件名或待补问题');
       };
 
       const renderMetrics = () => {
@@ -1107,14 +1269,20 @@
         const details = detailRows(sheet);
         const settlements = settlementRows(sheet);
         const personnel = sheet.scenario === 'personnel_incentive';
-        const itemName = personnel ? '商品' : '门店';
+        const poster = sheet.scenario === 'poster_material';
+        const other = sheet.scenario === 'other_expense';
+        const maintenance = sheet.scenario === 'maintenance_fee';
+        const errorOnly = poster || other || maintenance;
+        const itemName = personnel ? '商品' : (errorOnly ? '错误/人工项' : '门店');
         const metrics = [
-          [`${itemName}核验`, details.length, 'accent', 'detail'],
-          [`${itemName}通过`, details.filter((row) => row.status === 'pass').length, 'pass', 'detail'],
-          [`${itemName}待补`, details.filter((row) => row.status === 'issue').length, 'issue', 'detail'],
-          ['结算待补', settlements.filter((row) => row.status === 'issue').length, 'settlement', 'settlement'],
+          [errorOnly ? itemName : `${itemName}核验`, details.length, 'accent', 'detail'],
+          [errorOnly ? '已解决' : `${itemName}通过`, details.filter((row) => row.status === 'pass').length, 'pass', 'detail'],
+          [errorOnly ? '待处理' : `${itemName}待补`, details.filter((row) => row.status === 'issue').length, 'issue', 'detail'],
         ];
-        document.getElementById('summaryGrid').innerHTML = metrics.map(([label, value, tone, dimension]) => `
+        if (personnel) metrics.push(['结算待补', settlements.filter((row) => row.status === 'issue').length, 'settlement', 'settlement']);
+        const grid = document.getElementById('summaryGrid');
+        grid.classList.toggle('three', !personnel);
+        grid.innerHTML = metrics.map(([label, value, tone, dimension]) => `
           <article class="metric ${tone}" data-dimension="${dimension}"><span class="metric-label">${label}</span>
             <strong class="metric-value">${value}</strong></article>`).join('');
       };
@@ -1126,30 +1294,46 @@
           <div class="settlement-fields">${renderEvidence(sheet, row, true)}</div>
         </article>`).join('');
 
-      const renderSettlementItems = (sheet) => renderSummaryItems(
-        sheet, settlementRows(sheet), 'settlement'
-      );
+      const renderContextPanel = (sheet, title, tone, section, rows) => {
+        if (!rows.length) return '';
+        const statusRows = rows.length > 1 && rows[0].heading === title ? rows.slice(1) : rows;
+        const issueCount = statusRows.filter((row) => row.status === 'issue').length;
+        const status = issueCount > 0 ? 'issue' : 'pass';
+        const statusLabel = issueCount > 0
+          ? (sheet.scenario === 'promotional_display' ? '需要处理' : `待补 ${issueCount}项`)
+          : '已对齐';
+        return `<details class="business-panel ${tone}-panel" data-business-section="${section}" data-collapsible-panel="true">
+          <summary class="panel-head"><h3>${escapeHtml(title)}</h3>
+            <span class="panel-collapse-meta"><span class="status-pill ${status}">${statusLabel}</span><span class="panel-toggle" aria-hidden="true"></span></span>
+          </summary>
+          <div class="panel-body"><div class="settlement-stack">${renderSummaryItems(sheet, rows, section)}</div></div>
+        </details>`;
+      };
 
       const renderContextPanels = () => {
         const sheet = activeSheet();
-        const settlements = renderSettlementItems(sheet);
         const container = document.getElementById('contextPanels');
-        if (sheet.scenario === 'personnel_incentive') {
-          container.innerHTML = `<section class="business-panel settlement-panel" data-business-section="settlement">
-            <header class="panel-head"><h3>结算与付款</h3></header>
-            <div class="panel-body"><div class="settlement-stack">${settlements}</div></div>
-          </section>`;
+        if (sheet.scenario === 'poster_material' || sheet.scenario === 'other_expense' || sheet.scenario === 'maintenance_fee') {
+          container.innerHTML = '';
           return;
         }
-        const overview = overviewRows(sheet).map((row) => `
-          <section class="business-panel overview-panel" data-business-section="overview">
-            <header class="panel-head"><h3>${escapeHtml(row.heading)}</h3></header>
-            <div class="panel-body"><div class="settlement-stack">${renderSummaryItems(sheet, [row], 'overview')}</div></div>
-          </section>`).join('');
-        container.innerHTML = overview + `<section class="business-panel settlement-panel" data-business-section="settlement">
-          <header class="panel-head"><h3>活动结算</h3></header>
-          <div class="panel-body"><div class="settlement-stack">${settlements}</div></div>
-        </section>`;
+        if (sheet.scenario === 'personnel_incentive') {
+          container.innerHTML = renderContextPanel(
+            sheet, '结算与付款', 'settlement', 'settlement', settlementRows(sheet)
+          );
+          return;
+        }
+        const overviews = overviewRows(sheet);
+        const attachmentRows = overviews.filter((row) => row.heading.startsWith('合同销售附件'));
+        const overview = overviews.filter((row) => !row.heading.startsWith('合同销售附件')).map((row) => renderContextPanel(
+          sheet, row.heading, 'overview', 'overview', [row]
+        )).join('');
+        const attachment = renderContextPanel(
+          sheet, '合同销售附件｜合同主基准', 'overview', 'overview', attachmentRows
+        );
+        container.innerHTML = overview + attachment + renderContextPanel(
+          sheet, '活动结算', 'settlement', 'settlement', settlementRows(sheet)
+        );
       };
 
       const renderFilters = () => {
@@ -1170,22 +1354,44 @@
         const sheet = activeSheet();
         const rows = currentRows();
         const total = detailRows(sheet).length;
-        const unit = sheet.scenario === 'personnel_incentive' ? '个商品' : '家门店';
+        const unit = sheet.scenario === 'personnel_incentive'
+          ? '个商品'
+          : (sheet.scenario === 'poster_material' || sheet.scenario === 'other_expense' || sheet.scenario === 'maintenance_fee' ? '个错误/人工项' : '家门店');
         document.getElementById('resultsCount').innerHTML = `已显示 <strong>${rows.length}</strong> / ${total} ${unit}`;
         if (!rows.length) {
           records.innerHTML = '<div class="empty-state"><strong>没有符合条件的记录</strong><span>请调整搜索词或核验结论。</span></div>';
           return;
         }
-        records.innerHTML = rows.map((row) => `<article class="record-card ${row.status}" data-section="detail">
-          <details ${state.expanded ? 'open' : ''} data-row="${row.excel_row}">
-            <summary>
-              <div class="record-title"><h3>${escapeHtml(row.heading)}</h3><p>${escapeHtml(conclusionExcerpt(row))}</p></div>
-              <span class="status-pill ${row.status}">${statusText(row)}</span>
-              <span class="chevron" aria-hidden="true"></span>
-            </summary>
-            <div class="record-body"><div class="evidence-grid">${renderEvidence(sheet, row)}</div></div>
-          </details>
-        </article>`).join('');
+        records.innerHTML = rows.map((row) => {
+          if (sheet.scenario === 'promotional_display') {
+            const fact = displayRecordProjection(row);
+            const preview = [
+              withoutPrefix(fact.display, '陈列标准核验：'),
+              withoutPrefix(fact.product, '现场商品：'),
+            ].filter(Boolean).join(' · ');
+            return `<article class="record-card display-record ${row.status}" data-section="detail">
+              <details ${state.expanded ? 'open' : ''} class="record-details" data-row="${row.excel_row}">
+                <summary>
+                  <div class="record-title"><h3>${escapeHtml(row.heading)}</h3><p>${escapeHtml(preview)}</p></div>
+                  <span class="status-pill ${row.status}">${statusText(row)}</span>
+                  <div class="store-amount"><small>本店金额</small><strong>${renderSemanticText(withoutPrefix(fact.amount, '本店支持：'))}</strong></div>
+                  <span class="chevron" aria-hidden="true"></span>
+                </summary>
+                <div class="record-body">${renderDisplayReader(sheet, row)}</div>
+              </details>
+            </article>`;
+          }
+          return `<article class="record-card ${row.status}" data-section="detail">
+            <details ${state.expanded ? 'open' : ''} class="record-details" data-row="${row.excel_row}">
+              <summary>
+                <div class="record-title"><h3>${escapeHtml(row.heading)}</h3><p>${escapeHtml(conclusionExcerpt(row))}</p></div>
+                <span class="status-pill ${row.status}">${statusText(row)}</span>
+                <span class="chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="record-body"><div class="evidence-grid">${renderEvidence(sheet, row)}</div></div>
+            </details>
+          </article>`;
+        }).join('');
       };
 
       const resetScenarioState = () => {
@@ -1275,7 +1481,7 @@
       });
       expandButton.addEventListener('click', () => {
         state.expanded = !state.expanded;
-        records.querySelectorAll('details').forEach((detail) => { detail.open = state.expanded; });
+        records.querySelectorAll('.record-card > .record-details[data-row]').forEach((detail) => { detail.open = state.expanded; });
         expandButton.setAttribute('aria-pressed', String(state.expanded));
         expandButton.textContent = state.expanded ? '收起全部' : '展开全部';
       });
@@ -1291,6 +1497,12 @@
 
       renderAll();
     })();
+  </script>
+  <style id="error-only-preview-style">
+__ERROR_ONLY_CSS__
+  </style>
+  <script id="error-only-preview-script">
+__ERROR_ONLY_SCRIPT__
   </script>
 </body>
 </html>

@@ -1,0 +1,123 @@
+{
+  "schema_version": "1.0",
+  "description": "User-accepted visual regression calibrations for the permanent 2026-08-27 delivery standard. A calibration applies only when the immutable store route and every ordered source-photo SHA-256 match exactly.",
+  "calibrations": [
+    {
+      "calibration_id": "accepted-20260827-66-plaza-jiajiaxin",
+      "contract_store_name": "66广场家家欣",
+      "photo_sha256": [
+        "2bc5b681403c0d0e05ba6394449fd73b18e211370dbdfc3b1e3166678fb33aad"
+      ],
+      "display_observation": {
+        "standard_evidence": "meets",
+        "matched_standard": "four_vertical",
+        "vertical_facing_count": 5,
+        "vertical_facing_basis": [
+          "参半陈列区左侧第一列白色3+2礼盒",
+          "参半陈列区中间第二列白色3+2礼盒",
+          "参半陈列区右侧第三列白色3+2礼盒",
+          "白色礼盒右侧第一列边界独立的红绿参半包装",
+          "白色礼盒右侧第二列边界独立的红绿参半包装"
+        ],
+        "stack_1sqm_basis": null,
+        "description": "同一参半陈列区从左至右可分辨3列白色3+2礼盒和2列边界独立的红绿参半包装，共5个实体列位；不同参半SKU共同计列，已达到4纵陈列。左侧云南白药和最右侧高露洁均未计入。",
+        "limitations": [
+          "未提供可证明陈列足迹达到1平方米的尺寸或比例依据；本店按4纵分支通过。"
+        ]
+      }
+    },
+    {
+      "calibration_id": "accepted-20260827-baijiahua-gongming",
+      "contract_store_name": "百佳华百货（公明店）",
+      "photo_sha256": [
+        "334f7fe95b8f70a59cf89c0e2b65a47ba1a19c70d8b1695a51ecd59bdce07463"
+      ],
+      "display_observation": {
+        "standard_evidence": "unclear",
+        "matched_standard": "unclear",
+        "vertical_facing_count": 3,
+        "vertical_facing_basis": [
+          "左侧正面礼盒形成的独立列位",
+          "中间正面礼盒形成的独立列位",
+          "右侧正面礼盒形成的独立列位"
+        ],
+        "stack_1sqm_basis": null,
+        "description": "同一陈列可靠显示3个正面礼盒列；右端窄面与第三列礼盒连续，是同一包装侧板，不能重复计为第四列。照片也没有足以证明1平方米的尺寸或比例依据。",
+        "limitations": [
+          "未见第四个具有独立包装边界的实体列位。",
+          "未提供可证明陈列足迹达到1平方米的尺寸或比例依据。"
+        ]
+      }
+    },
+    {
+      "calibration_id": "accepted-20260827-jindafu-dongpu",
+      "contract_store_name": "金大福（东浦金正和总店）",
+      "photo_sha256": [
+        "5443f87d47fe6646e5da357f0e53a41c8934f58255619fe749eae9b7ad9596a0"
+      ],
+      "display_observation": {
+        "standard_evidence": "unclear",
+        "matched_standard": "unclear",
+        "vertical_facing_count": 3,
+        "vertical_facing_basis": [
+          "左侧正面3+2礼盒形成的独立列位",
+          "中间正面3+2礼盒形成的独立列位",
+          "右侧正面3+2礼盒形成的独立列位"
+        ],
+        "stack_1sqm_basis": null,
+        "description": "主体陈列可靠显示3个正面礼盒列；最右侧贴合窄面没有独立正面、错位或包装接缝足以证明另一实体堆叠，不能据此计为第四列。照片也没有1平方米面积依据。",
+        "limitations": [
+          "最右窄面不足以证明第四个独立实体列位。",
+          "未提供可证明陈列足迹达到1平方米的尺寸或比例依据。"
+        ]
+      }
+    },
+    {
+      "calibration_id": "accepted-20260827-tingmuzhi-hengli",
+      "contract_store_name": "挺拇指生活超市（横沥店）",
+      "photo_sha256": [
+        "f12dd735b31b0e3be209767b443a5dde76af047139821839e1c380befa2f17ba",
+        "1d4f8b92c71131ea2dbe09e06cff7496a82afca0ba4d7fced7ab272948670884"
+      ],
+      "display_observation": {
+        "standard_evidence": "meets",
+        "matched_standard": "four_vertical",
+        "vertical_facing_count": 4,
+        "vertical_facing_basis": [
+          "10-1照片中左缘边界独立的参半包装列",
+          "10-1照片中左侧参半礼盒正面列",
+          "10-1照片中中间参半礼盒正面列",
+          "10-1照片中右侧参半礼盒正面列"
+        ],
+        "stack_1sqm_basis": null,
+        "description": "10-1单张照片在同一参半陈列区可分辨4个独立包装列；不同参半组合装共同计列，不需要跨两张照片累加。已达到4纵陈列。",
+        "limitations": [
+          "未提供可证明陈列足迹达到1平方米的尺寸或比例依据；本店按4纵分支通过。"
+        ]
+      }
+    },
+    {
+      "calibration_id": "accepted-20260827-huadu-dongkeng",
+      "contract_store_name": "华都超市（东坑大道北店）",
+      "photo_sha256": [
+        "61e7f18669fe68e0686638d9bf53e6e488e8ce9ccb78192cdb6647915337dad0"
+      ],
+      "display_observation": {
+        "standard_evidence": "meets",
+        "matched_standard": "four_vertical",
+        "vertical_facing_count": 4,
+        "vertical_facing_basis": [
+          "最左侧绿色包装形成的独立列位",
+          "其右侧红色包装形成的独立列位",
+          "右侧白色大正面礼盒形成的独立列位",
+          "最右端与大正面礼盒边界独立的窄包装堆叠"
+        ],
+        "stack_1sqm_basis": null,
+        "description": "同一陈列从左至右可分辨绿色列、红色列、白色大正面礼盒列及其右侧边界独立的窄包装堆叠，共4个实体列位，达到4纵陈列。",
+        "limitations": [
+          "未提供可证明陈列足迹达到1平方米的尺寸或比例依据；本店按4纵分支通过。"
+        ]
+      }
+    }
+  ]
+}

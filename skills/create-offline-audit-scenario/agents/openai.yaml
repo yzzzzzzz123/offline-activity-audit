@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Offline Audit Scenario"
+  short_description: "Create and register a ZIP-driven audit scenario"
+  default_prompt: "Use $create-offline-audit-scenario with the new representative ZIP and my business rules to create a scenario Skill and register it in the existing offline-audit main flow."

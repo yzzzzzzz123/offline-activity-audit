@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/offline-activity-audit/other-expense-evidence.schema.json",
+  "title": "Other expense visible evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario", "documents", "extraction_notes"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "scenario": {"type": "string", "const": "other_expense"},
+    "documents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/document"}
+    },
+    "extraction_notes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "visibility": {
+      "type": "string",
+      "enum": ["visible", "not_visible", "unclear", "not_applicable"]
+    },
+    "expense_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "amount"],
+      "properties": {
+        "description": {"type": "string", "minLength": 1},
+        "amount": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "new_expense_type", "approval_authority", "approval_date",
+        "approval_statement", "approval_mark_visible"
+      ],
+      "properties": {
+        "new_expense_type": {"type": ["string", "null"], "minLength": 1},
+        "approval_authority": {"type": ["string", "null"], "minLength": 1},
+        "approval_date": {"type": ["string", "null"], "format": "date"},
+        "approval_statement": {"type": ["string", "null"], "minLength": 1},
+        "approval_mark_visible": {"$ref": "#/$defs/visibility"}
+      }
+    },
+    "photo_fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "watermark_date", "watermark_time", "watermark_location",
+        "activity_content", "pos_period", "pos_summary"
+      ],
+      "properties": {
+        "watermark_date": {"type": ["string", "null"], "format": "date"},
+        "watermark_time": {"type": ["string", "null"]},
+        "watermark_location": {"type": ["string", "null"]},
+        "activity_content": {"type": ["string", "null"]},
+        "pos_period": {"type": ["string", "null"]},
+        "pos_summary": {"type": ["string", "null"]}
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_file", "role", "document_type", "title", "party_names",
+        "customer_name", "activity_start", "activity_end", "expense_lines",
+        "total_amount", "company_template_visible", "customer_seal_visible",
+        "signed_visible", "approval", "activity_evidence", "visible_summary",
+        "limitations"
+      ],
+      "properties": {
+        "source_file": {"type": "string", "minLength": 1},
+        "role": {
+          "type": "string",
+          "enum": [
+            "signed_promotional_contract", "settlement", "supporting_document",
+            "activity_photo", "pos_data", "invoice_or_receipt",
+            "special_approval", "other"
+          ]
+        },
+        "document_type": {"type": "string", "minLength": 1},
+        "title": {"type": ["string", "null"], "minLength": 1},
+        "party_names": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "customer_name": {"type": ["string", "null"], "minLength": 1},
+        "activity_start": {"type": ["string", "null"], "format": "date"},
+        "activity_end": {"type": ["string", "null"], "format": "date"},
+        "expense_lines": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/expense_line"}
+        },
+        "total_amount": {"type": ["number", "null"], "minimum": 0},
+        "company_template_visible": {"$ref": "#/$defs/visibility"},
+        "customer_seal_visible": {"$ref": "#/$defs/visibility"},
+        "signed_visible": {"$ref": "#/$defs/visibility"},
+        "approval": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/approval"}]},
+        "activity_evidence": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/photo_fact"}]},
+        "visible_summary": {"type": "string", "minLength": 1},
+        "limitations": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

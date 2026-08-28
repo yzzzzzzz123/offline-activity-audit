@@ -37,8 +37,24 @@ DISPLAY_HEADERS = {
     "total": {"合计金额", "零售金额", "金额"},
 }
 
+MAINTENANCE_POS_HEADERS = {
+    "period": {"日期", "活动日期", "业务日期", "期间", "销售日期"},
+    "store": {"门店名称", "门店", "店名", "客户名称", "客户"},
+    "product_code": {"商品编码", "产品编码", "货号"},
+    "barcode": {"条形码", "条码", "商品条码"},
+    "product": {"货品名称", "商品名称", "产品名称", "名称"},
+    "quantity": {"货品数量", "销售数量", "数量", "销量"},
+    "unit_price": {"含税单价", "销售单价", "零售价", "单价"},
+    "amount": {"含税售额", "销售金额", "合计金额", "零售金额", "金额"},
+}
 
-def _header_map(ws: Any, candidates: dict[str, set[str]]) -> tuple[int, dict[str, int]]:
+
+def _header_map(
+    ws: Any,
+    candidates: dict[str, set[str]],
+    *,
+    required: set[str] | None = None,
+) -> tuple[int, dict[str, int]]:
     normalized = {
         key: {normalize_text(value) for value in values}
         for key, values in candidates.items()
@@ -50,12 +66,13 @@ def _header_map(ws: Any, candidates: dict[str, set[str]]) -> tuple[int, dict[str
             for key, options in normalized.items():
                 if key not in mapping and value in options:
                     mapping[key] = col
-        required = {"product", "quantity"}
-        if candidates is PERSONNEL_HEADERS:
-            required |= {"store", "barcode"}
-        else:
-            required |= {"customer", "product_code", "barcode"}
-        if required.issubset(mapping):
+        required_fields = set(required or {"product", "quantity"})
+        if required is None:
+            if candidates is PERSONNEL_HEADERS:
+                required_fields |= {"store", "barcode"}
+            else:
+                required_fields |= {"customer", "product_code", "barcode"}
+        if required_fields.issubset(mapping):
             return row, mapping
     raise AuditError(f"Could not find required Excel headers in sheet {ws.title!r}")
 
@@ -241,6 +258,15 @@ def read_display_sales(path: str | Path) -> dict[str, Any]:
             else None
         )
         line_amount_status = _money_pair_status(calculated_total, total_value)
+        unit_column = columns.get("unit", 0)
+        unit_value = value_ws.cell(row, unit_column).value if unit_column else None
+        if unit_value is None and unit_column:
+            formula_unit_value = formula_ws.cell(row, unit_column).value
+            if not (
+                isinstance(formula_unit_value, str)
+                and formula_unit_value.startswith("=")
+            ):
+                unit_value = formula_unit_value
         records.append(
             {
                 "excel_row": row,
@@ -249,9 +275,7 @@ def read_display_sales(path: str | Path) -> dict[str, Any]:
                 "product_code": str(formula_ws.cell(row, columns.get("product_code", 0)).value or ""),
                 "barcode": barcode_text(formula_ws.cell(row, columns.get("barcode", 0)).value),
                 "product_name": str(product).strip(),
-                "unit": str(
-                    formula_ws.cell(row, columns.get("unit", 0)).value or ""
-                ).strip(),
+                "unit": str(unit_value or "").strip(),
                 "quantity": _json_quantity(quantity),
                 "retail_price": retail_price,
                 "total_amount": total_value,
@@ -368,6 +392,137 @@ def read_display_sales(path: str | Path) -> dict[str, Any]:
     formula_book.close()
     value_book.close()
     return result
+
+
+def read_maintenance_pos(path: str | Path) -> dict[str, Any]:
+    """Read one POS workbook without exposing it to the visual extraction stage."""
+
+    source = Path(path).resolve()
+    formula_book = load_workbook(source, read_only=True, data_only=False)
+    value_book = load_workbook(source, read_only=True, data_only=True)
+    try:
+        formula_ws = formula_book[formula_book.sheetnames[0]]
+        value_ws = value_book[value_book.sheetnames[0]]
+        header_row, columns = _header_map(
+            formula_ws,
+            MAINTENANCE_POS_HEADERS,
+            required={"product", "quantity", "amount"},
+        )
+        records: list[dict[str, Any]] = []
+        printed_totals: list[dict[str, Any]] = []
+        external_formula_cells: list[str] = []
+        formula_cells: list[str] = []
+        for row in range(header_row + 1, formula_ws.max_row + 1):
+            formula_values = [
+                formula_ws.cell(row, col).value
+                for col in range(1, formula_ws.max_column + 1)
+            ]
+            for col, value in enumerate(formula_values, 1):
+                if isinstance(value, str) and value.startswith("="):
+                    coordinate = formula_ws.cell(row, col).coordinate
+                    formula_cells.append(coordinate)
+                    if "[" in value:
+                        external_formula_cells.append(coordinate)
+            normalized_cells = {
+                normalize_text(value)
+                for value in formula_values
+                if value is not None
+            }
+            if normalized_cells & {"合计", "总计"}:
+                printed_totals.append(
+                    {
+                        "excel_row": row,
+                        "quantity": _number(value_ws.cell(row, columns["quantity"]).value),
+                        "sales_amount": _number(value_ws.cell(row, columns["amount"]).value),
+                    }
+                )
+                continue
+
+            product = formula_ws.cell(row, columns["product"]).value
+            quantity = _number(value_ws.cell(row, columns["quantity"]).value)
+            amount = _number(value_ws.cell(row, columns["amount"]).value)
+            if not product or quantity is None or amount is None:
+                continue
+            unit_price = (
+                _number(value_ws.cell(row, columns["unit_price"]).value)
+                if "unit_price" in columns
+                else None
+            )
+            calculated_amount = quantity * unit_price if unit_price is not None else None
+            period_value = (
+                formula_ws.cell(row, columns["period"]).value
+                if "period" in columns
+                else None
+            )
+            store_value = (
+                formula_ws.cell(row, columns["store"]).value
+                if "store" in columns
+                else None
+            )
+            product_code_value = (
+                formula_ws.cell(row, columns["product_code"]).value
+                if "product_code" in columns
+                else None
+            )
+            barcode_value = (
+                formula_ws.cell(row, columns["barcode"]).value
+                if "barcode" in columns
+                else None
+            )
+            records.append(
+                {
+                    "excel_row": row,
+                    "period_text": str(period_value or "").strip(),
+                    "store_name": str(store_value or "").strip(),
+                    "product_code": str(product_code_value or "").strip(),
+                    "barcode": barcode_text(barcode_value),
+                    "product_name": str(product).strip(),
+                    "quantity": _json_quantity(quantity),
+                    "unit_price": unit_price,
+                    "sales_amount": amount,
+                    "calculated_sales_amount": calculated_amount,
+                    "line_amount_status": _money_pair_status(calculated_amount, amount),
+                }
+            )
+        if not records:
+            raise AuditError(f"POS电子表没有可读取的商品、数量和销售金额明细：{source.name}")
+
+        total_quantity = sum(float(item["quantity"]) for item in records)
+        total_sales_amount = sum(float(item["sales_amount"]) for item in records)
+        printed_total = printed_totals[0] if len(printed_totals) == 1 else None
+        printed_quantity_status = (
+            _money_pair_status(printed_total.get("quantity"), total_quantity)
+            if printed_total is not None
+            else "unverifiable"
+        )
+        printed_amount_status = (
+            _money_pair_status(printed_total.get("sales_amount"), total_sales_amount)
+            if printed_total is not None
+            else "unverifiable"
+        )
+        return {
+            "source_file": source.name,
+            "sheet": formula_ws.title,
+            "header_row": header_row,
+            "detail_row_count": len(records),
+            "total_quantity": _json_quantity(total_quantity),
+            "total_sales_amount": _json_quantity(total_sales_amount),
+            "printed_total_rows": printed_totals,
+            "printed_quantity_status": printed_quantity_status,
+            "printed_amount_status": printed_amount_status,
+            "period_values": sorted(
+                {item["period_text"] for item in records if item["period_text"]}
+            ),
+            "store_values": sorted(
+                {item["store_name"] for item in records if item["store_name"]}
+            ),
+            "formula_cells": sorted(set(formula_cells)),
+            "external_formula_cells": sorted(set(external_formula_cells)),
+            "records": records,
+        }
+    finally:
+        formula_book.close()
+        value_book.close()
 
 
 def _difference_hash(path: Path) -> str:

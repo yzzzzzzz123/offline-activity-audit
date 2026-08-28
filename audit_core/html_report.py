@@ -14,6 +14,9 @@ from .common import AuditError
 SHEET_SCENARIOS = {
     "人员激励核销": "personnel_incentive",
     "堆头核销": "promotional_display",
+    "海报物料核销": "poster_material",
+    "其他费用核销": "other_expense",
+    "维护费用核销": "maintenance_fee",
 }
 SCENARIO_SHEETS = {value: key for key, value in SHEET_SCENARIOS.items()}
 SUMMARY_PREFIXES = (
@@ -49,6 +52,7 @@ FORBIDDEN_UI_MARKERS = (
     "内容与同名 Excel 保持一致",
     "本页用于",
     "点击记录",
+    "合同核心商品 → 知识库：不适用",
     "打开同版 Excel",
     'id="excelLink"',
     "setExcelLink",
@@ -73,11 +77,18 @@ TEMPLATE_ASSET_PATH = (
     / "assets"
     / "canban-audit-shell.html"
 )
+ERROR_ONLY_STYLE_ASSET_PATH = TEMPLATE_ASSET_PATH.with_name("error-only.css")
+ERROR_ONLY_SCRIPT_ASSET_PATH = TEMPLATE_ASSET_PATH.with_name("error-only.js")
 AUDIT_DATA_MARKER = "__AUDIT_DATA__"
 STYLE_SHA256_MARKER = "__CANBAN_STYLE_SHA256__"
 SHELL_SHA256_MARKER = "__CANBAN_SHELL_SHA256__"
+ERROR_ONLY_STYLE_MARKER = "__ERROR_ONLY_CSS__"
+ERROR_ONLY_SCRIPT_MARKER = "__ERROR_ONLY_SCRIPT__"
 STYLE_PATTERN = re.compile(
     r'<style id="canban-audit-style">(?P<style>[\s\S]*?)</style>'
+)
+ERROR_ONLY_STYLE_PATTERN = re.compile(
+    r'<style id="error-only-preview-style">(?P<style>[\s\S]*?)</style>'
 )
 TEMPLATE_VERSION_PATTERN = re.compile(
     r'<meta name="canban-template-version" content="(?P<version>[^"]+)">'
@@ -104,7 +115,13 @@ def _row_section(
     scenario: str,
     values: list[str] | None = None,
 ) -> str:
-    if scenario not in {"personnel_incentive", "promotional_display"}:
+    if scenario not in {
+        "personnel_incentive",
+        "promotional_display",
+        "poster_material",
+        "other_expense",
+        "maintenance_fee",
+    }:
         raise AuditError(f"HTML不支持的核销场景：{scenario}")
     first = values[0].lstrip() if values else ""
     if (
@@ -118,8 +135,12 @@ def _row_section(
 
 def _row_status(values: list[str], kind: str) -> str:
     conclusion = values[5] if len(values) > 5 else ""
+    full_text = "\n".join(values)
+    if "待人工核定" in full_text:
+        return "issue"
     no_resubmission = (
         "无需重新提交" in conclusion
+        or "无需补交" in conclusion
         or "要重新提交：不用" in conclusion
         or "要重新提交什么：不用" in conclusion
     )
@@ -223,7 +244,7 @@ def _workbook_payload(workbook_path: str | Path) -> dict[str, Any]:
             if len(headers) != 6 or any(not header for header in headers):
                 raise AuditError(f"{worksheet.title} 缺少完整六列表头，不能生成HTML")
 
-            rows: list[dict[str, Any]] = []
+            all_rows: list[dict[str, Any]] = []
             for row_number in range(4, worksheet.max_row + 1):
                 values = [
                     _cell_text(worksheet.cell(row_number, column).value)
@@ -232,7 +253,7 @@ def _workbook_payload(workbook_path: str | Path) -> dict[str, Any]:
                 if not any(values):
                     continue
                 kind = _row_kind(values)
-                rows.append(
+                all_rows.append(
                     {
                         "excel_row": row_number,
                         "kind": kind,
@@ -249,6 +270,12 @@ def _workbook_payload(workbook_path: str | Path) -> dict[str, Any]:
                     }
                 )
 
+            issue_rows = [row for row in all_rows if row["status"] == "issue"]
+            visible_rows = (
+                issue_rows
+                if scenario in {"poster_material", "other_expense", "maintenance_fee"}
+                else all_rows
+            )
             sheets.append(
                 {
                     "name": worksheet.title,
@@ -256,14 +283,24 @@ def _workbook_payload(workbook_path: str | Path) -> dict[str, Any]:
                     "title": _cell_text(worksheet["A1"].value) or worksheet.title,
                     "note": _cell_text(worksheet["A2"].value),
                     "headers": headers,
-                    "rows": rows,
+                    "rows": visible_rows,
+                    "audit_counts": {
+                        "source_row_count": len(all_rows),
+                        "error_count": len(issue_rows),
+                        "detail_error_count": sum(
+                            row["section"] == "detail" for row in issue_rows
+                        ),
+                        "context_error_count": sum(
+                            row["section"] != "detail" for row in issue_rows
+                        ),
+                    },
                 }
             )
     finally:
         workbook.close()
 
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "title": "线下活动核销结果",
         "sheets": sheets,
     }
@@ -284,6 +321,21 @@ def _read_template_asset() -> str:
     if not TEMPLATE_ASSET_PATH.is_file():
         raise AuditError(f"找不到HTML模板资产：{TEMPLATE_ASSET_PATH}")
     template = TEMPLATE_ASSET_PATH.read_text(encoding="utf-8")
+    component_paths = {
+        ERROR_ONLY_STYLE_MARKER: ERROR_ONLY_STYLE_ASSET_PATH,
+        ERROR_ONLY_SCRIPT_MARKER: ERROR_ONLY_SCRIPT_ASSET_PATH,
+    }
+    for marker, path in component_paths.items():
+        if template.count(marker) != 1:
+            raise AuditError(f"HTML模板组件占位符缺失或重复：{marker}")
+        if not path.is_file():
+            raise AuditError(f"找不到HTML模板组件：{path}")
+        component = path.read_text(encoding="utf-8").rstrip("\n")
+        if marker == ERROR_ONLY_STYLE_MARKER and "</style>" in component.lower():
+            raise AuditError("错误清单样式组件不得提前结束style标签")
+        if marker == ERROR_ONLY_SCRIPT_MARKER and "</script>" in component.lower():
+            raise AuditError("错误清单脚本组件不得提前结束script标签")
+        template = template.replace(marker, component)
     required_markers = (
         AUDIT_DATA_MARKER,
         STYLE_SHA256_MARKER,
@@ -296,6 +348,10 @@ def _read_template_asset() -> str:
         raise AuditError("HTML模板不得预置核销数据")
     if STYLE_PATTERN.search(template) is None:
         raise AuditError("HTML模板缺少唯一主样式块")
+    if ERROR_ONLY_STYLE_PATTERN.search(template) is None:
+        raise AuditError("HTML模板缺少错误清单样式块")
+    if template.count('id="error-only-preview-script"') != 1:
+        raise AuditError("HTML模板缺少唯一错误清单脚本")
     version_matches = list(TEMPLATE_VERSION_PATTERN.finditer(template))
     if len(version_matches) != 1:
         raise AuditError("HTML模板缺少唯一版本标记")
@@ -304,13 +360,19 @@ def _read_template_asset() -> str:
 
 def _template_metadata(template: str) -> dict[str, str]:
     style_match = STYLE_PATTERN.search(template)
+    error_style_match = ERROR_ONLY_STYLE_PATTERN.search(template)
     version_match = TEMPLATE_VERSION_PATTERN.search(template)
-    if style_match is None or version_match is None:
+    if style_match is None or error_style_match is None or version_match is None:
         raise AuditError("HTML模板版本或样式标记无效")
+    combined_style = (
+        style_match.group("style")
+        + "\n"
+        + error_style_match.group("style")
+    )
     return {
         "template_version": version_match.group("version"),
         "style_sha256": hashlib.sha256(
-            style_match.group("style").encode("utf-8")
+            combined_style.encode("utf-8")
         ).hexdigest(),
         "shell_sha256": hashlib.sha256(template.encode("utf-8")).hexdigest(),
     }
@@ -375,12 +437,12 @@ def verify_html_report(
         raise AuditError(f"HTML场景名称或顺序错误：{actual_sheets}，期望{expected_sheets}")
 
     required_controls = (
-        'id="homeButton"',
-        'id="scenarioTabs"',
-        'id="searchInput"',
-        'id="statusFilters"',
-        'id="expandButton"',
-        'id="backTop"',
+        'id="error-only-preview-style"',
+        'id="error-only-preview-script"',
+        'id="eoBackTop"',
+        'class="eo-tab"',
+        'class="eo-enter"',
+        'class="eo-error-card"',
     )
     missing_controls = [control for control in required_controls if control not in html]
     if missing_controls:
@@ -402,6 +464,13 @@ def verify_html_report(
     }
     for sheet in payload.get("sheets", []):
         for row in sheet.get("rows") or []:
+            if (
+                sheet.get("scenario") in {"poster_material", "other_expense", "maintenance_fee"}
+                and row.get("status") != "issue"
+            ):
+                raise AuditError(
+                    f"{sheet.get('name')} 包含通过项；该场景HTML只能输出错误或人工处理项"
+                )
             expected_section = _row_section(
                 str(row.get("kind") or ""),
                 str(sheet.get("scenario") or ""),
@@ -412,10 +481,8 @@ def verify_html_report(
                     f"{sheet.get('name')} 第{row.get('excel_row')}行分组错误："
                     f"{row.get('section')}，期望{expected_section}"
                 )
-    if 'class="photo-product-table"' not in html:
-        raise AuditError("HTML缺少现场商品表格组件")
-    if 'class="identity-table"' not in html:
-        raise AuditError("HTML缺少知识库与销售行表格组件")
+    if 'class="eo-table"' not in html:
+        raise AuditError("HTML缺少合同商品错误明细表格组件")
     expected_html = _render_template(payload)
     if html != expected_html:
         raise AuditError("HTML静态模板与主Skill模板资产不一致")

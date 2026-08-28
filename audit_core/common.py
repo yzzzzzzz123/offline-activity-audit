@@ -17,6 +17,9 @@ class AuditError(RuntimeError):
 
 
 MONEY_QUANT = Decimal("0.01")
+POSTER_MATERIAL_QUANTITY_CALIBRATION_PREFIX = (
+    "[deterministic-poster-material-quantity-calibration]"
+)
 
 
 def now_utc() -> str:

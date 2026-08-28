@@ -19,9 +19,14 @@ from .common import (
 )
 from .excel_sources import image_file_inventory, pdf_inventory, read_display_sales
 from .product_rag import (
+    FIELD_SHORT_CODE_PATTERN,
+    PRODUCT_EXISTENCE_NAME_THRESHOLD,
+    apply_visible_catalog_text_exact_hits,
     apply_visible_short_code_exact_hits,
+    catalog_product_name_values,
     ean13_is_valid,
     load_product_rag,
+    product_name_similarity,
     product_reference_label,
     resolve_product_reference_hits,
 )
@@ -41,7 +46,6 @@ GENERIC_LOCATION_BIGRAMS = {
     "超市", "商场", "购物", "广场", "生活", "连锁", "百货", "中心",
     "广东", "东莞", "深圳", "门店", "精选",
 }
-DISPLAY_SKILL_DIR = Path(__file__).resolve().parents[1] / "skills" / "audit-promotional-display"
 ENTITY_SUFFIXES = ("有限责任公司", "股份有限公司", "有限公司", "公司")
 
 
@@ -303,15 +307,15 @@ def _contract_sales_reconciliation(
     seal = contract.get("seal_visible")
     watermark_status = "present" if watermark is True else "absent" if watermark is False else "unverifiable"
     seal_status = "present" if seal is True else "absent" if seal is False else "unverifiable"
-    if watermark is True or seal is True:
+    if seal is True:
         integrity_status = "pass"
-        integrity_basis = "合同可见水印或盖章，具备可核验的签署/来源标记。"
-    elif watermark is False and seal is False:
+        integrity_basis = "合同盖章清晰可见；水印状态仅记录，不参与核销。"
+    elif seal is False:
         integrity_status = "fail"
-        integrity_basis = "合同未见水印且未见盖章，完整性门禁不通过。"
+        integrity_basis = "合同明确未见盖章，完整性门禁不通过；水印不参与核销。"
     else:
         integrity_status = "unverifiable"
-        integrity_basis = "合同水印和盖章状态未能确认，完整性门禁待核验。"
+        integrity_basis = "合同盖章无法确认，完整性门禁待核验；水印不参与核销。"
 
     if customer_status == "mismatch" or period_status == "mismatch" or integrity_status == "fail":
         status = "fail"
@@ -341,20 +345,199 @@ def _contract_sales_reconciliation(
     }
 
 
+def _contract_core_reconciliation(
+    contract: dict[str, Any],
+    contract_sales: dict[str, Any],
+) -> dict[str, Any]:
+    """Audit every mandatory core-contract field as its own visible control."""
+
+    def text_is_explicit(value: Any) -> bool:
+        text = str(value or "").strip()
+        return bool(text) and not any(
+            marker in text
+            for marker in ("未识别", "无法识别", "不清楚", "不明确")
+        )
+
+    party_status = str(contract_sales.get("customer_status") or "unverifiable")
+    party_control = (
+        "pass"
+        if party_status in {"exact", "fuzzy"}
+        else "fail"
+        if party_status == "mismatch"
+        else "unverifiable"
+    )
+    parties = [
+        str(value).strip()
+        for value in contract.get("contract_parties") or []
+        if str(value).strip()
+    ]
+    sales_customers = [
+        str(value).strip()
+        for value in contract_sales.get("sales_customers") or []
+        if str(value).strip()
+    ]
+
+    budget = contract.get("activity_budget")
+    claimed = contract.get("claimed_amount")
+    if budget is None:
+        budget_control = "unverifiable"
+        budget_basis = "合同未识别到明确活动预算金额。"
+    elif claimed is not None and _decimal_value(claimed) is not None and _decimal_value(budget) is not None:
+        if _decimal_value(claimed) <= _decimal_value(budget):
+            budget_control = "pass"
+            budget_basis = "活动预算金额明确，且申报金额未超过预算。"
+        else:
+            budget_control = "fail"
+            budget_basis = "申报金额超过合同活动预算金额。"
+    else:
+        budget_control = "unverifiable"
+        budget_basis = "活动预算金额或申报金额无法完整核对。"
+
+    period_status = str(contract_sales.get("period_status") or "unverifiable")
+    period_control = (
+        "pass"
+        if period_status == "covered"
+        else "fail"
+        if period_status == "mismatch"
+        else "unverifiable"
+    )
+
+    activity_content = str(contract.get("activity_content") or "").strip()
+    content_control = "pass" if text_is_explicit(activity_content) else "unverifiable"
+    content_basis = (
+        "合同已明确写出活动内容。"
+        if content_control == "pass"
+        else "合同活动内容缺失、模糊或无法识别。"
+    )
+
+    settlement_method = str(contract.get("settlement_method") or "").strip()
+    fee_basis = str(contract.get("fee_basis") or "unclear")
+    method_control = (
+        "pass"
+        if text_is_explicit(settlement_method) and fee_basis != "unclear"
+        else "unverifiable"
+    )
+    method_basis = (
+        "合同核销方式原文清楚，且确定性规则已识别计费口径。"
+        if method_control == "pass"
+        else "合同核销方式缺失、模糊或无法形成明确计费口径。"
+    )
+
+    seal = contract.get("seal_visible")
+    seal_control = "pass" if seal is True else "fail" if seal is False else "unverifiable"
+
+    checks = [
+        {
+            "field": "contracting_party",
+            "label": "合同签订方",
+            "contract_value": "、".join(parties) or "未识别",
+            "comparison_value": "、".join(sales_customers) or None,
+            "status": party_control,
+            "basis": str(contract_sales.get("customer_basis") or "合同签订方未核验。"),
+        },
+        {
+            "field": "activity_budget",
+            "label": "活动预算金额",
+            "contract_value": (
+                f"{json_number(budget)}元" if budget is not None else "未识别"
+            ),
+            "comparison_value": (
+                f"申报{json_number(claimed)}元" if claimed is not None else None
+            ),
+            "status": budget_control,
+            "basis": budget_basis,
+        },
+        {
+            "field": "execution_period",
+            "label": "执行周期",
+            "contract_value": (
+                f"{contract.get('activity_start') or '未识别'} 至 "
+                f"{contract.get('activity_end') or '未识别'}"
+            ),
+            "comparison_value": "、".join(
+                str(value) for value in contract_sales.get("sales_period_values") or []
+            ) or None,
+            "status": period_control,
+            "basis": str(contract_sales.get("period_basis") or "合同执行周期未核验。"),
+        },
+        {
+            "field": "activity_content",
+            "label": "活动内容",
+            "contract_value": activity_content or "未识别",
+            "comparison_value": None,
+            "status": content_control,
+            "basis": content_basis,
+        },
+        {
+            "field": "settlement_method",
+            "label": "核销方式",
+            "contract_value": settlement_method or "未识别",
+            "comparison_value": fee_basis,
+            "status": method_control,
+            "basis": method_basis,
+        },
+        {
+            "field": "seal",
+            "label": "盖章",
+            "contract_value": "可见" if seal is True else "未见" if seal is False else "无法确认",
+            "comparison_value": None,
+            "status": seal_control,
+            "basis": (
+                "合同盖章清晰可见。"
+                if seal is True
+                else "合同未见盖章。"
+                if seal is False
+                else "合同盖章状态无法确认。"
+            ),
+        },
+    ]
+    problem_fields = [
+        str(item["field"]) for item in checks if item["status"] != "pass"
+    ]
+    statuses = {str(item["status"]) for item in checks}
+    status = (
+        "fail"
+        if "fail" in statuses
+        else "unverifiable"
+        if "unverifiable" in statuses
+        else "pass"
+    )
+    return {
+        "status": status,
+        "source_file": str(contract.get("source_file") or ""),
+        "field_count": len(checks),
+        "passed_count": sum(item["status"] == "pass" for item in checks),
+        "problem_count": len(problem_fields),
+        "problem_fields": problem_fields,
+        "field_checks": checks,
+        "basis": (
+            "合同核心六项全部核清。"
+            if status == "pass"
+            else "合同核心六项存在不通过或无法核对字段："
+            + "、".join(
+                str(item["label"])
+                for item in checks
+                if item["status"] != "pass"
+            )
+            + "。"
+        ),
+    }
+
+
 def _determine_store_match(
     contract_name: str,
     visible_location: str | None,
     photo_files: list[str],
 ) -> tuple[str, str]:
     if not visible_location:
-        return "filename_only", "现场未识别到独立地点，文件名不能单独证明门店"
+        return "filename_only", "照片水印未识别到独立地点，文件名不能单独证明门店"
     if _numbered_store_conflict(contract_name, visible_location):
-        return "mismatch", "合同为编号门店，现场地点未显示相同门店编号"
+        return "mismatch", "照片水印地点与合同编号门店不一致，未显示相同门店编号"
 
     contract_text = _canonical_location(contract_name)
     visible_text = _canonical_location(visible_location)
     if contract_text in visible_text or visible_text in contract_text:
-        return "exact", "可见地点包含合同门店名称"
+        return "exact", "照片水印地点包含合同门店名称"
 
     contract_grams = _location_bigrams(contract_name)
     visible_grams = _location_bigrams(visible_location)
@@ -364,10 +547,10 @@ def _determine_store_match(
         else 0.0
     )
     if direct_similarity >= 0.4:
-        return "compatible", "可见地点与合同门店的有效名称片段一致"
+        return "compatible", "照片水印地点与合同门店的有效名称片段一致"
     if _corroborated_location_bridge(contract_name, visible_location, photo_files):
-        return "compatible", "可见地点与合同门店名称由同一原始文件名双向印证"
-    return "mismatch", "可见地点与合同门店缺少可验证的名称对应关系"
+        return "compatible", "照片水印地点与合同门店名称由同一原始文件名双向印证"
+    return "mismatch", "照片水印地点已识别但与合同门店不一致；这是水印地点错误，不是清晰度问题"
 
 
 def _canonical_product(value: Any) -> str:
@@ -377,9 +560,9 @@ def _canonical_product(value: Any) -> str:
 
 
 def _strict_identity_key(value: Any) -> str:
-    """Normalize a formal identity without erasing meaningful punctuation."""
+    """Preserve a formal business identifier for exact source comparison."""
 
-    return unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
+    return str(value or "").strip()
 
 
 def _product_grams(value: Any) -> set[str]:
@@ -392,28 +575,11 @@ def _product_grams(value: Any) -> set[str]:
 
 
 def _similarity(left: Any, right: Any) -> float:
-    left_grams = _product_grams(left)
-    right_grams = _product_grams(right)
-    if not left_grams or not right_grams:
-        return 0.0
-    return len(left_grams & right_grams) / len(left_grams | right_grams)
+    return product_name_similarity(left, right)
 
 
 def _catalog_name_values(product: dict[str, Any]) -> list[str]:
-    values = [str(product.get("product_name") or "")]
-    values.extend(str(value) for value in product.get("aliases") or [])
-    for source in product.get("sources") or []:
-        observed_name = str(source.get("observed_product_name") or "").strip()
-        observed_specification = str(source.get("observed_specification") or "").strip()
-        observed_variant = str(source.get("observed_variant") or "").strip()
-        values.extend(
-            [
-                observed_name,
-                f"{observed_name}{observed_variant}{observed_specification}",
-                f"{observed_name}{observed_specification}{observed_variant}",
-            ]
-        )
-    return list(dict.fromkeys(value for value in values if value))
+    return catalog_product_name_values(product)
 
 
 def _measurement_tokens(value: Any) -> set[str]:
@@ -444,17 +610,32 @@ def _catalog_name_score(value: Any, product: dict[str, Any]) -> float:
     )
 
 
-def _unique_fuzzy_product(
+def _best_fuzzy_product(
     value: Any,
     products: list[dict[str, Any]],
     *,
-    minimum_score: float,
+    threshold: float = PRODUCT_EXISTENCE_NAME_THRESHOLD,
 ) -> tuple[dict[str, Any] | None, float]:
+    """Disambiguate same-ID candidates by their authoritative product names.
+
+    Catalog aliases, including packaging short codes such as ``SP-2``, remain
+    useful auxiliary name evidence elsewhere.  They must not overpower the
+    complete authoritative name when several catalog rows share one 69 code;
+    otherwise an edition-only alias can incorrectly select a ``代言人`` variant
+    even though the source name describes the ordinary package.
+    """
+
     ranked = sorted(
-        ((_catalog_name_score(value, product), product) for product in products),
+        (
+            (
+                _similarity(value, str(product.get("product_name") or "")),
+                product,
+            )
+            for product in products
+        ),
         key=lambda item: (-item[0], str(item[1].get("product_id") or "")),
     )
-    if not ranked or ranked[0][0] < minimum_score:
+    if not ranked or ranked[0][0] <= threshold:
         return None, ranked[0][0] if ranked else 0.0
     if len(ranked) > 1 and ranked[0][0] - ranked[1][0] < 0.08:
         return None, ranked[0][0]
@@ -470,25 +651,49 @@ def _catalog_identity_projection(product: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def _sales_catalog_reconciliation(
-    sales_records: list[dict[str, Any]],
+def _strict_catalog_product_codes(product: dict[str, Any]) -> set[str]:
+    """Return formal business codes, excluding packaging-only short codes."""
+
+    values = {str(product.get("product_code") or "").strip()}
+    values.update(
+        str(value).strip()
+        for value in product.get("product_code_aliases") or []
+        if str(value).strip()
+        and FIELD_SHORT_CODE_PATTERN.fullmatch(str(value).strip()) is None
+    )
+    return {value for value in values if value}
+
+
+def _product_records_catalog_reconciliation(
+    source_records: list[dict[str, Any]],
     catalog: dict[str, Any],
     *,
-    source_label: str = "销售Excel",
+    source_label: str = "合同附件",
 ) -> dict[str, Any]:
-    """Resolve every sales row with strict code/barcode and exact-or-fuzzy name checks."""
+    """Resolve contract-attachment products against the shared identity ledger.
+
+    The 69 code and source-local business product code are both strict catalog
+    identifiers.  The source code may match either the catalog's main
+    ``product_code`` or one of its exact ``product_code_aliases``; it is also
+    preserved for contract-attachment-to-Excel comparison.  Product names are
+    fuzzy auxiliary evidence and never require exact equality.
+    """
 
     products = list(catalog.get("products") or [])
     by_id = {str(product["product_id"]): product for product in products}
     reconciled: list[dict[str, Any]] = []
 
-    for record in sales_records:
+    for record in source_records:
         source_values = {
             "product_code": str(record.get("product_code") or "").strip(),
             "product_name": str(record.get("product_name") or "").strip(),
             "barcode_69": str(record.get("barcode") or "").strip(),
         }
-        missing_fields = [field for field, value in source_values.items() if not value]
+        missing_fields = [
+            field
+            for field in ("product_code", "barcode_69")
+            if not source_values[field]
+        ]
         invalid_barcode = bool(source_values["barcode_69"]) and not ean13_is_valid(
             source_values["barcode_69"]
         )
@@ -497,8 +702,7 @@ def _sales_catalog_reconciliation(
                 str(product["product_id"])
                 for product in products
                 if source_values["product_code"]
-                and _strict_identity_key(source_values["product_code"])
-                == _strict_identity_key(product.get("product_code"))
+                and source_values["product_code"] in _strict_catalog_product_codes(product)
             },
             "product_name": {
                 str(product["product_id"])
@@ -521,68 +725,57 @@ def _sales_catalog_reconciliation(
         code_ids = field_candidates["product_code"]
         exact_name_ids = field_candidates["product_name"]
         barcode_ids = field_candidates["barcode_69"]
-        strict_ids = code_ids & barcode_ids if code_ids and barcode_ids else set()
         selected: dict[str, Any] | None = None
         diagnostic_selected: dict[str, Any] | None = None
         name_match_type = "unmatched"
         fuzzy_score = 0.0
 
-        if not missing_fields and not invalid_barcode and strict_ids:
-            exact_strict_names = strict_ids & exact_name_ids
-            if len(exact_strict_names) == 1:
-                selected = by_id[next(iter(exact_strict_names))]
+        strict_identity_ids = code_ids & barcode_ids
+        if not missing_fields and not invalid_barcode and strict_identity_ids:
+            exact_barcode_names = strict_identity_ids & exact_name_ids
+            if exact_barcode_names:
+                selected = by_id[sorted(exact_barcode_names)[0]]
                 name_match_type = "exact"
-            elif len(exact_strict_names) > 1:
-                selected = None
+                fuzzy_score = 1.0
+            elif len(strict_identity_ids) == 1:
+                selected = by_id[next(iter(strict_identity_ids))]
+                name_match_type = "fuzzy"
+                fuzzy_score = _catalog_name_score(
+                    source_values["product_name"], selected
+                ) if source_values["product_name"] else 0.0
             else:
-                selected, fuzzy_score = _unique_fuzzy_product(
+                selected, fuzzy_score = _best_fuzzy_product(
                     source_values["product_name"],
-                    [by_id[product_id] for product_id in sorted(strict_ids)],
-                    minimum_score=0.45 if len(strict_ids) > 1 else 0.55,
+                    [
+                        by_id[product_id]
+                        for product_id in sorted(strict_identity_ids)
+                    ],
+                    threshold=PRODUCT_EXISTENCE_NAME_THRESHOLD,
                 )
                 if selected is not None:
                     name_match_type = "fuzzy"
 
-        if selected is not None:
-            diagnostic_selected = selected
-        else:
-            # A registered 69 code may belong to more than one product.  Locate
-            # the intended catalog product inside that exact-barcode group by
-            # name first, independently of an incorrect external product code,
-            # so the code error can be reported against the right product.
-            name_barcode = exact_name_ids & barcode_ids
-            if len(name_barcode) == 1:
-                diagnostic_selected = by_id[next(iter(name_barcode))]
+        diagnostic_selected = selected
+        if diagnostic_selected is None and barcode_ids:
+            exact_barcode_names = barcode_ids & exact_name_ids
+            if len(exact_barcode_names) == 1:
+                diagnostic_selected = by_id[next(iter(exact_barcode_names))]
                 name_match_type = "exact"
-            elif source_values["product_name"] and barcode_ids:
-                diagnostic_selected, fuzzy_score = _unique_fuzzy_product(
+                fuzzy_score = 1.0
+            elif source_values["product_name"]:
+                diagnostic_selected, fuzzy_score = _best_fuzzy_product(
                     source_values["product_name"],
                     [by_id[product_id] for product_id in sorted(barcode_ids)],
-                    minimum_score=0.45 if len(barcode_ids) > 1 else 0.55,
+                    threshold=PRODUCT_EXISTENCE_NAME_THRESHOLD,
                 )
                 if diagnostic_selected is not None:
                     name_match_type = "fuzzy"
-
-            # If the barcode is the bad strict field, the same diagnostic rule
-            # can use the registered code plus name to expose that mismatch.
-            if diagnostic_selected is None:
-                name_code = exact_name_ids & code_ids
-                if len(name_code) == 1:
-                    diagnostic_selected = by_id[next(iter(name_code))]
-                    name_match_type = "exact"
-                elif source_values["product_name"] and code_ids:
-                    diagnostic_selected, fuzzy_score = _unique_fuzzy_product(
-                        source_values["product_name"],
-                        [by_id[product_id] for product_id in sorted(code_ids)],
-                        minimum_score=0.45 if len(code_ids) > 1 else 0.55,
-                    )
-                    if diagnostic_selected is not None:
-                        name_match_type = "fuzzy"
-
-            if diagnostic_selected is None and len(strict_ids) == 1:
-                diagnostic_selected = by_id[next(iter(strict_ids))]
-            elif diagnostic_selected is None and len(exact_name_ids) == 1:
-                diagnostic_selected = by_id[next(iter(exact_name_ids))]
+        if diagnostic_selected is None and len(barcode_ids) == 1:
+            diagnostic_selected = by_id[next(iter(barcode_ids))]
+        elif diagnostic_selected is None and len(code_ids) == 1:
+            diagnostic_selected = by_id[next(iter(code_ids))]
+        elif diagnostic_selected is None and len(exact_name_ids) == 1:
+            diagnostic_selected = by_id[next(iter(exact_name_ids))]
 
         selected_id = (
             str(diagnostic_selected["product_id"])
@@ -594,44 +787,53 @@ def _sales_catalog_reconciliation(
                 str(diagnostic_selected["product_id"])
             )
 
-        nonempty_sets = [values for values in field_candidates.values() if values]
-
         matched_fields: list[str] = []
         unmatched_fields: list[str] = []
         conflicting_fields: list[str] = []
-
         field_comparisons: list[dict[str, Any]] = []
         for field, source_value in source_values.items():
             candidates = field_candidates[field]
             if not source_value:
                 comparison = "missing"
+            elif field == "product_code" and code_ids:
+                comparison = "matched"
+            elif field == "product_code":
+                comparison = "conflict" if diagnostic_selected is not None else "not_found"
             elif field == "barcode_69" and invalid_barcode:
                 comparison = "invalid"
+            elif field == "barcode_69" and barcode_ids:
+                comparison = "matched"
             elif (
                 field == "product_name"
                 and diagnostic_selected is not None
-                and name_match_type == "fuzzy"
+                and name_match_type != "exact"
             ):
                 comparison = "fuzzy"
-            elif selected_id and selected_id in candidates:
+            elif (
+                field == "product_name"
+                and diagnostic_selected is not None
+                and name_match_type == "exact"
+            ):
                 comparison = "matched"
-            elif not candidates:
+            elif field == "product_name" and not candidates:
                 comparison = "not_found"
-            elif selected_id is None and len(candidates) > 1:
-                comparison = "ambiguous"
-            elif candidates:
+            elif field == "product_name":
                 comparison = "conflict"
             else:
                 comparison = "not_found"
-            selected_knowledge_value = None
-            if diagnostic_selected is not None:
-                selected_knowledge_value = str(diagnostic_selected[field])
+
             if comparison in {"matched", "fuzzy"}:
                 matched_fields.append(field)
             elif comparison == "not_found":
                 unmatched_fields.append(field)
-            elif comparison in {"conflict", "ambiguous", "invalid"}:
+            elif comparison in {"conflict", "invalid"}:
                 conflicting_fields.append(field)
+
+            selected_knowledge_value = (
+                str(diagnostic_selected[field])
+                if diagnostic_selected is not None
+                else None
+            )
             field_comparisons.append(
                 {
                     "field": field,
@@ -647,28 +849,21 @@ def _sales_catalog_reconciliation(
 
         if invalid_barcode or missing_fields:
             status = "conflict"
-        elif not code_ids and not exact_name_ids and not barcode_ids:
+        elif not barcode_ids:
             status = "unmatched"
-        elif not code_ids or not barcode_ids or not strict_ids:
+        elif not code_ids or not strict_identity_ids:
             status = "conflict"
         elif selected is not None and name_match_type == "exact":
             status = "matched"
         elif selected is not None and name_match_type == "fuzzy":
             status = "fuzzy_matched"
-        elif len(strict_ids) > 1:
-            status = "ambiguous"
         else:
             status = "conflict"
 
         if status == "unmatched":
             basis = (
-                f"{source_label}第{record['excel_row']}行的商品编码、商品名称、69码"
-                "均未命中正式商品知识库。"
-            )
-        elif status == "ambiguous":
-            basis = (
-                f"{source_label}第{record['excel_row']}行命中多个知识库商品，"
-                "商品名称不能在同码/同编码候选中唯一消歧。"
+                f"{source_label}第{record['excel_row']}行的有效69码"
+                "未命中正式商品知识库。"
             )
         elif status == "conflict":
             details: list[str] = []
@@ -676,39 +871,50 @@ def _sales_catalog_reconciliation(
                 details.append("69码未通过EAN-13校验")
             if missing_fields:
                 details.append(
-                    "缺少" + "、".join(KNOWLEDGE_FIELD_LABELS[field] for field in missing_fields)
+                    "缺少"
+                    + "、".join(
+                        KNOWLEDGE_FIELD_LABELS[field] for field in missing_fields
+                    )
                 )
-            if unmatched_fields:
+            if source_values["product_code"] and not code_ids:
                 details.append(
-                    "知识库无同值字段："
-                    + "、".join(KNOWLEDGE_FIELD_LABELS[field] for field in unmatched_fields)
+                    "产品编码未在知识库product_code或product_code_aliases中登记"
                 )
-            if conflicting_fields:
+            if code_ids and barcode_ids and not strict_identity_ids:
+                details.append("产品编码和69码没有共同命中同一个知识库商品")
+            if (
+                strict_identity_ids
+                and selected is None
+                and not source_values["product_name"]
+            ):
                 details.append(
-                    "字段指向不同知识库商品："
-                    + "、".join(KNOWLEDGE_FIELD_LABELS[field] for field in conflicting_fields)
+                    "合同PDF商品名称未识别，无法在同69码商品中完成模糊确认"
                 )
+            if (
+                strict_identity_ids
+                and selected is None
+                and source_values["product_name"]
+            ):
+                details.append("商品名称模糊相似度未严格高于0.5")
             basis = (
-                f"{source_label}第{record['excel_row']}行未通过知识库核验；"
-                + "；".join(details or ["商品名称不能与严格编码和69码唯一对应"])
+                f"{source_label}第{record['excel_row']}行未通过商品存在核验；"
+                + "；".join(details or ["产品编码与69码未共同满足知识库核验条件"])
             )
         else:
             assert selected is not None
-            if status == "matched":
-                basis = (
-                    f"{source_label}第{record['excel_row']}行商品编码、商品名称和69码"
-                    f"均与知识库商品{selected['product_code']}严格一致。"
-                )
-            else:
-                basis = (
-                    f"{source_label}第{record['excel_row']}行商品编码和69码严格一致；"
-                    f"商品名称与知识库商品{selected['product_code']}模糊一致"
-                    f"（{fuzzy_score:.3f}）。"
-                )
+            name_basis = (
+                "商品名称精确匹配"
+                if status == "matched"
+                else "商品名称模糊相似度严格高于0.5"
+            )
+            basis = (
+                f"{source_label}第{record['excel_row']}行产品编码与69码精确匹配，{name_basis}。"
+            )
+
+        nonempty_sets = [values for values in field_candidates.values() if values]
         candidate_id_set = set().union(*nonempty_sets) if nonempty_sets else set()
         if selected_id:
             candidate_id_set.add(selected_id)
-        candidate_ids = sorted(candidate_id_set)
         reconciled.append(
             {
                 "excel_row": int(record["excel_row"]),
@@ -742,7 +948,7 @@ def _sales_catalog_reconciliation(
                 "unmatched_fields": unmatched_fields,
                 "conflicting_fields": conflicting_fields,
                 "missing_fields": missing_fields,
-                "candidate_product_ids": candidate_ids,
+                "candidate_product_ids": sorted(candidate_id_set),
                 "field_comparisons": field_comparisons,
                 "basis": basis,
             }
@@ -765,12 +971,11 @@ def _sales_catalog_reconciliation(
         "problem_rows": problem_rows,
         "records": reconciled,
         "basis": (
-            f"{matched_count + fuzzy_count}/{len(reconciled)}行通过商品知识库"
-            f"（精确{matched_count}行、模糊{fuzzy_count}行）"
+            f"{matched_count + fuzzy_count}/{len(reconciled)}行通过商品存在核验"
+            f"（69码精确，名称精确{matched_count}行、模糊>0.5共{fuzzy_count}行）"
             + (f"；问题行：{problem_rows}" if problem_rows else "；全部通过")
         ),
     }
-
 
 def _contract_attachment_knowledge_reconciliation(
     contract: dict[str, Any],
@@ -817,7 +1022,7 @@ def _contract_attachment_knowledge_reconciliation(
         }
         for item in source_records
     ]
-    reconciled = _sales_catalog_reconciliation(
+    reconciled = _product_records_catalog_reconciliation(
         projected,
         catalog,
         source_label="合同附件",
@@ -843,6 +1048,114 @@ def _contract_attachment_knowledge_reconciliation(
         **reconciled,
         "status": "pass" if reconciled["status"] == "pass" else "fail",
         "records": enriched,
+    }
+
+
+def _photo_contract_product_reconciliation(
+    contract_knowledge: dict[str, Any],
+    attachment_knowledge: dict[str, Any],
+    product_reference_hits: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compare independently resolved field identities with the contract product scope."""
+
+    contract_sources: dict[str, list[str]] = {}
+    required_core_ids = {
+        str(value)
+        for value in contract_knowledge.get("knowledge_product_ids") or []
+        if str(value)
+    }
+    for record in contract_knowledge.get("records") or []:
+        product_id = str(record.get("knowledge_product_id") or "")
+        if not product_id or record.get("knowledge_status") not in PASS_KNOWLEDGE_MATCHES:
+            continue
+        contract_sources.setdefault(product_id, []).append("合同核心条款")
+    for record in attachment_knowledge.get("records") or []:
+        product_id = str(record.get("knowledge_product_id") or "")
+        if not product_id or record.get("knowledge_status") not in PASS_KNOWLEDGE_MATCHES:
+            continue
+        source_page = record.get("source_page")
+        line_no = record.get("contract_line_no") or record.get("excel_row")
+        source = f"合同附件第{line_no}行"
+        if source_page:
+            source += f"（PDF第{source_page}页）"
+        contract_sources.setdefault(product_id, []).append(source)
+
+    if contract_knowledge.get("status") == "fail" or attachment_knowledge.get("status") == "fail":
+        return {
+            "status": "unmatched",
+            "contract_product_ids": sorted(contract_sources),
+            "photo_product_ids": [],
+            "checks": [],
+            "basis": "合同商品尚未全部通过知识库，不能继续确认现场商品是否属于合同。",
+        }
+    if not contract_sources:
+        return {
+            "status": "not_applicable",
+            "contract_product_ids": [],
+            "photo_product_ids": [
+                str(item.get("reference_product_id") or "")
+                for item in product_reference_hits
+                if str(item.get("reference_product_id") or "")
+            ],
+            "checks": [],
+            "basis": "合同核心条款和附件均未形成可核对的具体商品身份，本项不适用。",
+        }
+
+    checks: list[dict[str, Any]] = []
+    exact_photo_ids: set[str] = set()
+    for hit in product_reference_hits:
+        product_id = str(hit.get("reference_product_id") or "")
+        confidence = str(hit.get("confidence") or "candidate")
+        sources = list(dict.fromkeys(contract_sources.get(product_id, [])))
+        if confidence == "exact" and sources:
+            status = "exact"
+            exact_photo_ids.add(product_id)
+            basis = "现场包装已视觉对应知识库图片，且该知识库商品已由合同确认。"
+        elif sources:
+            status = "candidate"
+            basis = "现场包装与合同已确认商品的知识库图片仅能模糊对应。"
+        else:
+            status = "unmatched"
+            basis = "现场商品知识库身份已确认，但该商品不在适用的合同商品范围内。"
+        checks.append(
+            {
+                "reference_product_id": product_id,
+                "product_code": str(hit.get("product_code") or ""),
+                "product_name": str(hit.get("product_name") or ""),
+                "barcode_69": str(hit.get("barcode_69") or ""),
+                "visual_confidence": confidence,
+                "contract_sources": sources,
+                "status": status,
+                "basis": basis,
+            }
+        )
+
+    missing_core_ids = sorted(required_core_ids - exact_photo_ids)
+    if not checks or any(item["status"] == "unmatched" for item in checks) or missing_core_ids:
+        status = "unmatched"
+    elif any(item["status"] == "candidate" for item in checks):
+        status = "candidate"
+    else:
+        status = "exact"
+    detail = ""
+    if missing_core_ids:
+        detail = "；合同核心条款要求的商品未全部在现场照片中清晰确认"
+    return {
+        "status": status,
+        "contract_product_ids": sorted(contract_sources),
+        "photo_product_ids": sorted(
+            {
+                str(item.get("reference_product_id") or "")
+                for item in product_reference_hits
+                if str(item.get("reference_product_id") or "")
+            }
+        ),
+        "checks": checks,
+        "basis": (
+            "现场商品均通过知识库图片视觉确认，并属于合同已确认商品。"
+            if status == "exact"
+            else "现场商品未能全部视觉对应合同已确认的知识库商品" + detail + "。"
+        ),
     }
 
 
@@ -876,6 +1189,16 @@ def _text_pair_status(left: Any, right: Any) -> str:
     return "exact" if left_value == right_value else "mismatch"
 
 
+def _barcode_pair_status(left: Any, right: Any) -> str:
+    left_value = str(left or "").strip()
+    right_value = str(right or "").strip()
+    if not left_value or not right_value:
+        return "unverifiable"
+    if not ean13_is_valid(left_value) or not ean13_is_valid(right_value):
+        return "mismatch"
+    return "exact" if left_value == right_value else "mismatch"
+
+
 def _period_pair_status(left: Any, right: Any) -> str:
     left_bounds = _parse_period_bounds(left)
     right_bounds = _parse_period_bounds(right)
@@ -892,7 +1215,10 @@ def _product_name_pair_status(left: Any, right: Any) -> tuple[str, float]:
     if _canonical_product(left_value) == _canonical_product(right_value):
         return "exact", 1.0
     score = _similarity(left_value, right_value)
-    if _name_measurements_compatible(left_value, right_value) and score >= 0.45:
+    if (
+        _name_measurements_compatible(left_value, right_value)
+        and score > PRODUCT_EXISTENCE_NAME_THRESHOLD
+    ):
         return "fuzzy", score
     return "mismatch", score
 
@@ -905,20 +1231,27 @@ def _contract_attachment_sales_reconciliation(
 
     attachment = contract.get("sales_attachment") or {}
     if not attachment.get("present"):
+        sales_records = sorted(
+            list(sales.get("records") or []),
+            key=lambda item: int(item["excel_row"]),
+        )
         return {
-            "status": "not_applicable",
+            "status": "unverifiable",
             "record_count": 0,
             "matched_count": 0,
             "problem_count": 0,
             "records": [],
             "unmatched_contract_rows": [],
-            "unmatched_sales_rows": [],
+            "unmatched_sales_rows": [
+                int(item["excel_row"]) for item in sales_records
+            ],
+            "unmatched_sales_records": sales_records,
             "ambiguous_sales_rows": [],
             "attachment_line_amount_status": "not_applicable",
             "attachment_line_amount_problem_rows": [],
-            "quantity_status": "not_applicable",
-            "amount_status": "not_applicable",
-            "basis": "合同包未附商品销售明细，本项不核验。",
+            "quantity_status": "unverifiable",
+            "amount_status": "unverifiable",
+            "basis": "合同PDF未附销售明细，属于文档级无法核验；销售Excel的八个核验字段没有合同基准，无法完成逐行核对。",
         }
 
     attachment_records = sorted(
@@ -936,55 +1269,72 @@ def _contract_attachment_sales_reconciliation(
         code_exact = _text_pair_status(
             contract_row.get("product_code"), sales_row.get("product_code")
         ) == "exact"
-        barcode_exact = _text_pair_status(
+        barcode_exact = _barcode_pair_status(
             contract_row.get("barcode_69"), sales_row.get("barcode")
         ) == "exact"
         name_status, name_score = _product_name_pair_status(
             contract_row.get("product_name"), sales_row.get("product_name")
         )
-        # Two exact formal identifiers are sufficient to pair the rows even if
-        # their names disagree; the subsequent field comparison must expose the
-        # name error.  With only one exact strict identifier, require a
-        # compatible name so similarly coded rows cannot be paired arbitrarily.
+        if code_exact and barcode_exact and name_status in {"mismatch", "unverifiable"}:
+            # The two strict identifiers already establish the product.  Keep
+            # differing or unreadable source names as non-blocking auxiliary text.
+            name_status = "fuzzy"
         strict_count = int(code_exact) + int(barcode_exact)
-        if strict_count == 0 or (
-            strict_count == 1 and name_status not in {"exact", "fuzzy"}
-        ):
-            return -1.0, int(sales_row["excel_row"])
         customer_score = _entity_similarity(
             contract_row.get("customer_name"), sales_row.get("customer_name")
         )
-        score = 100.0 * strict_count + name_score + customer_score
-        score += float(
-            _period_pair_status(
-                contract_row.get("business_date"), sales_row.get("period_text")
+        period_exact = _period_pair_status(
+            contract_row.get("business_date"), sales_row.get("period_text")
+        ) == "exact"
+        quantity_exact = _number_pair_status(
+            contract_row.get("quantity"), sales_row.get("quantity")
+        ) == "exact"
+        price_exact = _number_pair_status(
+            contract_row.get("retail_price"),
+            sales_row.get("retail_price"),
+            tolerance=Decimal("0.01"),
+        ) == "exact"
+        amount_exact = _number_pair_status(
+            contract_row.get("total_amount"),
+            sales_row.get("total_amount"),
+            tolerance=Decimal("0.01"),
+        ) == "exact"
+        name_compatible = name_status in {"exact", "fuzzy"}
+        transaction_identity_exact = all(
+            (
+                customer_score == 1.0,
+                period_exact,
+                quantity_exact,
+                price_exact,
+                amount_exact,
             )
-            == "exact"
         )
-        score += float(
-            _text_pair_status(contract_row.get("unit"), sales_row.get("unit"))
-            == "exact"
+        # Two exact formal identifiers locate a row without depending on its
+        # auxiliary name.  With only one exact identifier, a differing or
+        # unreadable name may still locate the row when every independent
+        # transaction fact is exact.  Equal candidates remain ambiguous below;
+        # strict identifier problems are still reported after pairing.
+        relaxed_transaction_locator = (
+            strict_count == 1
+            and name_status in {"mismatch", "unverifiable"}
+            and transaction_identity_exact
         )
-        score += float(
-            _number_pair_status(contract_row.get("quantity"), sales_row.get("quantity"))
-            == "exact"
-        )
-        score += float(
-            _number_pair_status(
-                contract_row.get("retail_price"),
-                sales_row.get("retail_price"),
-                tolerance=Decimal("0.01"),
-            )
-            == "exact"
-        )
-        score += float(
-            _number_pair_status(
-                contract_row.get("total_amount"),
-                sales_row.get("total_amount"),
-                tolerance=Decimal("0.01"),
-            )
-            == "exact"
-        )
+        if strict_count == 0 or (
+            strict_count == 1
+            and not name_compatible
+            and not relaxed_transaction_locator
+        ):
+            return -1.0, int(sales_row["excel_row"])
+
+        score = 100.0 * strict_count + customer_score
+        if name_compatible:
+            # A compatible product name must always outrank the relaxed
+            # transaction-only locator when both compete for one strict ID.
+            score += 10.0 + name_score
+        score += float(period_exact)
+        score += float(quantity_exact)
+        score += float(price_exact)
+        score += float(amount_exact)
         return score, int(sales_row["excel_row"])
 
     for contract_row in attachment_records:
@@ -1024,6 +1374,24 @@ def _contract_attachment_sales_reconciliation(
                 contract_row.get("total_amount"),
                 tolerance=Decimal("0.01"),
             )
+            unavailable_comparisons = [
+                {
+                    "field": field,
+                    "contract_value": contract_row.get(contract_field),
+                    "sales_value": None,
+                    "status": "unverifiable",
+                }
+                for field, contract_field in (
+                    ("customer_name", "customer_name"),
+                    ("business_date", "business_date"),
+                    ("product_code", "product_code"),
+                    ("product_name", "product_name"),
+                    ("barcode_69", "barcode_69"),
+                    ("quantity", "quantity"),
+                    ("retail_price", "retail_price"),
+                    ("total_amount", "total_amount"),
+                )
+            ]
             checks.append(
                 {
                     "contract_line_no": int(contract_row["line_no"]),
@@ -1035,8 +1403,17 @@ def _contract_attachment_sales_reconciliation(
                         else "fail"
                     ),
                     "confidence": "low",
-                    "field_comparisons": [],
+                    "field_comparisons": unavailable_comparisons,
                     "ambiguous_sales_rows": ambiguous_rows,
+                    "contract_calculated_total_amount": (
+                        json_number(
+                            _decimal_value(contract_row.get("quantity"))
+                            * _decimal_value(contract_row.get("retail_price"))
+                        )
+                        if _decimal_value(contract_row.get("quantity")) is not None
+                        and _decimal_value(contract_row.get("retail_price")) is not None
+                        else None
+                    ),
                     "contract_line_amount_status": contract_line_amount_status,
                     "basis": (
                         "合同附件商品身份不完整，无法定位销售Excel行。"
@@ -1070,6 +1447,18 @@ def _contract_attachment_sales_reconciliation(
         name_status, name_score = _product_name_pair_status(
             contract_row.get("product_name"), selected.get("product_name")
         )
+        if (
+            _text_pair_status(
+                contract_row.get("product_code"), selected.get("product_code")
+            )
+            == "exact"
+            and _barcode_pair_status(
+                contract_row.get("barcode_69"), selected.get("barcode")
+            )
+            == "exact"
+            and name_status in {"mismatch", "unverifiable"}
+        ):
+            name_status = "fuzzy"
         contract_quantity = _decimal_value(contract_row.get("quantity"))
         contract_price = _decimal_value(contract_row.get("retail_price"))
         contract_calculated_amount = (
@@ -1116,15 +1505,9 @@ def _contract_attachment_sales_reconciliation(
                 "field": "barcode_69",
                 "contract_value": contract_row.get("barcode_69"),
                 "sales_value": selected.get("barcode"),
-                "status": _text_pair_status(
+                "status": _barcode_pair_status(
                     contract_row.get("barcode_69"), selected.get("barcode")
                 ),
-            },
-            {
-                "field": "unit",
-                "contract_value": contract_row.get("unit"),
-                "sales_value": selected.get("unit"),
-                "status": _text_pair_status(contract_row.get("unit"), selected.get("unit")),
             },
             {
                 "field": "quantity",
@@ -1155,7 +1538,12 @@ def _contract_attachment_sales_reconciliation(
                 ),
             },
         ]
-        statuses = {str(item["status"]) for item in comparisons}
+        # Product name is displayed as fuzzy auxiliary evidence but never owns
+        # pass/fail.  Comparable code, 69 code, and transaction fields do.
+        decision_comparisons = [
+            item for item in comparisons if item["field"] != "product_name"
+        ]
+        statuses = {str(item["status"]) for item in decision_comparisons}
         if "mismatch" in statuses or contract_line_amount_status == "mismatch":
             row_status = "fail"
         elif "unverifiable" in statuses or contract_line_amount_status == "unverifiable":
@@ -1171,7 +1559,7 @@ def _contract_attachment_sales_reconciliation(
         )
         problem_fields = [
             str(item["field"])
-            for item in comparisons
+            for item in decision_comparisons
             if item["status"] in {"mismatch", "unverifiable"}
         ]
         if contract_line_amount_status != "exact":
@@ -1192,7 +1580,7 @@ def _contract_attachment_sales_reconciliation(
                 ),
                 "contract_line_amount_status": contract_line_amount_status,
                 "basis": (
-                    "客户、业务日期、商品身份、单位、数量、零售价和合计金额均一致。"
+                    "客户、业务日期、商品身份、数量、零售价和合计金额均一致。"
                     if not problem_fields
                     else "不一致或无法核对字段：" + "、".join(problem_fields) + "。"
                 ),
@@ -1214,6 +1602,9 @@ def _contract_attachment_sales_reconciliation(
     unmatched_sales_rows = sorted(
         set(unused_sales_rows) - set(ambiguous_sales_rows)
     )
+    unmatched_sales_records = [
+        dict(unused_sales_rows[row]) for row in unmatched_sales_rows
+    ]
     attachment_line_amount_problem_rows = [
         int(item["contract_line_no"])
         for item in checks
@@ -1294,10 +1685,11 @@ def _contract_attachment_sales_reconciliation(
         "status": status,
         "record_count": len(attachment_records),
         "matched_count": matched_count,
-        "problem_count": len(problem_checks) + len(unmatched_sales_rows),
+        "problem_count": len(problem_checks),
         "records": checks,
         "unmatched_contract_rows": unmatched_contract_rows,
         "unmatched_sales_rows": unmatched_sales_rows,
+        "unmatched_sales_records": unmatched_sales_records,
         "ambiguous_sales_rows": ambiguous_sales_rows,
         "attachment_line_amount_status": attachment_line_amount_status,
         "attachment_line_amount_problem_rows": attachment_line_amount_problem_rows,
@@ -1322,8 +1714,8 @@ def _contract_attachment_sales_reconciliation(
         "amount_arithmetic_status": amount_arithmetic_status,
         "amount_status": amount_status,
         "basis": (
-            f"合同附件{len(attachment_records)}行与销售Excel{len(sales_records)}行逐项核对；"
-            f"通过{matched_count}行，问题{len(problem_checks) + len(unmatched_sales_rows)}行；"
+            f"合同附件{len(attachment_records)}行：通过{matched_count}行、问题{len(problem_checks)}行；"
+            f"销售Excel另有{len(unmatched_sales_rows)}行无合同附件基准；"
             f"附件行金额{'全部一致' if attachment_line_amount_status == 'pass' else '有问题或无法核对'}；"
             f"数量{'一致' if quantity_status == 'exact' else '不一致或无法核对'}，"
             f"合计金额{'一致' if amount_status == 'exact' else '不一致或无法核对'}。"
@@ -1335,14 +1727,17 @@ def _contract_product_knowledge_reconciliation(
     contract: dict[str, Any],
     catalog: dict[str, Any],
 ) -> dict[str, Any]:
-    required_products = [str(value).strip() for value in contract.get("required_products") or []]
+    required_products = [
+        str(value).strip() for value in contract.get("required_products") or []
+    ]
     if not contract.get("requires_specific_products"):
         return {
             "status": "not_applicable",
             "records": [],
             "knowledge_product_ids": [],
-            "basis": "合同未出现可核验的具体商品编码、明确商品名或69码，商品知识库不适用。",
+            "basis": "合同未出现可核验的具体商品条件，商品知识库不适用。",
         }
+
     products = list(catalog.get("products") or [])
     by_id = {str(product["product_id"]): product for product in products}
     identities = list(contract.get("required_product_identities") or [])
@@ -1356,6 +1751,7 @@ def _contract_product_knowledge_reconciliation(
             }
             for value in required_products
         ]
+
     records: list[dict[str, Any]] = []
     for identity in identities:
         value = str(identity.get("visible_text") or "").strip()
@@ -1363,71 +1759,127 @@ def _contract_product_knowledge_reconciliation(
         source_name = str(identity.get("product_name") or "").strip()
         source_barcode = str(identity.get("barcode_69") or "").strip()
         invalid_barcode = bool(source_barcode) and not ean13_is_valid(source_barcode)
-        candidate_sets: list[set[str]] = []
-        if source_code:
-            candidate_sets.append(
-                {
-                    str(product["product_id"])
-                    for product in products
-                    if _canonical_product(source_code)
-                    in {
-                        _canonical_product(product.get("product_code")),
-                        *(
-                            _canonical_product(alias)
-                            for alias in product.get("product_code_aliases") or []
-                        ),
-                    }
-                }
-            )
+        code_ids = {
+            str(product["product_id"])
+            for product in products
+            if source_code
+            and _strict_identity_key(source_code)
+            == _strict_identity_key(product.get("product_code"))
+        }
+        barcode_ids = {
+            str(product["product_id"])
+            for product in products
+            if source_barcode
+            and not invalid_barcode
+            and str(product.get("barcode_69") or "") == source_barcode
+        }
         exact_name_ids = {
             str(product["product_id"])
             for product in products
             if source_name
             and _canonical_product(source_name)
-            in {_canonical_product(candidate) for candidate in _catalog_name_values(product)}
+            in {
+                _canonical_product(candidate)
+                for candidate in _catalog_name_values(product)
+            }
         }
-        if source_name and exact_name_ids:
-            candidate_sets.append(exact_name_ids)
+
+        supplied_identity_count = sum(
+            bool(value) for value in (source_code, source_name, source_barcode)
+        )
+        strict_sets: list[set[str]] = []
+        if source_code:
+            strict_sets.append(code_ids)
         if source_barcode and not invalid_barcode:
-            candidate_sets.append(
-                {
-                    str(product["product_id"])
-                    for product in products
-                    if str(product.get("barcode_69") or "") == source_barcode
-                }
-            )
-        intersection = set.intersection(*candidate_sets) if candidate_sets else set()
+            strict_sets.append(barcode_ids)
+        strict_candidates = (
+            set.intersection(*strict_sets)
+            if strict_sets
+            else set(by_id)
+        )
+        strict_identifier_missing = (
+            bool(source_code) and not code_ids
+        ) or (
+            bool(source_barcode) and not invalid_barcode and not barcode_ids
+        )
+        strict_identifier_conflict = bool(strict_sets) and not strict_candidates
+
         selected: dict[str, Any] | None = None
         score = 0.0
         fuzzy = False
-        if len(intersection) == 1:
-            selected = by_id[next(iter(intersection))]
-            score = 1.0
-        elif len(intersection) > 1 and source_name:
-            selected, score = _unique_fuzzy_product(
-                source_name,
-                [by_id[product_id] for product_id in sorted(intersection)],
-                minimum_score=0.45,
-            )
-            fuzzy = selected is not None and str(selected["product_id"]) not in exact_name_ids
-        elif source_name and not candidate_sets:
-            selected, score = _unique_fuzzy_product(
-                source_name,
-                products,
-                minimum_score=0.72,
-            )
-            fuzzy = selected is not None
+        if not invalid_barcode and not strict_identifier_missing and not strict_identifier_conflict:
+            if source_name:
+                exact_pool = strict_candidates & exact_name_ids
+                if len(exact_pool) == 1:
+                    selected = by_id[next(iter(exact_pool))]
+                    score = 1.0
+                elif not exact_pool:
+                    selected, score = _best_fuzzy_product(
+                        source_name,
+                        [
+                            by_id[product_id]
+                            for product_id in sorted(strict_candidates)
+                        ],
+                        threshold=PRODUCT_EXISTENCE_NAME_THRESHOLD,
+                    )
+                    fuzzy = selected is not None
+            elif len(strict_candidates) == 1:
+                selected = by_id[next(iter(strict_candidates))]
+                score = 1.0
 
-        if invalid_barcode or not any((source_code, source_name, source_barcode)):
+        if not supplied_identity_count or invalid_barcode:
+            knowledge_status = "conflict"
+        elif strict_identifier_missing:
+            knowledge_status = "unmatched"
+        elif strict_identifier_conflict:
             knowledge_status = "conflict"
         elif selected is not None:
             knowledge_status = "fuzzy_matched" if fuzzy else "matched"
-        elif len(intersection) > 1:
-            knowledge_status = "ambiguous"
-        elif candidate_sets:
-            knowledge_status = "conflict"
         else:
-            knowledge_status = "unmatched"
+            knowledge_status = "conflict"
+
+        diagnostic_selected = selected
+        if diagnostic_selected is None and len(barcode_ids) == 1:
+            diagnostic_selected = by_id[next(iter(barcode_ids))]
+        elif diagnostic_selected is None and len(code_ids) == 1:
+            diagnostic_selected = by_id[next(iter(code_ids))]
+        elif diagnostic_selected is None and len(exact_name_ids) == 1:
+            diagnostic_selected = by_id[next(iter(exact_name_ids))]
+
+        if knowledge_status in PASS_KNOWLEDGE_MATCHES:
+            passed_fields: list[str] = []
+            if source_code:
+                passed_fields.append("商品编码精确匹配")
+            if source_barcode:
+                passed_fields.append("69码精确匹配")
+            if source_name:
+                passed_fields.append(
+                    "商品名称模糊且唯一匹配"
+                    if fuzzy
+                    else "商品名称精确匹配"
+                )
+            basis = "合同具体商品" + "、".join(passed_fields) + "。"
+        else:
+            if invalid_barcode:
+                reason = "69码未通过EAN-13校验"
+            elif not supplied_identity_count:
+                reason = "缺少商品编码、商品名称或69码等可核验身份"
+            elif source_code and not code_ids:
+                reason = "商品编码未登记"
+            elif source_barcode and not barcode_ids:
+                reason = "69码未登记"
+            elif strict_identifier_conflict:
+                reason = "商品编码与69码指向不同知识库商品"
+            elif source_name:
+                reason = "商品名称未与严格标识指向的商品唯一对应"
+            else:
+                reason = "现有身份字段不能唯一确定商品"
+            basis = (
+                "合同具体商品未通过商品存在核验："
+                + reason
+                + "；已提供的商品编码和69码必须精确一致，商品名称只需唯一模糊兼容，不要求逐字一致。"
+            )
+
         records.append(
             {
                 "required_product": value,
@@ -1435,18 +1887,42 @@ def _contract_product_knowledge_reconciliation(
                 "source_product_name": source_name or None,
                 "source_barcode_69": source_barcode or None,
                 "knowledge_status": knowledge_status,
-                "knowledge_product_id": str(selected["product_id"]) if selected is not None else None,
-                "knowledge_product_name": str(selected["product_name"]) if selected is not None else None,
-                "knowledge_product_code": str(selected["product_code"]) if selected is not None else None,
-                "knowledge_barcode_69": str(selected["barcode_69"]) if selected is not None else None,
-                "basis": (
-                    f"合同具体商品{'模糊' if fuzzy else '精确'}对应知识库"
-                    + (f"（名称相似度{score:.3f}）" if fuzzy else "")
-                    if knowledge_status in PASS_KNOWLEDGE_MATCHES
-                    else "合同具体商品无法唯一且一致地对应正式商品知识库"
+                "knowledge_product_id": (
+                    str(diagnostic_selected["product_id"])
+                    if diagnostic_selected is not None
+                    else None
                 ),
+                "knowledge_product_name": (
+                    str(diagnostic_selected["product_name"])
+                    if diagnostic_selected is not None
+                    else None
+                ),
+                "knowledge_product_code": (
+                    str(diagnostic_selected["product_code"])
+                    if diagnostic_selected is not None
+                    else None
+                ),
+                "knowledge_barcode_69": (
+                    str(diagnostic_selected["barcode_69"])
+                    if diagnostic_selected is not None
+                    else None
+                ),
+                "name_match_type": (
+                    "fuzzy"
+                    if fuzzy
+                    else "exact"
+                    if selected is not None and source_name
+                    else None
+                ),
+                "name_similarity": (
+                    round(score, 3)
+                    if source_name and score
+                    else None
+                ),
+                "basis": basis,
             }
         )
+
     problem = [
         item
         for item in records
@@ -1462,303 +1938,19 @@ def _contract_product_knowledge_reconciliation(
             and item["knowledge_status"] in PASS_KNOWLEDGE_MATCHES
         ],
         "basis": (
-            f"合同出现的{len(records)}个具体商品条件全部对应知识库"
+            f"合同出现的{len(records)}个具体商品条件全部通过共享商品知识库核验"
             if not problem
-            else f"合同具体商品条件中有{len(problem)}个无法唯一对应知识库"
+            else f"合同具体商品条件中有{len(problem)}个未通过共享商品知识库核验"
         ),
     }
 
-
 def _photo_knowledge_control(product_reference_hits: list[dict[str, Any]]) -> tuple[str, str]:
     if not product_reference_hits:
-        return "unmatched", "现场照片与商品知识库完全不匹配，置信度低"
+        return "unmatched", "现场照片可见文字未能对应到知识库商品，或包装视觉比对不一致，置信度低"
     if all(str(hit.get("confidence")) == "exact" for hit in product_reference_hits):
-        return "exact", "现场照片与商品知识库精确匹配，置信度高"
-    return "candidate", "现场照片与商品知识库模糊匹配，置信度中"
+        return "exact", "现场照片可见文字已对应知识库文字，且包装关键特征与知识库多方位参考图相容，置信度高"
+    return "candidate", "现场照片文字或包装仅能对应多个知识库候选，尚未唯一确认，置信度中"
 
-
-def sales_product_correspondence(
-    sales_knowledge_records: list[dict[str, Any]],
-    product_reference_hits: list[dict[str, Any]],
-    *,
-    source_label: str = "销售Excel",
-) -> dict[str, Any]:
-    """Use each field-photo product to locate and verify only relevant sales rows.
-
-    A field photo first establishes the knowledge-base product.  The registered
-    product identity is then used to locate likely Excel rows.  Product code and
-    69 code are strict fields; only product name may be fuzzy.  An unrelated bad
-    Excel row therefore cannot make every contract store fail.
-    """
-
-    def name_comparison(source_name: str, knowledge_name: str) -> tuple[str, float]:
-        if not source_name:
-            return "unverifiable", 0.0
-        if _canonical_product(source_name) == _canonical_product(knowledge_name):
-            return "exact", 1.0
-        score = _similarity(source_name, knowledge_name)
-        if _name_measurements_compatible(source_name, knowledge_name) and score >= 0.45:
-            return "fuzzy", score
-        return "mismatch", score
-
-    def code_matches(item: dict[str, Any], hit: dict[str, Any]) -> bool:
-        source = _strict_identity_key(item.get("source_product_code"))
-        registered = _strict_identity_key(hit.get("product_code"))
-        return bool(source and registered and source == registered)
-
-    def relevant_rows(hit: dict[str, Any]) -> list[dict[str, Any]]:
-        """Return rows independently resolved to the photo's catalog product.
-
-        Photo short codes stop at the photo-to-catalog boundary. Sales rows
-        start a fresh identity check: the registered 69 code must be exact and
-        the product name must be exact or fuzzy-compatible. The catalog
-        reconciliation must also resolve the row to this same product; this
-        fails closed for shared-barcode ambiguity. Product code is deliberately
-        not a row locator because it is a strict field verified afterwards.
-        """
-
-        product_id = str(hit.get("reference_product_id") or "")
-        knowledge_name = str(hit.get("product_name") or "")
-        knowledge_barcode = str(hit.get("barcode_69") or "")
-        rows: list[dict[str, Any]] = []
-        for item in sales_knowledge_records:
-            if (
-                not knowledge_barcode
-                or str(item.get("source_barcode_69") or "").strip()
-                != knowledge_barcode
-            ):
-                continue
-            if str(item.get("knowledge_product_id") or "") != product_id:
-                continue
-            name_match, _name_score = name_comparison(
-                str(item.get("source_product_name") or ""),
-                knowledge_name,
-            )
-            if name_match in {"exact", "fuzzy"}:
-                rows.append(item)
-        return sorted(rows, key=lambda item: int(item["excel_row"]))
-
-    product_checks: list[dict[str, Any]] = []
-    matched_product_ids: set[str] = set()
-    for hit in product_reference_hits:
-        product_id = str(hit["reference_product_id"])
-        knowledge_code = str(hit.get("product_code") or "")
-        knowledge_name = str(hit.get("product_name") or "")
-        knowledge_barcode = str(hit.get("barcode_69") or "")
-        knowledge_aliases = [
-            str(value) for value in hit.get("product_code_aliases") or []
-        ]
-        photo_identity_exact = str(hit.get("confidence") or "") == "exact"
-        rows = relevant_rows(hit)
-        if not rows:
-            product_checks.append(
-                {
-                    "knowledge_product_id": product_id,
-                    "knowledge_product_code": knowledge_code,
-                    "knowledge_product_code_aliases": knowledge_aliases,
-                    "knowledge_product_name": knowledge_name,
-                    "knowledge_barcode_69": knowledge_barcode,
-                    "photo_match": "exact" if photo_identity_exact else "fuzzy",
-                    "excel_row": None,
-                    "source_product_code": "",
-                    "source_product_name": "",
-                    "source_barcode_69": "",
-                    "source_quantity": None,
-                    "source_page": None,
-                    "source_customer_name": None,
-                    "source_business_date": None,
-                    "source_unit": None,
-                    "source_retail_price": None,
-                    "source_total_amount": None,
-                    "product_code_match": "unverifiable",
-                    "name_match": "unverifiable",
-                    "name_similarity": None,
-                    "barcode_match": "unverifiable",
-                    "status": "unmatched" if photo_identity_exact else "candidate",
-                    "confidence": "low" if photo_identity_exact else "medium",
-                    "barcode_comparison_basis": (
-                        f"现场商品已确定，但{source_label}没有找到69码精确一致且商品名称能够对应的有效商品行。"
-                        if photo_identity_exact
-                        else "现场商品还未精确确定，商品编码和69码暂不比较。"
-                    ),
-                    "basis": (
-                        f"{source_label}没有找到69码为{knowledge_barcode}且商品名称能够对应“{knowledge_name}”的有效商品行。"
-                        if photo_identity_exact
-                        else "现场商品只能模糊判断，销售行暂不能最终确认。"
-                    ),
-                    "resubmission": (
-                        (
-                            f"重新导出包含“{knowledge_name}”的销售明细："
-                            if source_label == "销售Excel"
-                            else f"重新提交清晰且包含“{knowledge_name}”的合同附件明细："
-                        )
-                        + f"商品编码应为{knowledge_code}，69码应为{knowledge_barcode}；"
-                        + "不要把其他商品行改成这一商品。"
-                        if photo_identity_exact
-                        else None
-                    ),
-                }
-            )
-            continue
-
-        hit_row_statuses: list[str] = []
-        for item in rows:
-            source_code = str(item.get("source_product_code") or "").strip()
-            source_name = str(item.get("source_product_name") or "").strip()
-            source_barcode = str(item.get("source_barcode_69") or "").strip()
-            name_match, name_score = name_comparison(source_name, knowledge_name)
-            if not photo_identity_exact:
-                product_code_match = "unverifiable"
-                barcode_match = "unverifiable"
-                status = "candidate"
-                confidence = "medium"
-                basis = "现场商品只能模糊判断，这一销售行仅作为可能对应行。"
-                resubmission = None
-                barcode_basis = "现场商品还未精确确定，69码暂不比较。"
-            else:
-                product_code_match = "exact" if code_matches(item, hit) else "mismatch"
-                barcode_match = (
-                    "exact"
-                    if source_barcode and source_barcode == knowledge_barcode
-                    else "mismatch"
-                )
-                row_pass = (
-                    product_code_match == "exact"
-                    and barcode_match == "exact"
-                    and name_match in {"exact", "fuzzy"}
-                )
-                status = name_match if row_pass else "unmatched"
-                confidence = (
-                    "high"
-                    if status == "exact"
-                    else "medium"
-                    if status == "fuzzy"
-                    else "low"
-                )
-                if row_pass:
-                    basis = (
-                        "商品编码、商品名称和69码均与知识库严格一致。"
-                        if status == "exact"
-                        else "商品编码和69码严格一致，商品名称表述略有差异但可以对应。"
-                    )
-                    resubmission = None
-                else:
-                    differences: list[str] = []
-                    corrections: list[str] = []
-                    if product_code_match != "exact":
-                        differences.append("商品编码不一致")
-                        corrections.append(f"商品编码改为{knowledge_code}")
-                    if barcode_match != "exact":
-                        differences.append("69码不一致")
-                        corrections.append(f"69码改为{knowledge_barcode}")
-                    if name_match not in {"exact", "fuzzy"}:
-                        differences.append("商品名称对不上")
-                        corrections.append(f"商品名称改为能明确对应“{knowledge_name}”")
-                    basis = "；".join(differences) + "。"
-                    unchanged: list[str] = []
-                    if product_code_match == "exact":
-                        unchanged.append("商品编码")
-                    if name_match in {"exact", "fuzzy"}:
-                        unchanged.append("商品名称")
-                    if barcode_match == "exact":
-                        unchanged.append("69码")
-                    resubmission = (
-                        (
-                            f"第{item['excel_row']}行重新导出时："
-                            if source_label == "销售Excel"
-                            else f"合同附件第{item['excel_row']}行重新提交时："
-                        )
-                        + "；".join(corrections)
-                        + (f"；{'、'.join(unchanged)}不用改。" if unchanged else "。")
-                    )
-                barcode_basis = (
-                    f"现场照片先确定知识库商品，再将该商品登记的69码与{source_label}比较；"
-                    + ("两边一致。" if barcode_match == "exact" else "两边不一致。")
-                )
-            product_checks.append(
-                {
-                    "knowledge_product_id": product_id,
-                    "knowledge_product_code": knowledge_code,
-                    "knowledge_product_code_aliases": knowledge_aliases,
-                    "knowledge_product_name": knowledge_name,
-                    "knowledge_barcode_69": knowledge_barcode,
-                    "photo_match": "exact" if photo_identity_exact else "fuzzy",
-                    "excel_row": int(item["excel_row"]),
-                    "source_product_code": source_code,
-                    "source_product_name": source_name,
-                    "source_barcode_69": source_barcode,
-                    "source_quantity": item.get("source_quantity"),
-                    "source_page": item.get("source_page"),
-                    "source_customer_name": item.get("source_customer_name"),
-                    "source_business_date": item.get("source_business_date"),
-                    "source_unit": item.get("source_unit"),
-                    "source_retail_price": item.get("source_retail_price"),
-                    "source_total_amount": item.get("source_total_amount"),
-                    "product_code_match": product_code_match,
-                    "name_match": name_match,
-                    "name_similarity": round(name_score, 3) if name_score else None,
-                    "barcode_match": barcode_match,
-                    "status": status,
-                    "confidence": confidence,
-                    "barcode_comparison_basis": barcode_basis,
-                    "basis": basis,
-                    "resubmission": resubmission,
-                }
-            )
-            hit_row_statuses.append(status)
-        if hit_row_statuses and all(
-            value in PASS_SALES_PRODUCT_MATCHES for value in hit_row_statuses
-        ):
-            matched_product_ids.add(product_id)
-
-    ordered_names = list(
-        dict.fromkeys(
-            str(item.get("source_product_name") or "").strip()
-            for item in product_checks
-            if str(item.get("source_product_name") or "").strip()
-        )
-    )
-    all_photo_exact = bool(product_reference_hits) and all(
-        str(hit.get("confidence")) == "exact" for hit in product_reference_hits
-    )
-    all_products_have_valid_row = bool(product_reference_hits) and all(
-        str(hit["reference_product_id"]) in matched_product_ids
-        for hit in product_reference_hits
-    )
-    all_rows_exact = bool(product_checks) and all(
-        str(check.get("status")) == "exact" for check in product_checks
-    )
-    if all_photo_exact and all_products_have_valid_row:
-        status = "exact" if all_rows_exact else "fuzzy"
-        basis = (
-            f"现场商品均已找到对应{source_label}商品行；商品编码、商品名称和69码均严格一致。"
-            if all_rows_exact
-            else f"现场商品均已找到对应{source_label}商品行；商品编码和69码严格一致，商品名称模糊对应。"
-        )
-    elif product_reference_hits and not all_photo_exact:
-        status = "candidate"
-        basis = "现场商品只能模糊判断，相关销售行暂不能最终确认。"
-    else:
-        status = "unmatched"
-        failed_rows = [
-            str(item["excel_row"])
-            for item in product_checks
-            if item.get("excel_row") is not None
-            and item.get("status") not in PASS_SALES_PRODUCT_MATCHES
-        ]
-        basis = f"现场商品没有通过{source_label}核对"
-        if failed_rows:
-            basis += (
-                "；需更正Excel第" if source_label == "销售Excel" else "；需重交合同附件第"
-            ) + "、".join(failed_rows) + "行"
-        basis += "。"
-    return {
-        "names": ordered_names,
-        "knowledge_product_ids": sorted(matched_product_ids),
-        "product_checks": product_checks,
-        "status": status,
-        "basis": basis,
-    }
 
 
 def build_promotion_summary(review: dict[str, Any]) -> tuple[str, bool]:
@@ -1857,26 +2049,19 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
     sales_path = Path(case["sales_excel"]).resolve()
     contract_path = Path(case["contract_pdf"]).resolve()
     photo_paths = [Path(value).resolve() for value in case["photo_files"]]
-    sales = read_display_sales(sales_path)
-    product_rag = load_product_rag(DISPLAY_SKILL_DIR)
-    sales_knowledge = _sales_catalog_reconciliation(sales["records"], product_rag)
-    sales["knowledge_status"] = sales_knowledge["status"]
-    sales["knowledge_matched_count"] = sales_knowledge["matched_count"]
-    sales["knowledge_fuzzy_count"] = sales_knowledge["fuzzy_count"]
-    sales["knowledge_problem_count"] = sales_knowledge["problem_count"]
-    sales["knowledge_problem_rows"] = sales_knowledge["problem_rows"]
-    sales["knowledge_basis"] = sales_knowledge["basis"]
-    sales["knowledge_reconciliation"] = sales_knowledge["records"]
-    photos = image_file_inventory(photo_paths, directory=case.get("source_root"))
-    pdf = pdf_inventory(contract_path)
     contract = evidence["contract"]
+    product_rag = load_product_rag()
     contract_knowledge = _contract_product_knowledge_reconciliation(contract, product_rag)
     contract_attachment_knowledge = _contract_attachment_knowledge_reconciliation(
         contract,
         product_rag,
     )
+    sales = read_display_sales(sales_path)
     contract_sales = _contract_sales_reconciliation(contract, sales)
+    contract_core = _contract_core_reconciliation(contract, contract_sales)
     contract_attachment_sales = _contract_attachment_sales_reconciliation(contract, sales)
+    photos = image_file_inventory(photo_paths, directory=case.get("source_root"))
+    pdf = pdf_inventory(contract_path)
     stores = sorted(contract["stores"], key=lambda item: int(item["line_no"]))
     store_map = unique_by(stores, "line_no", "contract store line number")
     review_map = unique_by(evidence.get("photo_reviews") or [], "store_line_no", "photo review store line number")
@@ -1940,14 +2125,25 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
                 "CONTRACT_SALES_RECONCILIATION_FAILED",
                 "合同与销售Excel未通过签订方、业务日期和合同完整性核验。",
                 "合同与销售明细之间的主体或期间链路不能闭环。",
-                "核对合同签订方与销售客户、合同执行周期与业务日期，并补充带水印或盖章的合同。",
+                "核对合同签订方与销售客户、合同执行周期与业务日期，并补充盖章清楚的合同。",
                 source=(
                     f"{Path(str(contract.get('source_file') or contract_path)).name} / "
                     f"{Path(str(sales.get('source_file') or sales_path)).name}"
                 ),
             )
         )
-    if contract_attachment_sales["status"] not in {"pass", "not_applicable"}:
+    if contract_core["status"] != "pass":
+        exceptions.append(
+            exception(
+                "high",
+                "CONTRACT_CORE_FIELDS_INCOMPLETE",
+                contract_core["basis"],
+                "合同签订方、活动预算金额、执行周期、活动内容、核销方式或盖章未全部核清。",
+                "按合同核心字段问题清单重新提交清晰、完整且已签章的合同PDF。",
+                source=Path(str(contract.get("source_file") or contract_path)).name,
+            )
+        )
+    if contract_attachment_sales["status"] != "pass":
         exceptions.append(
             exception(
                 "high",
@@ -1961,6 +2157,9 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
                 ),
             )
         )
+
+    contract_attachment_sales_pass = contract_attachment_sales["status"] == "pass"
+    sales_internal_pass = sales.get("internal_status") == "pass"
 
     for line_no, store in store_map.items():
         review = review_map.get(line_no) or _default_review(int(line_no), str(store["store_name"]))
@@ -2014,53 +2213,40 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
             [str(value) for value in review.get("visible_text") or []],
             product_rag,
         )
+        reference_hits = apply_visible_catalog_text_exact_hits(
+            reference_hits,
+            [str(value) for value in review.get("visible_text") or []],
+            product_rag,
+        )
         reference_labels = [product_reference_label(item) for item in reference_hits]
         recognized = reference_labels or recognized_visible
         photo_knowledge_match, photo_knowledge_basis = _photo_knowledge_control(reference_hits)
-        correspondence = sales_product_correspondence(
-            sales_knowledge["records"],
+        photo_contract_product = _photo_contract_product_reconciliation(
+            contract_knowledge,
+            contract_attachment_knowledge,
             reference_hits,
         )
-        if contract_attachment_knowledge["status"] == "not_applicable":
-            attachment_correspondence = {
-                "names": [],
-                "knowledge_product_ids": [],
-                "product_checks": [],
-                "status": "not_applicable",
-                "basis": "合同包未附商品销售明细，本项不核验。",
-            }
-        else:
-            attachment_correspondence = sales_product_correspondence(
-                contract_attachment_knowledge["records"],
-                reference_hits,
-                source_label="合同附件",
-            )
         promotion_summary, promotion_present = build_promotion_summary(review)
         contract_sales_pass = contract_sales["status"] == "pass"
+        contract_core_pass = contract_core["status"] == "pass"
         contract_knowledge_pass = contract_knowledge["status"] in {"pass", "not_applicable"}
-        photo_knowledge_pass = photo_knowledge_match == "exact"
-        internal_product_pass = correspondence["status"] in PASS_SALES_PRODUCT_MATCHES
-        attachment_product_pass = attachment_correspondence["status"] in {
+        contract_attachment_knowledge_pass = contract_attachment_knowledge["status"] in {
+            "pass",
             "not_applicable",
-            *PASS_SALES_PRODUCT_MATCHES,
+        }
+        photo_knowledge_pass = photo_knowledge_match == "exact"
+        photo_contract_product_pass = photo_contract_product["status"] in {
+            "not_applicable",
+            "exact",
         }
         product_pass = all(
             [
                 contract_knowledge_pass,
+                contract_attachment_knowledge_pass,
                 photo_knowledge_pass,
-                attachment_product_pass,
-                internal_product_pass,
+                photo_contract_product_pass,
             ]
         )
-        if contract.get("requires_specific_products"):
-            required_ids = set(contract_knowledge["knowledge_product_ids"])
-            exact_photo_ids = {
-                str(item["reference_product_id"])
-                for item in reference_hits
-                if str(item.get("confidence")) == "exact"
-            }
-            sales_ids = set(correspondence["knowledge_product_ids"])
-            product_pass = product_pass and required_ids.issubset(exact_photo_ids & sales_ids)
         promotion_pass = not contract.get("requires_promotion") or promotion_present
         store_stack_count = store.get("stack_count")
         if fee_basis == "per_store":
@@ -2085,6 +2271,7 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
         passed = all(
             [
                 contract_sales_pass,
+                contract_core_pass,
                 file_pass,
                 period_pass,
                 store_pass,
@@ -2093,6 +2280,8 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
                 product_pass,
                 promotion_pass,
                 amount_rule_pass,
+                contract_attachment_sales_pass,
+                sales_internal_pass,
             ]
         )
 
@@ -2100,40 +2289,44 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
         advice = list(review.get("supplement_advice") or [])
         if not contract_sales_pass:
             risks.append("合同与销售Excel的签订方、业务日期或合同完整性未闭环")
-            advice.append("核对合同签订方/销售客户、执行周期/业务日期，并补充带水印或盖章的合同。")
+            advice.append("核对合同签订方/销售客户、执行周期/业务日期，并补充盖章清楚的合同。")
+        if not contract_core_pass:
+            risks.append(contract_core["basis"])
+            advice.append("补齐合同签订方、活动预算金额、执行周期、活动内容、核销方式和盖章的问题项。")
         if not contract_knowledge_pass:
             risks.append(contract_knowledge["basis"])
             advice.append("先让合同限定商品唯一对应正式知识库，再重新核销。")
+        if not contract_attachment_knowledge_pass:
+            risks.append(contract_attachment_knowledge["basis"])
+            advice.append("先更正合同附件中的商品编码、商品名称或69码，使其通过知识库。")
+        if not contract_attachment_sales_pass:
+            risks.append(contract_attachment_sales["basis"])
+            advice.append("让销售Excel的八个核验字段逐行对齐合同附件，并补齐缺失的合同附件行；单位无需对齐。")
+        if not sales_internal_pass:
+            risks.append(str(sales.get("internal_basis") or "销售Excel内部金额无法闭环。"))
+            advice.append("更正销售Excel行内金额及打印合计后重新提交。")
         if photo_knowledge_match == "candidate":
             risks.append("现场照片与商品知识库只有模糊匹配，置信度中")
             advice.append("补拍清晰69码、唯一商品短码或足以确认具体商品的包装照片。")
         elif photo_knowledge_match == "unmatched":
             risks.append("现场照片与商品知识库完全不匹配，置信度低")
             advice.append("补拍能与商品知识库对应的商品正面、侧面或69码。")
-        if correspondence["status"] not in PASS_SALES_PRODUCT_MATCHES:
-            risks.append(correspondence["basis"])
-            advice.extend(
-                str(check["resubmission"])
-                for check in correspondence["product_checks"]
-                if check.get("resubmission")
-            )
-        if attachment_correspondence["status"] not in {
-            "not_applicable",
-            *PASS_SALES_PRODUCT_MATCHES,
-        }:
-            risks.append(attachment_correspondence["basis"])
-            advice.extend(
-                str(check["resubmission"])
-                for check in attachment_correspondence["product_checks"]
-                if check.get("resubmission")
-            )
+        if not photo_contract_product_pass:
+            risks.append(photo_contract_product["basis"])
+            advice.append("补拍合同已确认商品的清晰正面、侧面或条码面，并保留完整现场环境。")
         if missing:
             risks.append("核验引用了不存在的照片：" + "、".join(missing))
             advice.append("补齐缺失的原始现场照片。")
         if not period_pass:
             advice.append("补充活动期内且完整日期可见的原始现场照片。")
         if not store_pass:
-            advice.append("补充可见合同门店名称/地址的照片或权威门店映射。")
+            if store_match == "mismatch":
+                advice.append(
+                    f"重新提交水印地点正确的现场照片；当前水印地点为“{review.get('visible_location') or '未识别'}”，"
+                    f"应与合同门店“{store['store_name']}”一致。这不是照片清晰度问题。"
+                )
+            else:
+                advice.append("补充水印中可见合同门店名称/地址的照片或权威门店映射。")
         if not display_pass:
             advice.append("补充能看清完整堆头面积或纵向陈列数量的全景照片。")
         if duplicate_check in {"exact", "possible"}:
@@ -2177,22 +2370,13 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
                 "photo_knowledge_match_basis": photo_knowledge_basis,
                 "promotion_summary": promotion_summary,
                 "promotion_present": promotion_present,
-                "sales_product_names": correspondence["names"],
-                "sales_product_knowledge_ids": correspondence["knowledge_product_ids"],
-                "sales_product_match": correspondence["status"],
-                "sales_product_match_basis": correspondence["basis"],
-                "sales_product_checks": correspondence["product_checks"],
-                "contract_attachment_product_names": attachment_correspondence["names"],
-                "contract_attachment_product_knowledge_ids": attachment_correspondence[
-                    "knowledge_product_ids"
-                ],
-                "contract_attachment_product_match": attachment_correspondence["status"],
-                "contract_attachment_product_match_basis": attachment_correspondence["basis"],
-                "contract_attachment_product_checks": attachment_correspondence[
-                    "product_checks"
-                ],
+                "photo_contract_product_status": photo_contract_product["status"],
+                "photo_contract_product_basis": photo_contract_product["basis"],
+                "photo_contract_product_checks": photo_contract_product["checks"],
                 "contract_sales_status": contract_sales["status"],
+                "contract_core_status": contract_core["status"],
                 "contract_attachment_sales_status": contract_attachment_sales["status"],
+                "sales_internal_status": sales.get("internal_status"),
                 "contract_stack_count": (
                     int(store_stack_count) if store_stack_count is not None else None
                 ),
@@ -2301,10 +2485,14 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
         )
     attachment_global_pass = (
         contract_attachment_knowledge["status"] in {"pass", "not_applicable"}
-        and contract_attachment_sales["status"] in {"pass", "not_applicable"}
+        and contract_attachment_sales["status"] == "pass"
     )
-    sales_internal_pass = sales.get("internal_status") == "pass"
-    activity_global_pass = attachment_global_pass and sales_internal_pass
+    activity_global_pass = (
+        contract_core["status"] == "pass"
+        and contract_sales["status"] == "pass"
+        and attachment_global_pass
+        and sales_internal_pass
+    )
     if not activity_global_pass:
         # Preserve each store's independently supported amount for diagnosis,
         # but a broken stamped-attachment or sales-file internal chain blocks
@@ -2354,9 +2542,6 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
                 "printed_quantity_status"
             ),
             "sales_printed_amount_status": sales.get("printed_amount_status"),
-            "sales_knowledge_matched_count": sales_knowledge["matched_count"],
-            "sales_knowledge_fuzzy_count": sales_knowledge["fuzzy_count"],
-            "sales_knowledge_problem_count": sales_knowledge["problem_count"],
             "contract_attachment_present": bool(
                 (contract.get("sales_attachment") or {}).get("present")
             ),
@@ -2373,12 +2558,15 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
             "contract_attachment_sales_problem_count": contract_attachment_sales[
                 "problem_count"
             ],
+            "contract_core_status": contract_core["status"],
+            "contract_core_problem_count": contract_core["problem_count"],
             "high_exception_count": sum(item["severity"] == "high" for item in exceptions),
             "medium_exception_count": sum(item["severity"] == "medium" for item in exceptions),
         },
         "contract": contract,
         "contract_product_knowledge": contract_knowledge,
         "contract_attachment_product_knowledge": contract_attachment_knowledge,
+        "contract_core_reconciliation": contract_core,
         "contract_sales_reconciliation": contract_sales,
         "contract_attachment_sales_reconciliation": contract_attachment_sales,
         "contract_pdf": pdf,

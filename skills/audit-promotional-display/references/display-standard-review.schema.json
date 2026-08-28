@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Promotional display focused standard review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "display_reviews", "extraction_notes"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "display_reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "store_line_no",
+          "contract_store_name",
+          "photo_files",
+          "display_observation"
+        ],
+        "properties": {
+          "store_line_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "contract_store_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "photo_files": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "display_observation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "standard_evidence",
+              "matched_standard",
+              "vertical_facing_count",
+              "vertical_facing_basis",
+              "stack_1sqm_basis",
+              "description",
+              "limitations"
+            ],
+            "properties": {
+              "standard_evidence": {
+                "type": "string",
+                "enum": ["meets", "does_not_meet", "unclear"]
+              },
+              "matched_standard": {
+                "type": "string",
+                "enum": ["stack_1sqm", "four_vertical", "both", "none", "unclear"]
+              },
+              "vertical_facing_count": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "vertical_facing_basis": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "stack_1sqm_basis": {
+                "type": ["string", "null"]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "limitations": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "extraction_notes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

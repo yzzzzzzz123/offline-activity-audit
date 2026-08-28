@@ -19,17 +19,16 @@ from .common import (
 )
 from .excel_sources import image_file_inventory, read_personnel_sales
 from .product_rag import (
+    PRODUCT_EXISTENCE_NAME_THRESHOLD,
+    best_fuzzy_catalog_product,
     canonical_product_name,
     catalog_product_name_values,
     ean13_is_valid,
     load_product_rag,
-    unique_fuzzy_catalog_product,
+    product_name_similarity,
 )
 
 
-PRODUCT_KNOWLEDGE_SKILL_DIR = (
-    Path(__file__).resolve().parents[1] / "skills" / "audit-promotional-display"
-)
 PASS_PERSONNEL_KNOWLEDGE_MATCHES = {"matched", "fuzzy_matched"}
 
 
@@ -57,29 +56,14 @@ def _product_identity(value: Any) -> str:
 
 
 def _product_similarity(left: Any, right: Any) -> float:
-    left_text = _product_identity(left)
-    right_text = _product_identity(right)
-    if not left_text or not right_text:
-        return 0.0
-    if left_text in right_text or right_text in left_text:
-        return 1.0
-
-    def grams(value: str) -> set[str]:
-        if len(value) == 1:
-            return {value}
-        return {value[index : index + 2] for index in range(len(value) - 1)}
-
-    left_grams = grams(left_text)
-    right_grams = grams(right_text)
-    overlap = len(left_grams & right_grams)
-    return overlap / max(1, len(left_grams | right_grams))
+    return product_name_similarity(_product_identity(left), _product_identity(right))
 
 
 def _personnel_sales_knowledge_reconciliation(
     sales_skus: list[dict[str, Any]],
     catalog: dict[str, Any],
 ) -> dict[str, Any]:
-    """Resolve personnel Excel SKUs by exact 69 code and unique compatible name."""
+    """Resolve personnel Excel SKUs by exact 69 code plus name score above 0.5."""
 
     products = list(catalog.get("products") or [])
     reconciled: list[dict[str, Any]] = []
@@ -119,25 +103,24 @@ def _personnel_sales_knowledge_reconciliation(
             status = "conflict"
         elif not barcode_candidates:
             status = "unmatched"
-        elif len(exact_name_candidates) == 1:
-            selected = exact_name_candidates[0]
+        elif exact_name_candidates:
+            selected = sorted(
+                exact_name_candidates,
+                key=lambda product: str(product.get("product_id") or ""),
+            )[0]
             name_match_type = "exact"
             name_similarity = 1.0
             status = "matched"
-        elif len(exact_name_candidates) > 1:
-            status = "ambiguous"
         else:
-            selected, score = unique_fuzzy_catalog_product(
+            selected, score = best_fuzzy_catalog_product(
                 source_name,
                 barcode_candidates,
-                minimum_score=0.45 if len(barcode_candidates) > 1 else 0.55,
+                threshold=PRODUCT_EXISTENCE_NAME_THRESHOLD,
             )
             name_similarity = round(score, 3) if score else None
             if selected is not None:
                 name_match_type = "fuzzy"
                 status = "fuzzy_matched"
-            elif len(barcode_candidates) > 1:
-                status = "ambiguous"
             else:
                 status = "conflict"
 
@@ -158,8 +141,8 @@ def _personnel_sales_knowledge_reconciliation(
             assert selected is not None
             basis = (
                 f"销售Excel第{row_text}行的69码{source_barcode}与商品知识库精确一致；"
-                f"产品名在同码候选内唯一模糊对应知识库商品{selected['product_code']}"
-                f"（相似度{name_similarity:.3f}）。"
+                f"产品名与同码知识库商品{selected['product_code']}模糊匹配，"
+                "名称相似度严格高于0.5。"
             )
             resubmission = None
         elif not source_barcode or not source_name:
@@ -188,15 +171,6 @@ def _personnel_sales_knowledge_reconciliation(
                 f"核对销售Excel第{row_text}行69码；若69码正确，"
                 "先补齐该商品的正式知识库资料后重跑。"
             )
-        elif status == "ambiguous":
-            basis = (
-                f"销售Excel第{row_text}行的69码{source_barcode}精确命中多个知识库商品，"
-                "产品名未能在同码候选内唯一消歧。"
-            )
-            resubmission = (
-                f"重新提交销售Excel：补全第{row_text}行产品名的规格、香型或版本，"
-                "使其能唯一对应商品知识库。"
-            )
         else:
             expected = (
                 f"{diagnostic['product_code']} / {diagnostic['product_name']}"
@@ -205,7 +179,7 @@ def _personnel_sales_knowledge_reconciliation(
             )
             basis = (
                 f"销售Excel第{row_text}行的69码{source_barcode}与知识库精确一致，"
-                f"但产品名不能模糊对应{expected}。"
+                f"但产品名与{expected}的模糊相似度未严格高于0.5。"
             )
             resubmission = (
                 f"重新提交销售Excel：核对并更正第{row_text}行产品名；"
@@ -277,11 +251,18 @@ def _personnel_sales_knowledge_reconciliation(
     }
 
 
-def _sales_sku_product_similarity(settlement_name: Any, sku: dict[str, Any]) -> float:
+def _sales_sku_product_similarity(
+    settlement_name: Any,
+    sku: dict[str, Any],
+    catalog_by_id: dict[str, dict[str, Any]],
+) -> float:
     names = [sku.get("product_name")]
     knowledge = sku.get("knowledge_match") or {}
     if knowledge.get("knowledge_status") in PASS_PERSONNEL_KNOWLEDGE_MATCHES:
         names.append(knowledge.get("knowledge_product_name"))
+        product = catalog_by_id.get(str(knowledge.get("knowledge_product_id") or ""))
+        if product is not None:
+            names.extend(catalog_product_name_values(product))
     return max(
         (_product_similarity(settlement_name, name) for name in names if name),
         default=0.0,
@@ -291,6 +272,7 @@ def _sales_sku_product_similarity(settlement_name: Any, sku: dict[str, Any]) -> 
 def _map_settlement_lines(
     lines: list[dict[str, Any]],
     sales_skus: list[dict[str, Any]],
+    catalog: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Map visual settlement lines to code-read sales SKUs without AI Excel access."""
 
@@ -301,6 +283,10 @@ def _map_settlement_lines(
         }
         for line in lines
     ]
+    catalog_by_id = {
+        str(product["product_id"]): product
+        for product in catalog.get("products") or []
+    }
     sku_by_barcode = {str(item["barcode"]): item for item in sales_skus}
     used: set[str] = set()
     for line in completed:
@@ -324,7 +310,9 @@ def _map_settlement_lines(
         scored = sorted(
             (
                 (
-                    _sales_sku_product_similarity(line["product_name"], sku),
+                    _sales_sku_product_similarity(
+                        line["product_name"], sku, catalog_by_id
+                    ),
                     decimal_value(sku["quantity"], label="Excel SKU quantity") == quantity,
                     sku,
                 )
@@ -333,15 +321,33 @@ def _map_settlement_lines(
             key=lambda item: (item[1], item[0]),
             reverse=True,
         )
-        quantity_candidates = [item for item in scored if item[1] and item[0] >= 0.08]
+        quantity_candidates = [
+            item
+            for item in scored
+            if item[1] and item[0] > PRODUCT_EXISTENCE_NAME_THRESHOLD
+        ]
+        exact_quantity_candidates = [
+            item
+            for item in scored
+            if item[1]
+            and (item[2].get("knowledge_match") or {}).get("knowledge_status")
+            in PASS_PERSONNEL_KNOWLEDGE_MATCHES
+        ]
         candidate: dict[str, Any] | None = None
         score = 0.0
-        if len(quantity_candidates) == 1:
+        mapping_basis = "name_and_quantity"
+        if len(exact_quantity_candidates) == 1:
+            score, _, candidate = exact_quantity_candidates[0]
+            mapping_basis = "unique_quantity"
+        elif len(quantity_candidates) == 1:
             score, _, candidate = quantity_candidates[0]
         elif scored:
             best = scored[0]
             runner_up = scored[1][0] if len(scored) > 1 else 0.0
-            if best[0] >= 0.35 and best[0] - runner_up >= 0.08:
+            if (
+                best[0] > PRODUCT_EXISTENCE_NAME_THRESHOLD
+                and best[0] - runner_up >= 0.08
+            ):
                 score, _, candidate = best
 
         if candidate is None:
@@ -349,21 +355,33 @@ def _map_settlement_lines(
                 "barcode": None,
                 "excel_product_name": None,
                 "confidence": "ambiguous",
-                "basis": "代码未找到同时满足商品文字相似、一行一条码唯一性的可靠销售SKU。",
+                "basis": (
+                    "代码未找到能由结算单可见条码、唯一数量，或商品名称模糊"
+                    "辅助在剩余一行一条码约束下可靠定位的销售SKU。"
+                ),
             }
             continue
         barcode = str(candidate["barcode"])
         used.add(barcode)
+        if mapping_basis == "unique_quantity":
+            basis = (
+                "确定性映射：该结算数量在尚未使用且已通过知识库核验的Excel SKU中"
+                "唯一，满足剩余一行一条码约束；结算商品名称只作模糊辅助，"
+                "即使识别残缺或错字也不单独否决。结算单未显示条码，因此置信度为中。"
+            )
+        else:
+            basis = (
+                "确定性映射：结算商品名与代码读取的Excel/知识库商品名模糊匹配"
+                "且相似度严格高于0.5；结算数量与Excel汇总数量"
+                f"{'一致' if decimal_value(candidate['quantity'], label='Excel quantity') == quantity else '不一致'}；"
+                "且满足剩余一行一条码唯一约束。结算单未显示条码，因此置信度为中；"
+                "不要求商品名称逐字一致。"
+            )
         line["sales_match"] = {
             "barcode": barcode,
             "excel_product_name": candidate["product_name"],
             "confidence": "medium",
-            "basis": (
-                "确定性映射：结算商品文字与代码读取的Excel/知识库商品文字相似，"
-                f"相似度={score:.3f}；结算数量与Excel汇总数量"
-                f"{'一致' if decimal_value(candidate['quantity'], label='Excel quantity') == quantity else '不一致'}；"
-                "且满足剩余一行一条码唯一约束。因结算单未显示条码，商品身份不标记为已验证。"
-            ),
+            "basis": basis,
         }
         line["notes"].append(
             f"代码映射到Excel条码{barcode}；原始结算单未显示该条码。"
@@ -526,17 +544,6 @@ def _line_result(
                 source=f"settlement line {line_no}",
             )
         )
-    if match.get("confidence") != "high":
-        exceptions.append(
-            exception(
-                "medium",
-                "NON_HIGH_CONFIDENCE_SKU_MAPPING",
-                f"结算单第{line_no}行SKU映射置信度为{match.get('confidence')}。",
-                "逐项数量虽然可计算，但商品身份仍有不确定性。",
-                "补充结算单条码或商品主数据映射。",
-                source=f"settlement line {line_no}",
-            )
-        )
     if difference != 0:
         exceptions.append(
             exception(
@@ -685,7 +692,7 @@ def audit_personnel_case(
 ) -> dict[str, Any]:
     sales_path = Path(case["sales_excel"]).resolve()
     sales = read_personnel_sales(sales_path)
-    product_catalog = load_product_rag(PRODUCT_KNOWLEDGE_SKILL_DIR)
+    product_catalog = load_product_rag()
     sales_knowledge = _personnel_sales_knowledge_reconciliation(
         sales["skus"], product_catalog
     )
@@ -714,7 +721,7 @@ def audit_personnel_case(
     settlement = evidence["settlement"]
     lines = sorted(settlement["lines"], key=lambda item: int(item["line_no"]))
     unique_by(lines, "line_no", "settlement line number")
-    lines = _map_settlement_lines(lines, sales["skus"])
+    lines = _map_settlement_lines(lines, sales["skus"], product_catalog)
     sku_map = {item["barcode"]: item for item in sales["skus"]}
     exceptions: list[dict[str, Any]] = []
     used_barcodes: set[str] = set()

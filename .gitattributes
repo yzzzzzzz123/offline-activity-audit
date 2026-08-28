@@ -1,2 +1,2 @@
-/skills/audit-promotional-display/canban-product-multimodal-knowledge-base/**/*.jpg filter=lfs diff=lfs merge=lfs -text
-/skills/audit-promotional-display/canban-product-multimodal-knowledge-base/*.xlsx filter=lfs diff=lfs merge=lfs -text
+/shared/canban-product-multimodal-knowledge-base/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+/shared/canban-product-multimodal-knowledge-base/*.xlsx filter=lfs diff=lfs merge=lfs -text

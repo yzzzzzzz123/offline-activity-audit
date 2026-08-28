@@ -1,0 +1,4 @@
+interface:
+  display_name: "海报/物料制作核销"
+  short_description: "核对合同、票据、结算单及水印现场照片的海报物料制作费用"
+  default_prompt: "Use $audit-poster-material to audit this poster/material-production reimbursement package and report only blocking errors."

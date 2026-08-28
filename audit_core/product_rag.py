@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from difflib import SequenceMatcher
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -9,13 +10,18 @@ from typing import Any
 from .common import AuditError, load_json, sha256_file, validate_json
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SHARED_PRODUCT_RAG_DIR = (
+    PROJECT_ROOT / "shared" / "canban-product-multimodal-knowledge-base"
+)
 CATALOG_RELATIVE_PATH = Path("references") / "product-rag.json"
 SCHEMA_RELATIVE_PATH = Path("references") / "product-rag.schema.json"
-PENDING_RELATIVE_PATH = Path("canban-product-multimodal-knowledge-base") / "pending-barcode.json"
+PENDING_RELATIVE_PATH = Path("pending-barcode.json")
 PENDING_SCHEMA_RELATIVE_PATH = Path("references") / "product-rag-pending.schema.json"
 FIELD_SHORT_CODE_PATTERN = re.compile(
     r"(?<![0-9A-Za-z])([A-Za-z]{1,4})[\s\-－_]*([0-9]{1,4})(?![0-9A-Za-z])"
 )
+PRODUCT_EXISTENCE_NAME_THRESHOLD = 0.5
 
 
 def ean13_is_valid(value: str) -> bool:
@@ -41,6 +47,10 @@ def catalog_product_name_values(product: dict[str, Any]) -> list[str]:
 
     values = [str(product.get("product_name") or "")]
     values.extend(str(value) for value in product.get("aliases") or [])
+    values.extend(str(value) for value in product.get("product_code_aliases") or [])
+    values.append(str(product.get("variant") or ""))
+    values.extend(str(value) for value in product.get("variant_aliases") or [])
+    values.extend(str(value) for value in product.get("specification_aliases") or [])
     for source in product.get("sources") or []:
         observed_name = str(source.get("observed_product_name") or "").strip()
         observed_specification = str(source.get("observed_specification") or "").strip()
@@ -55,13 +65,52 @@ def catalog_product_name_values(product: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
 
-def _product_name_grams(value: Any) -> set[str]:
+def _fuzzy_product_name_text(value: Any) -> str:
     text = canonical_product_name(value)
-    for token in ("参半", "oralshark", "牙膏", "组合装", "超值装", "特享装", "量贩装"):
+    for token in (
+        "参半",
+        "oralshark",
+        "牙膏",
+        "套盒",
+        "组合装",
+        "超值装",
+        "特享装",
+        "量贩装",
+    ):
         text = text.replace(token, "")
+    return re.sub(r"\d+(?:g|ml)", "", text)
+
+
+def _product_name_grams(value: Any) -> set[str]:
+    text = _fuzzy_product_name_text(value)
     if len(text) < 2:
         return {text} if text else set()
     return {text[index : index + 2] for index in range(len(text) - 1)}
+
+
+def product_name_similarity(left: Any, right: Any) -> float:
+    """Return OCR-tolerant fuzzy compatibility for product names.
+
+    Exact equality is only a score-1 special case, never a prerequisite.  The
+    strict identity boundary remains the product code and 69 code wherever
+    those comparable identifiers are supplied.
+    """
+
+    left_text = _fuzzy_product_name_text(left)
+    right_text = _fuzzy_product_name_text(right)
+    if not left_text or not right_text:
+        return 0.0
+    if left_text in right_text or right_text in left_text:
+        return 1.0
+    left_grams = _product_name_grams(left_text)
+    right_grams = _product_name_grams(right_text)
+    gram_score = (
+        len(left_grams & right_grams) / len(left_grams | right_grams)
+        if left_grams and right_grams
+        else 0.0
+    )
+    sequence_score = SequenceMatcher(None, left_text, right_text).ratio()
+    return max(gram_score, sequence_score)
 
 
 def _measurement_tokens(value: Any) -> set[str]:
@@ -88,14 +137,75 @@ def catalog_product_name_score(value: Any, product: dict[str, Any]) -> float:
             and not source_measurements.intersection(candidate_measurements)
         ):
             continue
-        left_grams = _product_name_grams(value)
-        right_grams = _product_name_grams(candidate)
-        if not left_grams or not right_grams:
-            score = 0.0
-        else:
-            score = len(left_grams & right_grams) / len(left_grams | right_grams)
-        scores.append(score)
+        scores.append(product_name_similarity(value, candidate))
     return max(scores, default=0.0)
+
+
+def _catalog_full_identity_name_score(value: Any, product: dict[str, Any]) -> float:
+    """Score the complete catalog identity without a generic alias shortcut.
+
+    Several variants may intentionally share a short catalog alias.  When that
+    makes the primary fuzzy score tie, the source text still needs to prefer the
+    variant whose authoritative name, specification, and variant add no
+    conflicting extra identity text.
+    """
+
+    identity_text = " ".join(
+        item
+        for item in (
+            str(product.get("product_name") or "").strip(),
+            str(product.get("variant") or "").strip(),
+            str(product.get("specification") or "").strip(),
+        )
+        if item
+    )
+    return product_name_similarity(value, identity_text)
+
+
+def _rank_fuzzy_catalog_products(
+    value: Any,
+    products: list[dict[str, Any]],
+    *,
+    minimum_margin: float,
+) -> list[tuple[float, float, dict[str, Any]]]:
+    scored = [
+        (
+            catalog_product_name_score(value, product),
+            _catalog_full_identity_name_score(value, product),
+            product,
+        )
+        for product in products
+    ]
+    if not scored:
+        return []
+    best_primary = max(item[0] for item in scored)
+    contenders = [
+        item for item in scored if best_primary - item[0] < minimum_margin
+    ]
+    return sorted(
+        contenders,
+        key=lambda item: (
+            -item[1],
+            -item[0],
+            str(item[2].get("product_id") or ""),
+        ),
+    )
+
+
+def best_fuzzy_catalog_product(
+    value: Any,
+    products: list[dict[str, Any]],
+    *,
+    threshold: float = PRODUCT_EXISTENCE_NAME_THRESHOLD,
+) -> tuple[dict[str, Any] | None, float]:
+    """Select one uniquely fuzzy-compatible name inside the strict ID set."""
+
+    ranked = _rank_fuzzy_catalog_products(value, products, minimum_margin=0.08)
+    if not ranked or ranked[0][0] <= threshold:
+        return None, ranked[0][0] if ranked else 0.0
+    if len(ranked) > 1 and ranked[0][1] - ranked[1][1] < 0.08:
+        return None, ranked[0][0]
+    return ranked[0][2], ranked[0][0]
 
 
 def unique_fuzzy_catalog_product(
@@ -107,15 +217,16 @@ def unique_fuzzy_catalog_product(
 ) -> tuple[dict[str, Any] | None, float]:
     """Select one catalog product only when fuzzy name evidence is strong and unique."""
 
-    ranked = sorted(
-        ((catalog_product_name_score(value, product), product) for product in products),
-        key=lambda item: (-item[0], str(item[1].get("product_id") or "")),
+    ranked = _rank_fuzzy_catalog_products(
+        value,
+        products,
+        minimum_margin=minimum_margin,
     )
     if not ranked or ranked[0][0] < minimum_score:
         return None, ranked[0][0] if ranked else 0.0
-    if len(ranked) > 1 and ranked[0][0] - ranked[1][0] < minimum_margin:
+    if len(ranked) > 1 and ranked[0][1] - ranked[1][1] < minimum_margin:
         return None, ranked[0][0]
-    return ranked[0][1], ranked[0][0]
+    return ranked[0][2], ranked[0][0]
 
 
 def _unique_text(values: list[str], label: str) -> None:
@@ -125,10 +236,11 @@ def _unique_text(values: list[str], label: str) -> None:
 
 
 @lru_cache(maxsize=8)
-def _load_product_rag_cached(skill_root_text: str) -> dict[str, Any]:
-    skill_root = Path(skill_root_text)
-    catalog_path = skill_root / CATALOG_RELATIVE_PATH
-    schema_path = skill_root / SCHEMA_RELATIVE_PATH
+def _load_product_rag_cached(knowledge_root_text: str) -> dict[str, Any]:
+    knowledge_root = Path(knowledge_root_text).resolve()
+    asset_root = knowledge_root.parent
+    catalog_path = knowledge_root / CATALOG_RELATIVE_PATH
+    schema_path = knowledge_root / SCHEMA_RELATIVE_PATH
     catalog = load_json(catalog_path)
     validate_json(catalog, schema_path)
 
@@ -189,10 +301,10 @@ def _load_product_rag_cached(skill_root_text: str) -> dict[str, Any]:
         for view in views:
             relative = Path(str(view["image_file"]))
             if relative.is_absolute():
-                raise AuditError(f"商品视觉RAG图片必须使用Skill内相对路径：{relative}")
-            image_path = (skill_root / relative).resolve()
-            if not image_path.is_relative_to(skill_root):
-                raise AuditError(f"商品视觉RAG图片越出Skill目录：{relative}")
+                raise AuditError(f"商品视觉RAG图片必须使用共享仓库相对路径：{relative}")
+            image_path = (asset_root / relative).resolve()
+            if not image_path.is_relative_to(knowledge_root):
+                raise AuditError(f"商品视觉RAG图片越出共享知识库：{relative}")
             if not image_path.is_file():
                 raise AuditError(f"商品视觉RAG图片不存在：{relative}")
             expected_suffix = "" if product_code == "未标注" else f"__{product_code}"
@@ -210,8 +322,12 @@ def _load_product_rag_cached(skill_root_text: str) -> dict[str, Any]:
     return catalog
 
 
-def load_product_rag(skill_dir: str | Path) -> dict[str, Any]:
-    return _load_product_rag_cached(str(Path(skill_dir).resolve()))
+def load_product_rag(
+    knowledge_dir: str | Path = SHARED_PRODUCT_RAG_DIR,
+) -> dict[str, Any]:
+    """Load the project-level product identity ledger shared by every scenario."""
+
+    return _load_product_rag_cached(str(Path(knowledge_dir).resolve()))
 
 
 def clear_product_rag_cache() -> None:
@@ -220,15 +336,18 @@ def clear_product_rag_cache() -> None:
     _load_product_rag_cached.cache_clear()
 
 
-def load_pending_product_rag(skill_dir: str | Path) -> dict[str, Any]:
+def load_pending_product_rag(
+    knowledge_dir: str | Path = SHARED_PRODUCT_RAG_DIR,
+) -> dict[str, Any]:
     """Validate quarantined reference images without exposing them to runtime matching."""
 
-    skill_root = Path(skill_dir).resolve()
-    manifest_path = skill_root / PENDING_RELATIVE_PATH
+    knowledge_root = Path(knowledge_dir).resolve()
+    asset_root = knowledge_root.parent
+    manifest_path = knowledge_root / PENDING_RELATIVE_PATH
     if not manifest_path.exists():
         return {"schema_version": "1.0", "pending_products": []}
     manifest = load_json(manifest_path)
-    validate_json(manifest, skill_root / PENDING_SCHEMA_RELATIVE_PATH)
+    validate_json(manifest, knowledge_root / PENDING_SCHEMA_RELATIVE_PATH)
     products = list(manifest.get("pending_products") or [])
     _unique_text([str(item["pending_id"]) for item in products], "待补69码 pending_id")
     for product in products:
@@ -238,10 +357,10 @@ def load_pending_product_rag(skill_dir: str | Path) -> dict[str, Any]:
         for view in views:
             relative = Path(str(view["image_file"]))
             if relative.is_absolute():
-                raise AuditError(f"待补69码图片必须使用Skill内相对路径：{relative}")
-            image_path = (skill_root / relative).resolve()
-            if not image_path.is_relative_to(skill_root):
-                raise AuditError(f"待补69码图片越出Skill目录：{relative}")
+                raise AuditError(f"待补69码图片必须使用共享仓库相对路径：{relative}")
+            image_path = (asset_root / relative).resolve()
+            if not image_path.is_relative_to(knowledge_root):
+                raise AuditError(f"待补69码图片越出共享知识库：{relative}")
             if not image_path.is_file():
                 raise AuditError(f"待补69码图片不存在：{relative}")
             actual_hash = sha256_file(image_path)
@@ -261,12 +380,13 @@ def product_by_id(catalog: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def product_reference_images(
-    skill_dir: str | Path,
+    knowledge_dir: str | Path,
     catalog: dict[str, Any],
 ) -> list[tuple[dict[str, Any], dict[str, Any], Path]]:
-    root = Path(skill_dir).resolve()
+    knowledge_root = Path(knowledge_dir).resolve()
+    asset_root = knowledge_root.parent
     return [
-        (product, view, (root / str(view["image_file"])).resolve())
+        (product, view, (asset_root / str(view["image_file"])).resolve())
         for product in catalog.get("products") or []
         for view in product.get("views") or []
     ]
@@ -333,13 +453,14 @@ def apply_visible_short_code_exact_hits(
     visible_text: list[str],
     catalog: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Apply the field-photo rule for a visible, catalog-unique short product code.
+    """Promote a visually matched candidate when its visible short code is unique.
 
     Short packaging codes such as ``SP-1`` are deliberately tolerant of spaces,
-    case, and hyphen style.  A code can establish an exact field identity only
-    when it is a registered catalog alias for exactly one product.  Shared codes
-    such as the current ``SP-4`` group remain fuzzy until another visible package
-    feature disambiguates them.
+    case, and hyphen style. A code contributes to an exact field identity only
+    when it is a registered catalog alias for exactly one product and the model
+    has already matched that product to at least one registered reference view.
+    Shared codes such as the current ``SP-4`` group remain fuzzy until another
+    visible text and packaging feature disambiguates them.
     """
 
     visible_codes = {
@@ -385,28 +506,65 @@ def apply_visible_short_code_exact_hits(
             "且该短码只对应这一种商品"
         )
         hit = by_id.get(product_id)
-        if hit is None:
-            hit = {
-                "reference_product_id": product_id,
-                "product_name": str(product["product_name"]),
-                "product_code": str(product["product_code"]),
-                "product_code_aliases": [
-                    str(value) for value in product.get("product_code_aliases") or []
-                ],
-                "barcode_69": str(product["barcode_69"]),
-                "specification": str(product["specification"]),
-                "variant": product.get("variant"),
-                "confidence": "exact",
-                "matched_view_ids": [],
-                "visible_basis": [basis],
-                "limitations": [],
-            }
-            result.append(hit)
-            by_id[product_id] = hit
+        if hit is None or not hit.get("matched_view_ids"):
             continue
         hit["confidence"] = "exact"
         if basis not in hit["visible_basis"]:
             hit["visible_basis"].append(basis)
+    return result
+
+
+def apply_visible_catalog_text_exact_hits(
+    resolved_hits: list[dict[str, Any]],
+    visible_text: list[str],
+    catalog: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Promote one visually supported hit when visible catalog text is unique.
+
+    This covers general combinations such as bundle notation, specification,
+    and package wording.  Text alone never creates a hit: the selected product
+    must already have a model-returned match to at least one registered
+    reference view, and the same visible text must uniquely select it from the
+    complete validated catalog.
+    """
+
+    visible = " ".join(str(value).strip() for value in visible_text if str(value).strip())
+    if not visible or not resolved_hits:
+        return resolved_hits
+    selected, score = best_fuzzy_catalog_product(
+        visible,
+        list(catalog.get("products") or []),
+        threshold=PRODUCT_EXISTENCE_NAME_THRESHOLD,
+    )
+    if selected is None:
+        return resolved_hits
+
+    result = [
+        {
+            **hit,
+            "matched_view_ids": list(hit.get("matched_view_ids") or []),
+            "visible_basis": list(hit.get("visible_basis") or []),
+            "limitations": list(hit.get("limitations") or []),
+        }
+        for hit in resolved_hits
+    ]
+    selected_id = str(selected["product_id"])
+    matching_hits = [
+        hit
+        for hit in result
+        if str(hit.get("reference_product_id") or "") == selected_id
+        and hit.get("matched_view_ids")
+    ]
+    if len(matching_hits) != 1 or selected.get("match_policy") == "candidate_only":
+        return result
+    hit = matching_hits[0]
+    hit["confidence"] = "exact"
+    basis = (
+        "现场照片可见名称片段、规格、款式或组合装文字已从完整知识库唯一收敛到"
+        f"{selected['product_name']}，且包装与登记参考图相容"
+    )
+    if basis not in hit["visible_basis"]:
+        hit["visible_basis"].append(basis)
     return result
 
 

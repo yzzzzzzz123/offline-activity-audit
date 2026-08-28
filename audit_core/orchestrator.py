@@ -17,7 +17,10 @@ from .codex_runner import extract_with_codex
 from .common import AuditError, clean_identifier, validate_json
 from .display import audit_display_case
 from .html_report import create_html_report_from_workbook, verify_html_report
+from .maintenance_fee import audit_maintenance_fee_case
+from .other_expense import audit_other_expense_case
 from .personnel import audit_personnel_case
+from .poster_material import audit_poster_material_case
 from .report import create_combined_report, verify_workbook
 
 
@@ -36,8 +39,29 @@ EVIDENCE_SCHEMA = {
     / "audit-promotional-display"
     / "references"
     / "evidence.schema.json",
+    "poster_material": PROJECT_ROOT
+    / "skills"
+    / "audit-poster-material"
+    / "references"
+    / "evidence.schema.json",
+    "other_expense": PROJECT_ROOT
+    / "skills"
+    / "audit-other-expense"
+    / "references"
+    / "evidence.schema.json",
+    "maintenance_fee": PROJECT_ROOT
+    / "skills"
+    / "audit-maintenance-fee"
+    / "references"
+    / "evidence.schema.json",
 }
-SCENARIO_ORDER = ("personnel_incentive", "promotional_display")
+SCENARIO_ORDER = (
+    "personnel_incentive",
+    "promotional_display",
+    "poster_material",
+    "other_expense",
+    "maintenance_fee",
+)
 EvidenceProvider = Callable[[dict[str, Any], Path], dict[str, Any]]
 
 
@@ -208,6 +232,7 @@ def run_audit(
     output_dir: str | Path = DEFAULT_OUTPUT_DIR,
     evidence_provider: EvidenceProvider | None = None,
     model: str | None = None,
+    scenario: str | None = None,
 ) -> dict[str, Any]:
     normalized_run_id = normalize_run_id(run_id)
     normalized_producer_model = normalize_producer_model(producer_model)
@@ -219,7 +244,12 @@ def run_audit(
     temporary_root = _create_temporary_root(output_root)
 
     try:
-        cases = prepare_cases(input_dir, temporary_root / "sources")
+        selected_scenarios = {scenario} if scenario else None
+        cases = prepare_cases(
+            input_dir,
+            temporary_root / "sources",
+            selected_scenarios=selected_scenarios,
+        )
         results: list[dict[str, Any]] = []
         scenarios = [scenario for scenario in SCENARIO_ORDER if scenario in cases]
         for scenario in scenarios:
@@ -228,8 +258,14 @@ def run_audit(
             validate_json(evidence, EVIDENCE_SCHEMA[scenario])
             if scenario == "personnel_incentive":
                 result = audit_personnel_case(case, evidence)
-            else:
+            elif scenario == "promotional_display":
                 result = audit_display_case(case, evidence)
+            elif scenario == "poster_material":
+                result = audit_poster_material_case(case, evidence)
+            elif scenario == "other_expense":
+                result = audit_other_expense_case(case, evidence)
+            else:
+                result = audit_maintenance_fee_case(case, evidence)
             validate_json(result, RESULT_SCHEMA)
             results.append(result)
 
@@ -277,7 +313,7 @@ def run_audit(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "从 input/ 的1～2个活动材料ZIP生成并校验线下活动核销结果，"
+            "从 input/ 的活动材料ZIP生成并校验线下活动核销结果，"
             "正式发布一个可离线打开的HTML文件"
         )
     )
@@ -291,6 +327,11 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="执行本次核销的模型来源标识，例如 codex、qwen3.7 或 glm-4.5",
     )
+    parser.add_argument(
+        "--scenario",
+        choices=SCENARIO_ORDER,
+        help="只运行指定核销类型；不传时运行 input/ 中全部已支持类型",
+    )
     return parser
 
 
@@ -301,6 +342,7 @@ def main(argv: list[str] | None = None) -> int:
             args.run_id,
             producer_model=args.producer_model,
             model=os.environ.get("OFFLINE_AUDIT_MODEL") or None,
+            scenario=args.scenario,
         )
     except AuditError as exc:
         print(f"核销失败：{exc}", file=sys.stderr)

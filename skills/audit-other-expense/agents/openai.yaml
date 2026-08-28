@@ -1,0 +1,4 @@
+interface:
+  display_name: "其他费用核销"
+  short_description: "审核无法归类的新费用、特殊审批及配套核销资料"
+  default_prompt: "使用 $audit-other-expense 审核提交的其他费用材料，先排除现有费用类型，再核对特殊审批、签章合同、统一模板盖章结算单和按类型提供的支持资料。"

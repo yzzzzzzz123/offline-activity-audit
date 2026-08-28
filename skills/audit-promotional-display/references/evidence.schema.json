@@ -6,14 +6,14 @@
   "additionalProperties": false,
   "required": ["schema_version", "scenario", "contract", "photo_reviews", "extraction_notes"],
   "properties": {
-    "schema_version": {"type": "string", "const": "2.4"},
+    "schema_version": {"type": "string", "const": "2.5"},
     "scenario": {"type": "string", "const": "promotional_display"},
     "contract": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "source_file", "customer_name", "contract_parties", "activity_start", "activity_end",
-        "activity_budget", "activity_content", "display_standard", "fee_per_store",
+        "activity_budget", "activity_content", "settlement_method", "display_standard", "fee_per_store",
         "fee_basis", "claimed_amount", "contract_stack_count", "watermark_visible",
         "seal_visible", "requires_specific_products", "required_products",
         "required_product_identities", "requires_promotion",
@@ -31,6 +31,7 @@
         "activity_end": {"type": "string", "format": "date"},
         "activity_budget": {"type": ["number", "null"], "minimum": 0},
         "activity_content": {"type": "string", "minLength": 1},
+        "settlement_method": {"type": "string", "minLength": 1},
         "display_standard": {"type": "string", "minLength": 1},
         "fee_per_store": {"type": "number", "minimum": 0},
         "fee_basis": {
@@ -39,7 +40,10 @@
         },
         "claimed_amount": {"type": "number", "minimum": 0},
         "contract_stack_count": {"type": ["integer", "null"], "minimum": 1},
-        "watermark_visible": {"type": ["boolean", "null"]},
+        "watermark_visible": {
+          "type": ["boolean", "null"],
+          "description": "Informational extraction only; contract watermark does not affect reimbursement."
+        },
         "seal_visible": {"type": ["boolean", "null"]},
         "requires_specific_products": {"type": "boolean"},
         "required_products": {"type": "array", "items": {"type": "string"}},
@@ -69,7 +73,6 @@
             "present": {"type": "boolean"},
             "source_pages": {
               "type": "array",
-              "uniqueItems": true,
               "items": {"type": "integer", "minimum": 1}
             },
             "records": {
@@ -102,35 +105,7 @@
             },
             "total_quantity": {"type": ["number", "null"], "minimum": 0},
             "total_amount": {"type": ["number", "null"], "minimum": 0}
-          },
-          "allOf": [
-            {
-              "if": {
-                "properties": {"present": {"const": false}},
-                "required": ["present"]
-              },
-              "then": {
-                "properties": {
-                  "source_pages": {"maxItems": 0},
-                  "records": {"maxItems": 0},
-                  "total_quantity": {"type": "null"},
-                  "total_amount": {"type": "null"}
-                }
-              }
-            },
-            {
-              "if": {
-                "properties": {"present": {"const": true}},
-                "required": ["present"]
-              },
-              "then": {
-                "properties": {
-                  "source_pages": {"minItems": 1},
-                  "records": {"minItems": 1}
-                }
-              }
-            }
-          ]
+          }
         },
         "stores": {
           "type": "array",

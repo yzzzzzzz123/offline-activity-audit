@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/offline-activity-audit/maintenance-fee-evidence.schema.json",
+  "title": "Maintenance-fee visible evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario", "documents", "extraction_notes"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "scenario": {"type": "string", "const": "maintenance_fee"},
+    "documents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/document"}
+    },
+    "extraction_notes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "visibility": {
+      "type": "string",
+      "enum": ["visible", "not_visible", "unclear", "not_applicable"]
+    },
+    "expense_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description", "calculation_basis", "quantity", "unit", "unit_price",
+        "rate", "amount"
+      ],
+      "properties": {
+        "description": {"type": "string", "minLength": 1},
+        "calculation_basis": {"type": ["string", "null"], "minLength": 1},
+        "quantity": {"type": ["number", "null"], "minimum": 0},
+        "unit": {"type": ["string", "null"], "minLength": 1},
+        "unit_price": {"type": ["number", "null"], "minimum": 0},
+        "rate": {"type": ["number", "null"], "minimum": 0},
+        "amount": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "pos_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_name", "quantity", "sales_amount"],
+      "properties": {
+        "product_name": {"type": "string", "minLength": 1},
+        "quantity": {"type": ["number", "null"], "minimum": 0},
+        "sales_amount": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_file", "role", "document_type", "title", "party_names",
+        "customer_name", "activity_start", "activity_end", "fee_type",
+        "expense_lines", "eligible_pos_scope", "calculation_method", "rate",
+        "amount_ceiling", "sales_quantity",
+        "sales_amount", "claimed_amount", "company_template_visible",
+        "dealer_seal_visible", "signed_visible", "pos_lines",
+        "pos_total_quantity", "pos_total_sales_amount", "activity_date",
+        "activity_location", "activity_content", "visible_summary", "limitations"
+      ],
+      "properties": {
+        "source_file": {"type": "string", "minLength": 1},
+        "role": {
+          "type": "string",
+          "enum": [
+            "stamped_pos_data", "signed_promotional_contract", "settlement",
+            "supporting_document", "activity_photo", "other"
+          ]
+        },
+        "document_type": {"type": "string", "minLength": 1},
+        "title": {"type": ["string", "null"], "minLength": 1},
+        "party_names": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "customer_name": {"type": ["string", "null"], "minLength": 1},
+        "activity_start": {"type": ["string", "null"], "format": "date"},
+        "activity_end": {"type": ["string", "null"], "format": "date"},
+        "fee_type": {"type": ["string", "null"], "minLength": 1},
+        "expense_lines": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/expense_line"}
+        },
+        "eligible_pos_scope": {"type": ["string", "null"], "minLength": 1},
+        "calculation_method": {"type": ["string", "null"], "minLength": 1},
+        "rate": {"type": ["number", "null"], "minimum": 0},
+        "amount_ceiling": {"type": ["number", "null"], "minimum": 0},
+        "sales_quantity": {"type": ["number", "null"], "minimum": 0},
+        "sales_amount": {"type": ["number", "null"], "minimum": 0},
+        "claimed_amount": {"type": ["number", "null"], "minimum": 0},
+        "company_template_visible": {"$ref": "#/$defs/visibility"},
+        "dealer_seal_visible": {"$ref": "#/$defs/visibility"},
+        "signed_visible": {"$ref": "#/$defs/visibility"},
+        "pos_lines": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/pos_line"}
+        },
+        "pos_total_quantity": {"type": ["number", "null"], "minimum": 0},
+        "pos_total_sales_amount": {"type": ["number", "null"], "minimum": 0},
+        "activity_date": {"type": ["string", "null"], "format": "date"},
+        "activity_location": {"type": ["string", "null"], "minLength": 1},
+        "activity_content": {"type": ["string", "null"], "minLength": 1},
+        "visible_summary": {"type": "string", "minLength": 1},
+        "limitations": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}
