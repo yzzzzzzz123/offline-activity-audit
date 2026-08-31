@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "entry_fee",
+  "skill_name": "audit-entry-fee",
+  "display_name": "进场费/条码费",
+  "aliases": ["进场费", "条码费", "条码上架费用"],
+  "order": 9,
+  "provenance": {
+    "source_zip_basename": "SQ202607130073-HX202608180040-进场费.zip",
+    "source_zip_sha256": "677762281d650171d1becb2a2daf02b5b077e8a3ca3af00d9c209675f694207d",
+    "source_zip_size": 27303100,
+    "generator_skill_version": "1.0",
+    "business_requirements_summary": [
+      "产品进入渠道门店支付的条码上架费用。",
+      "进场费合同是费用权威。",
+      "样本合同要求门店上架照片和系统扣款凭证。",
+      "条码费按合同商品条码行合计，不按门店数重复相乘。"
+    ]
+  },
+  "scope": {
+    "in_scope": ["渠道门店产品条码上架费用"],
+    "excluded": ["直营", "价格补差", "额外搭赠", "POS达标激励"],
+    "audit_object": "一份进场费申报包及其分组阻断问题"
+  },
+  "evidence_roles": [
+    {"role_id": "entry_fee_contract", "description": "双方签章进场费合同/产品推广协议", "extensions": [".pdf", ".jpg", ".jpeg", ".png", ".webp"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["产品推广协议", "进场费合同", "条码费合同"], "ai_visible": true, "required": true, "binding_rule": "名称明确的唯一合同候选。"},
+    {"role_id": "shelf_photo", "description": "合同门店实际上架水印照片", "extensions": [".jpg", ".jpeg", ".png", ".webp"], "minimum": 1, "maximum": null, "nested_in": "photo_rar", "name_markers": [], "ai_visible": true, "required": true, "binding_rule": "进场照片RAR内图片逐文件绑定；父目录只作路由提示。"},
+    {"role_id": "system_deduction_proof", "description": "合同要求的系统扣款凭证", "extensions": [".pdf", ".jpg", ".jpeg", ".png", ".webp"], "minimum": 1, "maximum": null, "nested_in": null, "name_markers": ["系统扣款", "扣款凭证", "上架凭证"], "ai_visible": true, "required": true, "binding_rule": "按明确名称绑定；缺失作为报告问题。"}
+  ],
+  "ai_stages": [{"stage_id": "entry_fee_visual_facts", "input_roles": ["entry_fee_contract", "shelf_photo", "system_deduction_proof"], "reference_scope": [], "schema_file": "references/evidence.schema.json", "source_coverage_rule": "每个视觉源必须且只能返回一次，来源名和角色不得改写。"}],
+  "authority_edges": [
+    {"from": "entry_fee_contract", "to": "shelf_photo", "purpose": "限定合同商品、门店、上架和时间范围"},
+    {"from": "entry_fee_contract", "to": "system_deduction_proof", "purpose": "限定支付方式与扣款凭证要求"},
+    {"from": "entry_fee_contract", "to": "claim_amount", "purpose": "确定条码费和合同总额上限"}
+  ],
+  "forbidden_edges": [
+    {"from": "folder_name", "to": "store_identity", "purpose": "文件夹名不能替代照片水印"},
+    {"from": "contracted_store_count", "to": "barcode_fee_multiplier", "purpose": "条码费未明确按店时不得再乘门店数"},
+    {"from": "shelf_photo", "to": "system_deduction", "purpose": "上架照片不能替代系统扣款凭证"}
+  ],
+  "controls": [
+    {"control_id": "contract_authority", "source": "进场费合同", "object": "双方、渠道、商品、门店、条码费和总额", "expectation": "完整且双方签章", "comparison": "visible_and_deterministic", "blocking": true, "error_group": "合同权威", "resubmission": "补交条款完整的双方签章合同。"},
+    {"control_id": "contract_amount", "source": "合同商品行", "object": "条码费总额", "expectation": "各条码费合计等于合同总额", "comparison": "deterministic", "blocking": true, "error_group": "金额复算", "resubmission": "补正合同商品行、条码费或总额。"},
+    {"control_id": "shelf_photo_coverage", "source": "水印上架照片", "object": "合同门店与商品", "expectation": "合同期内每个合同商品覆盖全部合同门店", "comparison": "unique_fuzzy_and_visible", "blocking": true, "error_group": "上架照片", "resubmission": "补交缺失门店/商品的水印上架照片。"},
+    {"control_id": "system_deduction_proof", "source": "系统扣款凭证", "object": "实际扣款", "expectation": "存在且金额、主体和合同对应", "comparison": "visible", "blocking": true, "error_group": "系统扣款", "resubmission": "补交清晰、完整的系统扣款凭证。"},
+    {"control_id": "source_integrity", "source": "全部视觉来源", "object": "来源完整性与照片重复", "expectation": "逐文件覆盖且图片内容不重复", "comparison": "deterministic", "blocking": true, "error_group": "来源完整性", "resubmission": "重交不重复且来源清楚的原始资料。"}
+  ],
+  "amount_policy": {"claim_source": "签章进场费合同含税总额", "supported_amount_rule": "完成全部合同门店上架并由系统扣款凭证支持的商品条码费合计，受合同总额和凭证金额约束；全部阻断控制通过方可支持。", "rounding": "人民币元，ROUND_HALF_UP保留两位小数", "blocked_rule": "任一阻断失败全额暂缓", "conclusions": ["pass", "human_review"]},
+  "output": {"sheet_name": "进场费核销", "html_mode": "error_only", "count_unit": "个问题", "required_facts": ["问题来源", "识别内容", "规则", "影响", "补交"], "prohibited_terms": ["prompt", "schema", "临时目录", "系统内部路径"]},
+  "dependencies": [{"name": "pypdf", "purpose": "读取并展开扫描合同PDF。"}, {"name": "jsonschema", "purpose": "校验证据、manifest和结果。"}]
+}

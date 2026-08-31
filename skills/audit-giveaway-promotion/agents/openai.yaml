@@ -1,0 +1,4 @@
+interface:
+  display_name: "额外搭赠核销"
+  short_description: "核验额外搭赠合同、出货结算、小票及活动执行材料"
+  default_prompt: "Use $audit-giveaway-promotion to audit this extra-giveaway reimbursement package."

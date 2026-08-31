@@ -16,12 +16,17 @@ from .archive_input import prepare_cases
 from .codex_runner import extract_with_codex
 from .common import AuditError, clean_identifier, validate_json
 from .display import audit_display_case
+from .entry_fee import audit_entry_fee_case
+from .giveaway_promotion import audit_giveaway_promotion_case
 from .html_report import create_html_report_from_workbook, verify_html_report
 from .maintenance_fee import audit_maintenance_fee_case
 from .other_expense import audit_other_expense_case
 from .personnel import audit_personnel_case
 from .poster_material import audit_poster_material_case
+from .pos_target_incentive import audit_pos_target_incentive_case
+from .price_difference_support import audit_price_difference_support_case
 from .report import create_combined_report, verify_workbook
+from .self_procured_gift_material import audit_self_procured_gift_material_case
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +59,31 @@ EVIDENCE_SCHEMA = {
     / "audit-maintenance-fee"
     / "references"
     / "evidence.schema.json",
+    "giveaway_promotion": PROJECT_ROOT
+    / "skills"
+    / "audit-giveaway-promotion"
+    / "references"
+    / "evidence.schema.json",
+    "price_difference_support": PROJECT_ROOT
+    / "skills"
+    / "audit-price-difference-support"
+    / "references"
+    / "evidence.schema.json",
+    "pos_target_incentive": PROJECT_ROOT
+    / "skills"
+    / "audit-pos-target-incentive"
+    / "references"
+    / "evidence.schema.json",
+    "entry_fee": PROJECT_ROOT
+    / "skills"
+    / "audit-entry-fee"
+    / "references"
+    / "evidence.schema.json",
+    "self_procured_gift_material": PROJECT_ROOT
+    / "skills"
+    / "audit-self-procured-gift-material"
+    / "references"
+    / "evidence.schema.json",
 }
 SCENARIO_ORDER = (
     "personnel_incentive",
@@ -61,8 +91,14 @@ SCENARIO_ORDER = (
     "poster_material",
     "other_expense",
     "maintenance_fee",
+    "giveaway_promotion",
+    "price_difference_support",
+    "pos_target_incentive",
+    "entry_fee",
+    "self_procured_gift_material",
 )
 EvidenceProvider = Callable[[dict[str, Any], Path], dict[str, Any]]
+RunObserver = Callable[[str, dict[str, Any]], None]
 
 
 def _create_temporary_root(output_root: Path) -> Path:
@@ -233,6 +269,7 @@ def run_audit(
     evidence_provider: EvidenceProvider | None = None,
     model: str | None = None,
     scenario: str | None = None,
+    observer: RunObserver | None = None,
 ) -> dict[str, Any]:
     normalized_run_id = normalize_run_id(run_id)
     normalized_producer_model = normalize_producer_model(producer_model)
@@ -250,24 +287,63 @@ def run_audit(
             temporary_root / "sources",
             selected_scenarios=selected_scenarios,
         )
-        results: list[dict[str, Any]] = []
         scenarios = [scenario for scenario in SCENARIO_ORDER if scenario in cases]
-        for scenario in scenarios:
-            case = cases[scenario]
-            evidence = provider(case, temporary_root)
-            validate_json(evidence, EVIDENCE_SCHEMA[scenario])
-            if scenario == "personnel_incentive":
+        if observer is not None:
+            observer(
+                "cases.prepared",
+                {
+                    "cases": cases,
+                    "scenarios": scenarios,
+                    "temporary_root": str(temporary_root),
+                },
+            )
+        evidence_by_scenario: dict[str, dict[str, Any]] = {}
+        for scenario_name in scenarios:
+            case = cases[scenario_name]
+            if observer is not None:
+                observer("scenario.started", {"scenario": scenario_name})
+            evidence_by_scenario[scenario_name] = provider(case, temporary_root)
+
+        for scenario_name in scenarios:
+            evidence = evidence_by_scenario[scenario_name]
+            validate_json(evidence, EVIDENCE_SCHEMA[scenario_name])
+            if observer is not None:
+                observer(
+                    "evidence.validated",
+                    {"scenario": scenario_name, "evidence": evidence},
+                )
+
+        results: list[dict[str, Any]] = []
+        for scenario_name in scenarios:
+            case = cases[scenario_name]
+            evidence = evidence_by_scenario[scenario_name]
+            if scenario_name == "personnel_incentive":
                 result = audit_personnel_case(case, evidence)
-            elif scenario == "promotional_display":
+            elif scenario_name == "promotional_display":
                 result = audit_display_case(case, evidence)
-            elif scenario == "poster_material":
+            elif scenario_name == "poster_material":
                 result = audit_poster_material_case(case, evidence)
-            elif scenario == "other_expense":
+            elif scenario_name == "other_expense":
                 result = audit_other_expense_case(case, evidence)
-            else:
+            elif scenario_name == "maintenance_fee":
                 result = audit_maintenance_fee_case(case, evidence)
+            elif scenario_name == "giveaway_promotion":
+                result = audit_giveaway_promotion_case(case, evidence)
+            elif scenario_name == "price_difference_support":
+                result = audit_price_difference_support_case(case, evidence)
+            elif scenario_name == "pos_target_incentive":
+                result = audit_pos_target_incentive_case(case, evidence)
+            elif scenario_name == "entry_fee":
+                result = audit_entry_fee_case(case, evidence)
+            else:
+                result = audit_self_procured_gift_material_case(case, evidence)
             validate_json(result, RESULT_SCHEMA)
             results.append(result)
+            if observer is not None:
+                observer(
+                    "result.validated",
+                    {"scenario": scenario_name, "result": result},
+                )
 
         temporary_workbook = temporary_root / "internal-report.xlsx"
         temporary_html = temporary_workbook.with_suffix(".html")
@@ -279,6 +355,16 @@ def run_audit(
             scenarios,
             workbook_path=temporary_workbook,
         )
+        if observer is not None:
+            observer(
+                "report.verified",
+                {
+                    "verification": {
+                        "workbook": verification,
+                        "html": html_verification,
+                    }
+                },
+            )
         published_html = _publish_html_without_overwrite(
             temporary_workbook,
             temporary_html,

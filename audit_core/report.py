@@ -1946,6 +1946,278 @@ def _add_maintenance_fee_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
     return ws
 
 
+def _add_giveaway_promotion_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
+    ws = wb.create_sheet("额外搭赠核销")
+    summary = result["summary"]
+    audit = result["giveaway_promotion_audit"]
+    issues = list(audit.get("issues") or [])
+    note = (
+        "本页只列影响额外搭赠核销的问题；正常出货金额仅作核对，不作为赠品申报。"
+        f"当前结论：{summary.get('decision_label')}；"
+        f"正常出货{_number(summary.get('shipment_amount'))}元；"
+        f"额外搭赠申报{_number(summary.get('claimed_amount'))}元；"
+        f"建议核销{_number(summary.get('suggested_approved_amount'))}元；"
+        f"暂缓{_number(summary.get('temporarily_held_amount'))}元。"
+    )
+    _style_title(ws, "额外搭赠核销｜只显示错误", note)
+    _write_header(
+        ws,
+        [
+            "问题来源",
+            "已识别内容",
+            "额外搭赠规则",
+            "审核结论",
+            "核销影响",
+            "需要补交",
+        ],
+        height=36,
+    )
+
+    confidence_labels = {"high": "高", "medium": "中", "low": "低"}
+    row = 4
+    if issues:
+        for issue in issues:
+            sources = "、".join(issue.get("source_files") or []) or "未提交对应文件"
+            values = [
+                f"问题：{issue.get('title')}\n文件：{sources}",
+                str(issue.get("observed") or ""),
+                str(issue.get("expected") or ""),
+                f"审核结论：不通过\n置信度：{confidence_labels.get(str(issue.get('confidence')), '中')}",
+                str(issue.get("impact") or ""),
+                f"处理方式：{issue.get('resubmission')}",
+            ]
+            _write_row(
+                ws,
+                row,
+                values,
+                height=_poster_row_height(values),
+                font_size=9,
+            )
+            row += 1
+    else:
+        values = [
+            "未发现影响额外搭赠核销的问题",
+            "合同、出货、结算、小票和活动照片已形成闭环",
+            "赠品数量与明确单价已复算，并与合同预算和盖章结算一致",
+            "审核结论：可核销\n置信度：高",
+            f"建议核销：{_number(summary.get('suggested_approved_amount'))}元",
+            "无需补交",
+        ]
+        _write_row(ws, row, values, height=66, font_size=9)
+
+    ws.freeze_panes = "A4"
+    ws.auto_filter.ref = f"A3:F{ws.max_row}"
+    widths = {"A": 48, "B": 70, "C": 62, "D": 28, "E": 48, "F": 62}
+    for column, width in widths.items():
+        ws.column_dimensions[column].width = width
+    _sheet_base(ws, zoom=78, tab_color="4F8B57")
+    return ws
+
+
+def _add_price_difference_support_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
+    ws = wb.create_sheet("价格补差核销")
+    summary = result["summary"]
+    audit = result["price_difference_support_audit"]
+    issues = list(audit.get("issues") or [])
+    note = (
+        "本页只列影响价格补差核销的问题；终端零售价差额不自动等于合同补差单价。"
+        f"当前结论：{summary.get('decision_label')}；"
+        f"申报金额{_number(summary.get('claimed_amount'))}元；"
+        f"建议核销{_number(summary.get('suggested_approved_amount'))}元；"
+        f"暂缓{_number(summary.get('temporarily_held_amount'))}元。"
+    )
+    _style_title(ws, "价格补差核销｜只显示错误", note)
+    _write_header(
+        ws,
+        ["问题来源", "已识别内容", "价格补差规则", "审核结论", "核销影响", "需要补交"],
+        height=36,
+    )
+    confidence_labels = {"high": "高", "medium": "中", "low": "低"}
+    row = 4
+    if issues:
+        for issue in issues:
+            sources = "、".join(issue.get("source_files") or []) or "未提交对应文件"
+            values = [
+                f"问题：{issue.get('title')}\n文件：{sources}",
+                f"识别结果：{issue.get('observed')}",
+                f"规则要求：{issue.get('expected')}",
+                "审核结论：资料需补正\n"
+                f"置信度：{confidence_labels.get(str(issue.get('confidence')), '中')}",
+                f"核销影响：{issue.get('impact')}\n暂不能核销",
+                f"要重新提交什么：{issue.get('resubmission')}",
+            ]
+            _write_row(ws, row, values, height=_poster_row_height(values), font_size=9)
+            row += 1
+    else:
+        values = [
+            "未发现影响价格补差核销的问题",
+            "合同、盖章POS、电子表、结算和全门店活动照片已形成闭环",
+            "按合同补差单价复算，并受数量与预算上限约束",
+            "审核结论：可核销\n置信度：高",
+            f"建议核销：{_number(summary.get('suggested_approved_amount'))}元",
+            "无需补交",
+        ]
+        _write_row(ws, row, values, height=66, font_size=9)
+    ws.freeze_panes = "A4"
+    ws.auto_filter.ref = f"A3:F{ws.max_row}"
+    for column, width in {"A": 48, "B": 70, "C": 64, "D": 28, "E": 48, "F": 64}.items():
+        ws.column_dimensions[column].width = width
+    _sheet_base(ws, zoom=78, tab_color="C55A11")
+    return ws
+
+
+def _add_pos_target_incentive_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
+    ws = wb.create_sheet("POS达标激励核销")
+    summary = result["summary"]
+    issues = list(result["pos_target_incentive_audit"].get("issues") or [])
+    note = (
+        "本页只列影响经销商POS达标激励核销的问题；结算比例不能替代签章合同授权。"
+        f"当前结论：{summary.get('decision_label')}；"
+        f"申报金额{_number(summary.get('claimed_amount'))}元；"
+        f"建议核销{_number(summary.get('suggested_approved_amount'))}元；"
+        f"暂缓{_number(summary.get('temporarily_held_amount'))}元。"
+    )
+    _style_title(ws, "POS达标激励核销｜只显示错误", note)
+    _write_header(ws, ["问题来源", "已识别内容", "POS达标激励规则", "审核结论", "核销影响", "需要补交"], height=36)
+    confidence_labels = {"high": "高", "medium": "中", "low": "低"}
+    row = 4
+    if issues:
+        for issue in issues:
+            sources = "、".join(issue.get("source_files") or []) or "未提交对应文件"
+            values = [
+                f"问题：{issue.get('title')}\n文件：{sources}",
+                f"识别结果：{issue.get('observed')}",
+                f"规则要求：{issue.get('expected')}",
+                "审核结论：资料需补正\n"
+                f"置信度：{confidence_labels.get(str(issue.get('confidence')), '中')}",
+                f"核销影响：{issue.get('impact')}\n暂不能核销",
+                f"要重新提交什么：{issue.get('resubmission')}",
+            ]
+            _write_row(ws, row, values, height=_poster_row_height(values), font_size=9)
+            row += 1
+    else:
+        values = [
+            "未发现影响POS达标激励核销的问题",
+            "合同、盖章POS、电子表、结算和满减活动证明已形成闭环",
+            "按最高已达合同档位比例复算，并应用合同上限",
+            "审核结论：可核销\n置信度：高",
+            f"建议核销：{_number(summary.get('suggested_approved_amount'))}元",
+            "无需补交",
+        ]
+        _write_row(ws, row, values, height=66, font_size=9)
+    ws.freeze_panes = "A4"
+    ws.auto_filter.ref = f"A3:F{ws.max_row}"
+    for column, width in {"A": 48, "B": 70, "C": 66, "D": 28, "E": 48, "F": 64}.items():
+        ws.column_dimensions[column].width = width
+    _sheet_base(ws, zoom=78, tab_color="00A6A6")
+    return ws
+
+
+def _add_entry_fee_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
+    ws = wb.create_sheet("进场费核销")
+    summary = result["summary"]
+    issues = list(result["entry_fee_audit"].get("issues") or [])
+    note = (
+        "本页只列影响进场费/条码费核销的问题；合同条码费未明确按店计费时不得再乘门店数。"
+        f"当前结论：{summary.get('decision_label')}；"
+        f"申报金额{_number(summary.get('claimed_amount'))}元；"
+        f"建议核销{_number(summary.get('suggested_approved_amount'))}元；"
+        f"暂缓{_number(summary.get('temporarily_held_amount'))}元。"
+    )
+    _style_title(ws, "进场费核销｜只显示错误", note)
+    _write_header(
+        ws,
+        ["问题来源", "已识别内容", "进场费/条码费规则", "审核结论", "核销影响", "需要补交"],
+        height=36,
+    )
+    confidence_labels = {"high": "高", "medium": "中", "low": "低"}
+    row = 4
+    if issues:
+        for issue in issues:
+            sources = "、".join(issue.get("source_files") or []) or "未提交对应文件"
+            values = [
+                f"问题：{issue.get('title')}\n文件：{sources}",
+                f"识别结果：{issue.get('observed')}",
+                f"规则要求：{issue.get('expected')}",
+                "审核结论：资料需补正\n"
+                f"置信度：{confidence_labels.get(str(issue.get('confidence')), '中')}",
+                f"核销影响：{issue.get('impact')}\n暂不能核销",
+                f"要重新提交什么：{issue.get('resubmission')}",
+            ]
+            _write_row(ws, row, values, height=_poster_row_height(values), font_size=9)
+            row += 1
+    else:
+        values = [
+            "未发现影响进场费核销的问题",
+            "双方签章合同、全部合同门店和商品上架照片、系统扣款凭证已形成闭环",
+            "按实际完成全部门店上架的合同商品条码费合计，并受合同总额和扣款凭证金额约束",
+            "审核结论：可核销\n置信度：高",
+            f"建议核销：{_number(summary.get('suggested_approved_amount'))}元",
+            "无需补交",
+        ]
+        _write_row(ws, row, values, height=66, font_size=9)
+    ws.freeze_panes = "A4"
+    ws.auto_filter.ref = f"A3:F{ws.max_row}"
+    for column, width in {"A": 48, "B": 72, "C": 68, "D": 28, "E": 48, "F": 66}.items():
+        ws.column_dimensions[column].width = width
+    _sheet_base(ws, zoom=78, tab_color="7F6000")
+    return ws
+
+
+def _add_self_procured_gift_material_sheet(
+    wb: Workbook,
+    result: dict[str, Any],
+) -> Any:
+    ws = wb.create_sheet("自采赠品物料核销")
+    summary = result["summary"]
+    issues = list(result["self_procured_gift_material_audit"].get("issues") or [])
+    note = (
+        "本页只列影响客户自采赠品物料核销的问题；活动返图工作簿不能替代POS电子表。"
+        f"当前结论：{summary.get('decision_label')}；"
+        f"申报金额{_number(summary.get('claimed_amount'))}元；"
+        f"建议核销{_number(summary.get('suggested_approved_amount'))}元；"
+        f"暂缓{_number(summary.get('temporarily_held_amount'))}元。"
+    )
+    _style_title(ws, "客户自采赠品物料核销｜只显示错误", note)
+    _write_header(
+        ws,
+        ["问题来源", "已识别内容", "自采赠品物料规则", "审核结论", "核销影响", "需要补交"],
+        height=36,
+    )
+    confidence_labels = {"high": "高", "medium": "中", "low": "低"}
+    row = 4
+    if issues:
+        for issue in issues:
+            sources = "、".join(issue.get("source_files") or []) or "未提交对应文件"
+            values = [
+                f"问题：{issue.get('title')}\n文件：{sources}",
+                f"识别结果：{issue.get('observed')}",
+                f"规则要求：{issue.get('expected')}",
+                "审核结论：资料需补正\n"
+                f"置信度：{confidence_labels.get(str(issue.get('confidence')), '中')}",
+                f"核销影响：{issue.get('impact')}\n暂不能核销",
+                f"要重新提交什么：{issue.get('resubmission')}",
+            ]
+            _write_row(ws, row, values, height=_poster_row_height(values), font_size=9)
+            row += 1
+    else:
+        values = [
+            "未发现影响客户自采赠品物料核销的问题",
+            "合同、票据、付款、盖章POS及电子表、全门店水印返图和盖章结算已闭环",
+            "赠送规则、POS合格销售与自采赠品数量已完成确定性复算",
+            "审核结论：可核销\n置信度：高",
+            f"建议核销：{_number(summary.get('suggested_approved_amount'))}元",
+            "无需补交",
+        ]
+        _write_row(ws, row, values, height=66, font_size=9)
+    ws.freeze_panes = "A4"
+    ws.auto_filter.ref = f"A3:F{ws.max_row}"
+    for column, width in {"A": 48, "B": 72, "C": 68, "D": 28, "E": 48, "F": 68}.items():
+        ws.column_dimensions[column].width = width
+    _sheet_base(ws, zoom=78, tab_color="A64D79")
+    return ws
+
+
 def create_combined_report(results: list[dict[str, Any]], output_path: str | Path) -> Path:
     if not results:
         raise AuditError("没有可生成工作簿的核销结果")
@@ -1961,6 +2233,11 @@ def create_combined_report(results: list[dict[str, Any]], output_path: str | Pat
         "poster_material",
         "other_expense",
         "maintenance_fee",
+        "giveaway_promotion",
+        "price_difference_support",
+        "pos_target_incentive",
+        "entry_fee",
+        "self_procured_gift_material",
     }
     if unknown:
         raise AuditError("不支持的核销结果类型：" + "、".join(sorted(unknown)))
@@ -1977,6 +2254,19 @@ def create_combined_report(results: list[dict[str, Any]], output_path: str | Pat
         _add_other_expense_sheet(workbook, by_scenario["other_expense"])
     if "maintenance_fee" in by_scenario:
         _add_maintenance_fee_sheet(workbook, by_scenario["maintenance_fee"])
+    if "giveaway_promotion" in by_scenario:
+        _add_giveaway_promotion_sheet(workbook, by_scenario["giveaway_promotion"])
+    if "price_difference_support" in by_scenario:
+        _add_price_difference_support_sheet(workbook, by_scenario["price_difference_support"])
+    if "pos_target_incentive" in by_scenario:
+        _add_pos_target_incentive_sheet(workbook, by_scenario["pos_target_incentive"])
+    if "entry_fee" in by_scenario:
+        _add_entry_fee_sheet(workbook, by_scenario["entry_fee"])
+    if "self_procured_gift_material" in by_scenario:
+        _add_self_procured_gift_material_sheet(
+            workbook,
+            by_scenario["self_procured_gift_material"],
+        )
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(target)
@@ -1995,6 +2285,11 @@ def verify_workbook(path: str | Path, scenarios: list[str]) -> dict[str, Any]:
             ("poster_material", "海报物料核销"),
             ("other_expense", "其他费用核销"),
             ("maintenance_fee", "维护费用核销"),
+            ("giveaway_promotion", "额外搭赠核销"),
+            ("price_difference_support", "价格补差核销"),
+            ("pos_target_incentive", "POS达标激励核销"),
+            ("entry_fee", "进场费核销"),
+            ("self_procured_gift_material", "自采赠品物料核销"),
         )
         if scenario in scenarios
     ]

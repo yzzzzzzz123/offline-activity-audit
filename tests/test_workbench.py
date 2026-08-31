@@ -1,0 +1,411 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import threading
+import unittest
+import urllib.error
+import urllib.request
+from pathlib import Path
+from unittest import mock
+
+from audit_core.html_report import DATA_CLOSE, DATA_OPEN
+from audit_core.orchestrator import run_audit
+from audit_core.workbench_server import Handler, WorkbenchCatalog, WorkbenchHTTPServer
+from audit_core.workbench_store import (
+    WorkbenchRunStore,
+    main_flow_task_list,
+    reserve_workspace,
+)
+from audit_core.workbench_runtime import ROOT_HTML, run_persistent_audit
+
+
+def _view_payload() -> dict:
+    return {
+        "schema_version": "1.1",
+        "title": "线下活动核销结果",
+        "sheets": [
+            {
+                "name": "维护费用核销",
+                "scenario": "maintenance_fee",
+                "title": "维护费用核销｜只显示错误",
+                "note": "测试快照",
+                "headers": ["问题文件", "对照文件", "错误原因", "处理方式", "影响", "结论"],
+                "rows": [
+                    {
+                        "excel_row": 4,
+                        "kind": "record",
+                        "section": "detail",
+                        "status": "issue",
+                        "confidence": "high",
+                        "heading": "POS电子表缺失",
+                        "values": [
+                            "盖章POS.jpg",
+                            "POS电子表",
+                            "未提交电子表",
+                            "补交POS电子表",
+                            "金额不能复算",
+                            "资料需补正",
+                        ],
+                    }
+                ],
+                "audit_counts": {
+                    "source_row_count": 1,
+                    "error_count": 1,
+                    "detail_error_count": 1,
+                    "context_error_count": 0,
+                },
+            }
+        ],
+    }
+
+
+class WorkbenchStoreTests(unittest.TestCase):
+    def test_orchestrator_groups_all_scenarios_into_monotonic_main_flow_stages(self) -> None:
+        observed: list[tuple[str, str | None]] = []
+        cases = {
+            "maintenance_fee": {"scenario": "maintenance_fee"},
+            "entry_fee": {"scenario": "entry_fee"},
+        }
+
+        def provider(case: dict, _temporary_root: Path) -> dict:
+            return {"scenario": case["scenario"]}
+
+        def audit_case(case: dict, _evidence: dict) -> dict:
+            return {"scenario": case["scenario"], "summary": {}}
+
+        def observer(event_type: str, payload: dict) -> None:
+            observed.append((event_type, payload.get("scenario")))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with (
+                mock.patch("audit_core.orchestrator.prepare_cases", return_value=cases),
+                mock.patch("audit_core.orchestrator.validate_json"),
+                mock.patch(
+                    "audit_core.orchestrator.audit_maintenance_fee_case",
+                    side_effect=audit_case,
+                ),
+                mock.patch(
+                    "audit_core.orchestrator.audit_entry_fee_case",
+                    side_effect=audit_case,
+                ),
+                mock.patch("audit_core.orchestrator.create_combined_report"),
+                mock.patch("audit_core.orchestrator.verify_workbook", return_value={}),
+                mock.patch("audit_core.orchestrator.create_html_report_from_workbook"),
+                mock.patch("audit_core.orchestrator.verify_html_report", return_value={}),
+                mock.patch(
+                    "audit_core.orchestrator._publish_html_without_overwrite",
+                    return_value=root / "published.html",
+                ),
+            ):
+                run_audit(
+                    "20260831-stage-flow",
+                    producer_model="codex",
+                    input_dir=root / "input",
+                    output_dir=root,
+                    evidence_provider=provider,
+                    observer=observer,
+                )
+
+        self.assertEqual(
+            observed,
+            [
+                ("cases.prepared", None),
+                ("scenario.started", "maintenance_fee"),
+                ("scenario.started", "entry_fee"),
+                ("evidence.validated", "maintenance_fee"),
+                ("evidence.validated", "entry_fee"),
+                ("result.validated", "maintenance_fee"),
+                ("result.validated", "entry_fee"),
+                ("report.verified", None),
+            ],
+        )
+
+    def test_main_flow_checklist_stays_aligned_with_skill_contract(self) -> None:
+        tasks = main_flow_task_list()
+        self.assertEqual(len(tasks), 6)
+        skill = (
+            Path("skills/orchestrate-offline-audit/SKILL.md")
+            .read_text(encoding="utf-8")
+        )
+        positions = []
+        for task in tasks:
+            marker = (
+                f'- [ ] `{int(task["order"]):02d} {task["stage"]}` '
+                f'— {task["label"]}'
+            )
+            self.assertIn(marker, skill)
+            positions.append(skill.index(marker))
+        self.assertEqual(positions, sorted(positions))
+
+    def test_workspace_revision_respects_legacy_html(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "20260828-codex.html").touch()
+            (root / "20260828-codex-1.4.html").touch()
+            workspace = reserve_workspace("20260828-example", "codex", root)
+            self.assertEqual(workspace.name, "20260828-codex-1.5")
+
+    def test_store_persists_trace_analysis_and_dom_checkpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = reserve_workspace("20260828-example", "codex", root)
+            store = WorkbenchRunStore(
+                workspace,
+                run_id="20260828-example",
+                producer_model="codex",
+                root_html=Path("offline-activity-audit.html"),
+                workbench_url="http://127.0.0.1:8080/",
+            )
+            store.observe(
+                "cases.prepared",
+                {
+                    "scenarios": ["maintenance_fee"],
+                    "cases": {
+                        "maintenance_fee": {
+                            "scenario": "maintenance_fee",
+                            "source_archive": "D:/temporary/维护费用.zip",
+                        }
+                    },
+                },
+            )
+            store.observe(
+                "evidence.validated",
+                {"scenario": "maintenance_fee", "evidence": {"documents": []}},
+            )
+            store.observe(
+                "result.validated",
+                {
+                    "scenario": "maintenance_fee",
+                    "result": {"scenario": "maintenance_fee", "summary": {"conclusion": "fail"}},
+                },
+            )
+            store.complete(
+                view_payload=_view_payload(),
+                scenarios=["maintenance_fee"],
+                verification={"html": {"verified": True}},
+            )
+
+            manifest = json.loads((workspace / "manifest.json").read_text(encoding="utf-8"))
+            snapshot = json.loads((workspace / "snapshot.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], "1.1")
+            self.assertEqual(manifest["status"], "completed")
+            self.assertEqual(manifest["error_count"], 1)
+            self.assertEqual(manifest["main_flow_tasks"], main_flow_task_list())
+            self.assertEqual(
+                [task["stage"] for task in manifest["main_flow_tasks"]],
+                [
+                    "bootstrap",
+                    "intake",
+                    "analysis",
+                    "evidence",
+                    "decision",
+                    "verification",
+                ],
+            )
+            self.assertEqual(snapshot["view"]["sheets"][0]["scenario"], "maintenance_fee")
+            self.assertGreaterEqual(len(snapshot["dom_checkpoints"]), 5)
+            self.assertTrue((workspace / "analysis" / "evidence" / "maintenance_fee.json").is_file())
+            events = (workspace / "logs" / "events.jsonl").read_text(encoding="utf-8")
+            self.assertIn("run.completed", events)
+
+    def test_persistent_runner_publishes_data_directory_not_an_html_result(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+
+            def fake_run_audit(*args, **kwargs):  # type: ignore[no-untyped-def]
+                observer = kwargs["observer"]
+                observer(
+                    "cases.prepared",
+                    {
+                        "scenarios": ["maintenance_fee"],
+                        "cases": {"maintenance_fee": {"scenario": "maintenance_fee"}},
+                    },
+                )
+                observer(
+                    "evidence.validated",
+                    {"scenario": "maintenance_fee", "evidence": {"documents": []}},
+                )
+                observer(
+                    "result.validated",
+                    {
+                        "scenario": "maintenance_fee",
+                        "result": {"scenario": "maintenance_fee", "summary": {}},
+                    },
+                )
+                observer(
+                    "report.verified",
+                    {"verification": {"html": {"verified": True}}},
+                )
+                generated = Path(kwargs["output_dir"]) / "20260828-codex.html"
+                generated.write_text(
+                    "<!doctype html>"
+                    + DATA_OPEN
+                    + json.dumps(_view_payload(), ensure_ascii=False)
+                    + DATA_CLOSE,
+                    encoding="utf-8",
+                )
+                return {
+                    "output": str(generated),
+                    "scenarios": ["maintenance_fee"],
+                    "verification": {"html": {"verified": True}},
+                }
+
+            self.assertTrue(ROOT_HTML.is_file())
+            with mock.patch(
+                "audit_core.workbench_runtime.run_audit",
+                side_effect=fake_run_audit,
+            ):
+                result = run_persistent_audit(
+                    "20260828-persistent-test",
+                    producer_model="codex",
+                    worktrees_root=root,
+                )
+            workspace = Path(result["worktree"])
+            self.assertTrue((workspace / "snapshot.json").is_file())
+            self.assertEqual(result["output"], str(ROOT_HTML))
+            self.assertEqual(
+                result["workbench_url"],
+                "http://192.0.0.108:8080/?run=20260828-codex",
+            )
+            self.assertEqual(list(root.glob("*.html")), [])
+
+
+class WorkbenchServerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        workspace = reserve_workspace("20260828-server", "codex", self.root)
+        store = WorkbenchRunStore(
+            workspace,
+            run_id="20260828-server",
+            producer_model="codex",
+            root_html=Path("offline-activity-audit.html"),
+            workbench_url="http://127.0.0.1:8080/",
+        )
+        store.write_analysis("facts.json", {"visible": True}, label="结构化事实")
+        store.complete(
+            view_payload=_view_payload(),
+            scenarios=["maintenance_fee"],
+            verification={"verified": True},
+        )
+        self.workspace_id = workspace.name
+        self.server = WorkbenchHTTPServer(
+            ("127.0.0.1", 0),
+            Handler,
+            catalog=WorkbenchCatalog(self.root),
+        )
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        self.temporary.cleanup()
+
+    def _json(self, path: str) -> dict:
+        with self.opener.open(self.base + path, timeout=5) as response:
+            return json.load(response)
+
+    def _html(self, path: str) -> str:
+        with self.opener.open(self.base + path, timeout=5) as response:
+            return response.read().decode("utf-8")
+
+    @staticmethod
+    def _script_payload(html: str, element_id: str) -> dict:
+        marker = f'<script id="{element_id}" type="application/json">'
+        start = html.index(marker) + len(marker)
+        end = html.index("</script>", start)
+        return json.loads(html[start:end])
+
+    def test_lists_and_loads_persisted_run(self) -> None:
+        listing = self._json("/api/runs")
+        self.assertEqual(listing["count"], 1)
+        self.assertEqual(listing["runs"][0]["workspace_id"], self.workspace_id)
+        self.assertEqual(listing["runs"][0]["main_flow_tasks"], main_flow_task_list())
+        snapshot = self._json(f"/api/runs/{self.workspace_id}/snapshot")
+        self.assertEqual(snapshot["run"]["status"], "completed")
+        self.assertEqual(snapshot["run"]["main_flow_tasks"], main_flow_task_list())
+        self.assertEqual(snapshot["view"]["sheets"][0]["audit_counts"]["error_count"], 1)
+
+    def test_root_is_primary_system_and_run_query_is_secondary_record(self) -> None:
+        primary = self._html("/")
+        primary_context = self._script_payload(primary, "audit-workbench-context")
+        self.assertEqual(primary_context["mode"], "system")
+        self.assertIsNone(primary_context["selected_run"])
+        self.assertEqual(primary_context["system_version"], "2.2.0")
+        self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
+        self.assertIn("audit-system-extension-script", primary)
+        self.assertIn('content="2.2.0"', primary)
+        self.assertIn('id="as-monitor-list"', primary)
+        self.assertIn("核销运行链路", primary)
+        self.assertIn("阶段完成时更新", primary)
+        self.assertIn("同阶段内不重绘", primary)
+        self.assertNotIn("实时刷新", primary)
+        self.assertNotIn("window.location.reload(), 5000", primary)
+        self.assertIn("data-runtime-stage", primary)
+        self.assertNotIn('data-as-view="monitor"', primary)
+        self.assertNotIn('id="as-view-monitor"', primary)
+
+        config = self._json("/api/config")
+        self.assertEqual(config["api_version"], "1.1")
+        self.assertEqual(config["system_version"], "2.2.0")
+        self.assertEqual(config["main_flow_tasks"], main_flow_task_list())
+        self.assertEqual(config["refresh_policy"]["mode"], "stage_boundary")
+        self.assertEqual(
+            config["refresh_policy"]["visible_update_rule"],
+            "workspace_status_or_stage_index_change",
+        )
+
+        secondary = self._html(f"/?run={self.workspace_id}")
+        secondary_context = self._script_payload(
+            secondary, "audit-workbench-context"
+        )
+        self.assertEqual(secondary_context["mode"], "record")
+        self.assertEqual(secondary_context["selected_run"], self.workspace_id)
+        self.assertEqual(secondary_context["main_flow_tasks"], main_flow_task_list())
+        self.assertTrue(secondary_context["view_available"])
+        injected = self._script_payload(secondary, "audit-data")
+        self.assertEqual(
+            injected["sheets"][0]["scenario"],
+            "maintenance_fee",
+        )
+
+    def test_serves_analysis_and_rejects_unlisted_path(self) -> None:
+        with self.opener.open(
+            self.base + f"/api/runs/{self.workspace_id}/analysis?path=analysis%2Ffacts.json",
+            timeout=5,
+        ) as response:
+            self.assertEqual(json.load(response), {"visible": True})
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            self.opener.open(
+                self.base + f"/api/runs/{self.workspace_id}/analysis?path=..%2Fmanifest.json",
+                timeout=5,
+            )
+        self.assertEqual(raised.exception.code, 404)
+        raised.exception.close()
+
+    def test_reads_legacy_embedded_html_without_modifying_it(self) -> None:
+        legacy = self.root / "20260827-codex.html"
+        legacy.write_text(
+            "<!doctype html><html><body>"
+            + DATA_OPEN
+            + json.dumps(_view_payload(), ensure_ascii=False)
+            + DATA_CLOSE
+            + "</body></html>",
+            encoding="utf-8",
+        )
+        listing = self._json("/api/runs")
+        self.assertEqual(listing["count"], 2)
+        snapshot = self._json("/api/runs/20260827-codex/snapshot")
+        self.assertEqual(snapshot["run"]["storage_type"], "legacy_html")
+        self.assertEqual(snapshot["run"]["error_count"], 1)
+        self.assertEqual(snapshot["run"]["main_flow_tasks"], main_flow_task_list())
+
+
+if __name__ == "__main__":
+    unittest.main()

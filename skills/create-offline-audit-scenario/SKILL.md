@@ -92,9 +92,10 @@ Read these references completely before editing:
 - Later evidence cannot silently repair missing or conflicting authoritative evidence. Declare every
   allowed and forbidden reconciliation edge in the manifest.
 - Shared product identity stays under `shared/`; do not clone a private catalog into a scenario Skill.
-- The formal result remains exactly one self-contained HTML. Adding a scenario may extend the
-  canonical shell, but must deliberately bump its version/fingerprint and update structural and
-  responsive tests; never weaken verification to accept template drift.
+- The customer interface remains exactly one fixed root HTML with a level-one ledger and one
+  data-driven level-two record view per run. Adding a scenario may extend the level-two projection,
+  but must deliberately bump the canonical system version/fingerprint and update structural and
+  responsive tests; never publish a separate scenario HTML or weaken verification to accept drift.
 - Finish by deleting temporary extractions and reporting the created Skill, registered scenario ID,
   routing signature, evidence chain, main-flow changes, tests, and any business decisions that still
   require confirmation.

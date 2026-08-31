@@ -11,7 +11,7 @@ sys.dont_write_bytecode = True
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from audit_core.orchestrator import main  # noqa: E402
+from audit_core.workbench_runtime import main  # noqa: E402
 
 
 if __name__ == "__main__":

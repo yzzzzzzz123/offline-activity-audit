@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import shutil
 import stat
+import subprocess
 import zipfile
 from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .common import AuditError, normalize_text, sha256_file
+from .legacy_activity_workbook import extract_activity_return_workbook
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
@@ -47,6 +49,22 @@ def _zip_member_parts(info: zipfile.ZipInfo) -> tuple[str, ...]:
         raise ArchiveInputError(f"ZIP 不接受符号链接：{info.filename!r}")
     if info.flag_bits & 0x1:
         raise ArchiveInputError(f"ZIP 不接受加密成员：{info.filename!r}")
+    return parts
+
+
+def _archive_member_parts(raw_name: str, *, archive_label: str) -> tuple[str, ...]:
+    raw = raw_name.replace("\\", "/")
+    if "\x00" in raw:
+        raise ArchiveInputError(f"{archive_label} 成员名包含 NUL 字节")
+    pure = PurePosixPath(raw)
+    parts = tuple(part for part in pure.parts if part not in {"", "."})
+    if pure.is_absolute() or not parts or any(part == ".." for part in parts):
+        raise ArchiveInputError(f"{archive_label} 包含不安全路径：{raw_name!r}")
+    if ":" in parts[0]:
+        raise ArchiveInputError(f"{archive_label} 包含盘符路径：{raw_name!r}")
+    invalid = set('<>:"|?*')
+    if any(any(char in invalid for char in part) for part in parts):
+        raise ArchiveInputError(f"{archive_label} 文件名不受 Windows 支持：{raw_name!r}")
     return parts
 
 
@@ -139,6 +157,8 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         for name, suffix in member_facts
     )
     nested_archive_count = sum(suffix == ".zip" for _, suffix in member_facts)
+    rar_count = sum(suffix == ".rar" for _, suffix in member_facts)
+    legacy_xls_count = sum(suffix == ".xls" for _, suffix in member_facts)
 
     maintenance_pos_count = sum(
         suffix in VISUAL_DOCUMENT_SUFFIXES
@@ -151,6 +171,103 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         for name, suffix in member_facts
     )
 
+    price_contract_count = sum(
+        suffix in VISUAL_DOCUMENT_SUFFIXES
+        and any(marker in name for marker in ("促销协议", "促销合同"))
+        for name, suffix in member_facts
+    )
+    price_settlement_count = sum(
+        suffix in VISUAL_DOCUMENT_SUFFIXES
+        and any(marker in name for marker in ("结算单", "结算表"))
+        for name, suffix in member_facts
+    )
+    price_pos_visual_count = sum(
+        suffix in VISUAL_DOCUMENT_SUFFIXES
+        and any(marker in name for marker in ("pos", "销售", "陈列销售"))
+        for name, suffix in member_facts
+    )
+    price_photo_rar_count = sum(
+        suffix == ".rar" and any(marker in name for marker in ("照片", "返图", "现场"))
+        for name, suffix in member_facts
+    )
+    entry_contract_count = sum(
+        suffix in VISUAL_DOCUMENT_SUFFIXES
+        and any(
+            marker in name
+            for marker in ("产品推广协议", "进场费合同", "条码费合同", "进场合同")
+        )
+        for name, suffix in member_facts
+    )
+    entry_photo_rar_count = sum(
+        suffix == ".rar"
+        and any(marker in name for marker in ("进场照片", "上架照片", "照片", "返图"))
+        for name, suffix in member_facts
+    )
+    self_procured_contract_count = sum(
+        suffix in VISUAL_DOCUMENT_SUFFIXES
+        and any(marker in name for marker in ("促销协议", "促销合同"))
+        for name, suffix in member_facts
+    )
+    self_procured_settlement_count = sum(
+        suffix in VISUAL_DOCUMENT_SUFFIXES
+        and any(marker in name for marker in ("结算单", "结算表"))
+        for name, suffix in member_facts
+    )
+    self_procured_purchase_count = sum(
+        suffix in VISUAL_DOCUMENT_SUFFIXES
+        and any(marker in name for marker in ("购买凭证", "发票", "收据"))
+        for name, suffix in member_facts
+    )
+    self_procured_pos_count = sum(
+        suffix in VISUAL_DOCUMENT_SUFFIXES
+        and any(marker in name for marker in ("销售pos", "pos数据", "销售数据"))
+        for name, suffix in member_facts
+    )
+
+    if (
+        any(marker in archive_text for marker in ("价格补差", "补差"))
+        and nested_archive_count == 0
+        and rar_count == 1
+        and excel_count <= 1
+        and price_contract_count == 1
+        and price_settlement_count == 1
+        and price_pos_visual_count >= 1
+        and price_photo_rar_count == 1
+    ):
+        return {**shape, "scenario": "price_difference_support"}
+
+    if (
+        any(marker in archive_text for marker in ("pos激励达标", "pos达标激励", "pos激励"))
+        and nested_archive_count == 0
+        and rar_count == 0
+        and excel_count <= 1
+        and image_count + pdf_count >= 1
+    ):
+        return {**shape, "scenario": "pos_target_incentive"}
+
+    if (
+        any(marker in archive_text for marker in ("自采赠品物料", "自采赠品", "自采物料"))
+        and nested_archive_count == 0
+        and rar_count == 0
+        and legacy_xls_count == 1
+        and excel_count <= 1
+        and self_procured_contract_count == 1
+        and self_procured_settlement_count == 1
+        and self_procured_purchase_count == 1
+        and self_procured_pos_count >= 1
+    ):
+        return {**shape, "scenario": "self_procured_gift_material"}
+
+    if (
+        any(marker in archive_text for marker in ("进场费", "条码费"))
+        and nested_archive_count == 0
+        and rar_count == 1
+        and excel_count == 0
+        and entry_contract_count == 1
+        and entry_photo_rar_count == 1
+    ):
+        return {**shape, "scenario": "entry_fee"}
+
     if (
         any(marker in archive_text for marker in ("维护费用", "维护费"))
         and nested_archive_count == 0
@@ -158,6 +275,14 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         and maintenance_pos_count + maintenance_settlement_count >= 1
     ):
         return {**shape, "scenario": "maintenance_fee"}
+
+    if (
+        any(marker in archive_text for marker in ("额外搭赠", "搭赠"))
+        and nested_archive_count == 0
+        and excel_count == 0
+        and image_count + pdf_count >= 1
+    ):
+        return {**shape, "scenario": "giveaway_promotion"}
 
     if (
         "其他" in archive_text
@@ -224,9 +349,9 @@ def discover_archives(input_dir: str | Path) -> dict[str, dict[str, Any]]:
         ),
         key=lambda path: path.name.casefold(),
     )
-    if not 1 <= len(archives) <= 5:
+    if not 1 <= len(archives) <= 10:
         raise ArchiveInputError(
-            f"input/ 必须直接包含 1～5 个 ZIP；当前发现 {len(archives)} 个。"
+            f"input/ 必须直接包含 1～10 个 ZIP；当前发现 {len(archives)} 个。"
         )
     linked = [path.name for path in archives if path.is_symlink()]
     if linked:
@@ -243,6 +368,11 @@ def discover_archives(input_dir: str | Path) -> dict[str, dict[str, Any]]:
                 "poster_material": "海报/物料制作",
                 "other_expense": "其他费用",
                 "maintenance_fee": "维护费用",
+                "giveaway_promotion": "额外搭赠",
+                "price_difference_support": "价格补差",
+                "pos_target_incentive": "POS达标激励",
+                "entry_fee": "进场费",
+                "self_procured_gift_material": "自采赠品物料",
             }[scenario]
             raise ArchiveInputError(
                 f"同类材料重复：发现两份{label} ZIP；同一类型最多提交一份。"
@@ -312,6 +442,106 @@ def _extract_archive(archive_path: Path, target_root: Path) -> dict[str, Any]:
     }
 
 
+def _decode_archive_listing(raw: bytes) -> str:
+    for encoding in ("utf-8", "gbk"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _extract_rar_archive(archive_path: Path, target_root: Path) -> dict[str, Any]:
+    """Extract one RAR through bsdtar after strict pre- and post-validation."""
+
+    tar = shutil.which("tar")
+    if tar is None:
+        raise ArchiveInputError(
+            f"无法读取现场照片 RAR：系统未提供 bsdtar/tar（{archive_path.name}）"
+        )
+    if target_root.exists() or target_root.is_symlink():
+        raise ArchiveInputError(f"临时解压目录已存在：{target_root}")
+
+    list_result = subprocess.run(
+        [tar, "-tf", str(archive_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if list_result.returncode != 0:
+        detail = _decode_archive_listing(list_result.stderr).strip()[-1000:]
+        raise ArchiveInputError(f"RAR 无法读取：{archive_path.name}；{detail}")
+    names = [line.strip() for line in _decode_archive_listing(list_result.stdout).splitlines() if line.strip()]
+    if not names:
+        raise ArchiveInputError(f"RAR 没有成员：{archive_path.name}")
+    if len(names) > MAX_ARCHIVE_FILES:
+        raise ArchiveInputError(f"RAR 成员过多（{len(names)}）：{archive_path.name}")
+    seen_names: set[str] = set()
+    for name in names:
+        parts = _archive_member_parts(name.rstrip("/"), archive_label="RAR")
+        key = "/".join(parts).casefold()
+        if key in seen_names:
+            raise ArchiveInputError(f"RAR 路径重复或大小写冲突：{name!r}")
+        seen_names.add(key)
+
+    verbose_result = subprocess.run(
+        [tar, "-tvf", str(archive_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if verbose_result.returncode != 0:
+        detail = _decode_archive_listing(verbose_result.stderr).strip()[-1000:]
+        raise ArchiveInputError(f"RAR 成员类型无法校验：{archive_path.name}；{detail}")
+    type_lines = [line for line in _decode_archive_listing(verbose_result.stdout).splitlines() if line.strip()]
+    unsafe_types = [line for line in type_lines if line[0] not in {"-", "d"}]
+    if unsafe_types:
+        raise ArchiveInputError(
+            f"RAR 不接受链接或特殊成员：{archive_path.name}；{unsafe_types[0][:160]}"
+        )
+
+    target_root.mkdir(parents=True)
+    target_resolved = target_root.resolve()
+    try:
+        extract_result = subprocess.run(
+            [tar, "-xf", str(archive_path), "-C", str(target_root)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if extract_result.returncode != 0:
+            detail = _decode_archive_listing(extract_result.stderr).strip()[-1000:]
+            raise ArchiveInputError(f"RAR 解压失败：{archive_path.name}；{detail}")
+        extracted: list[Path] = []
+        total_bytes = 0
+        for path in target_root.rglob("*"):
+            resolved = path.resolve()
+            if not _inside(resolved, target_resolved):
+                raise ArchiveInputError(f"RAR 成员越过解压目录：{path}")
+            if path.is_symlink() or (hasattr(path, "is_socket") and path.is_socket()):
+                raise ArchiveInputError(f"RAR 不接受链接或特殊成员：{path.name}")
+            if not path.is_file():
+                continue
+            size = path.stat().st_size
+            if size > MAX_MEMBER_BYTES:
+                raise ArchiveInputError(f"RAR 成员过大：{path.name}")
+            total_bytes += size
+            if total_bytes > MAX_TOTAL_BYTES:
+                raise ArchiveInputError(f"RAR 解压总量过大：{archive_path.name}")
+            extracted.append(resolved)
+        if not extracted:
+            raise ArchiveInputError(f"RAR 没有可读取文件：{archive_path.name}")
+    except Exception:
+        shutil.rmtree(target_root, ignore_errors=True)
+        raise
+    return {
+        "archive": archive_path.resolve(),
+        "archive_sha256": sha256_file(archive_path),
+        "root": target_resolved,
+        "files": extracted,
+    }
+
+
 def _material_files(root: Path, suffixes: set[str]) -> list[Path]:
     return sorted(
         (
@@ -359,6 +589,11 @@ def prepare_cases(
         "poster_material",
         "other_expense",
         "maintenance_fee",
+        "giveaway_promotion",
+        "price_difference_support",
+        "pos_target_incentive",
+        "entry_fee",
+        "self_procured_gift_material",
     }
     selected = supported if selected_scenarios is None else set(selected_scenarios)
     unknown = selected - supported
@@ -373,6 +608,11 @@ def prepare_cases(
         "poster_material",
         "other_expense",
         "maintenance_fee",
+        "giveaway_promotion",
+        "price_difference_support",
+        "pos_target_incentive",
+        "entry_fee",
+        "self_procured_gift_material",
     ):
         if scenario not in selected:
             continue
@@ -599,6 +839,397 @@ def prepare_cases(
                 "visual_files": documents,
                 "document_roles": document_roles,
                 "excluded_files": all_files,
+            }
+        elif scenario == "giveaway_promotion":
+            documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
+            document_names = [path.name.casefold() for path in documents]
+            duplicate_document_names = sorted(
+                {name for name in document_names if document_names.count(name) > 1}
+            )
+            if duplicate_document_names:
+                raise ArchiveInputError(
+                    f"{archive.name} 中存在同名额外搭赠资料，无法稳定绑定："
+                    + "、".join(duplicate_document_names)
+                )
+            if not documents:
+                raise ArchiveInputError(f"{archive.name} 没有可视核销资料")
+            document_roles = [
+                {"path": path, "role": "visual_document"}
+                for path in documents
+            ]
+            all_files = [
+                path
+                for path in root.rglob("*")
+                if path.is_file() and path not in documents
+            ]
+            cases[scenario] = {
+                "scenario": scenario,
+                "source_archive": archive.resolve(),
+                "archive_sha256": extracted["archive_sha256"],
+                "source_root": root,
+                "visual_files": documents,
+                "document_roles": document_roles,
+                "excluded_files": all_files,
+            }
+        elif scenario == "price_difference_support":
+            documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
+            if not documents:
+                raise ArchiveInputError(f"{archive.name} 没有可视核销资料")
+            lowered = [path.name.casefold() for path in documents]
+            duplicates = sorted({name for name in lowered if lowered.count(name) > 1})
+            if duplicates:
+                raise ArchiveInputError(
+                    f"{archive.name} 中存在同名价格补差资料，无法稳定绑定："
+                    + "、".join(duplicates)
+                )
+            if len(excels) > 1:
+                raise ArchiveInputError(
+                    f"{archive.name} 中POS电子表应最多1份，实际{len(excels)}份："
+                    + "、".join(path.name for path in excels)
+                )
+
+            def price_named(*markers: str) -> list[Path]:
+                return [
+                    path for path in documents
+                    if any(marker in normalize_text(path.name) for marker in markers)
+                ]
+
+            contract = _one(price_named("促销协议", "促销合同"), "签章促销合同", archive.name)
+            settlement = _one(price_named("结算单", "结算表"), "结算单", archive.name)
+            reserved = {contract, settlement}
+            pos_files = [
+                path for path in documents
+                if path not in reserved
+                and any(marker in normalize_text(path.name) for marker in ("pos", "销售", "陈列销售"))
+            ]
+            if not pos_files:
+                raise ArchiveInputError(f"{archive.name} 缺少名称可识别的盖章POS数据")
+            reserved.update(pos_files)
+            outer_other = [path for path in documents if path not in reserved]
+            rar_candidates = [
+                path for path in _material_files(root, {".rar"})
+                if any(marker in normalize_text(path.name) for marker in ("照片", "返图", "现场"))
+            ]
+            photo_archive = _one(rar_candidates, "现场活动照片RAR", archive.name)
+            photo_extraction = _extract_rar_archive(
+                photo_archive,
+                temp / "price_difference_support_field_photos",
+            )
+            activity_photos = _material_files(Path(photo_extraction["root"]), IMAGE_SUFFIXES)
+            if not activity_photos:
+                raise ArchiveInputError(f"{photo_archive.name} 没有现场活动图片")
+            non_images = [
+                path for path in Path(photo_extraction["root"]).rglob("*")
+                if path.is_file() and path.suffix.lower() not in IMAGE_SUFFIXES
+            ]
+            if non_images:
+                raise ArchiveInputError(
+                    f"{photo_archive.name} 含非图片成员："
+                    + "、".join(path.name for path in non_images)
+                )
+            _unique_image_names(activity_photos, photo_archive.name)
+            document_roles: list[dict[str, Any]] = [
+                {"path": contract, "role": "signed_promotional_contract"},
+                {"path": settlement, "role": "settlement"},
+                *({"path": path, "role": "stamped_pos_data"} for path in pos_files),
+                *({"path": path, "role": "other"} for path in outer_other),
+                *({"path": path, "role": "activity_photo"} for path in activity_photos),
+            ]
+            cases[scenario] = {
+                "scenario": scenario,
+                "source_archive": archive.resolve(),
+                "archive_sha256": extracted["archive_sha256"],
+                "source_root": root,
+                "pos_spreadsheet": excels[0] if excels else None,
+                "promotional_contract": contract,
+                "settlement_document": settlement,
+                "stamped_pos_files": pos_files,
+                "photo_archive": photo_archive,
+                "photo_archive_sha256": photo_extraction["archive_sha256"],
+                "activity_photo_files": activity_photos,
+                "visual_files": [*documents, *activity_photos],
+                "document_roles": document_roles,
+                "excluded_files": [
+                    path for path in root.rglob("*")
+                    if path.is_file()
+                    and path not in documents
+                    and path not in excels
+                    and path != photo_archive
+                ],
+            }
+        elif scenario == "pos_target_incentive":
+            documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
+            if not documents:
+                raise ArchiveInputError(f"{archive.name} 没有可视核销资料")
+            lowered = [path.name.casefold() for path in documents]
+            duplicates = sorted({name for name in lowered if lowered.count(name) > 1})
+            if duplicates:
+                raise ArchiveInputError(
+                    f"{archive.name} 中存在同名POS达标激励资料，无法稳定绑定："
+                    + "、".join(duplicates)
+                )
+            if len(excels) > 1:
+                raise ArchiveInputError(
+                    f"{archive.name} 中POS电子表应最多1份，实际{len(excels)}份："
+                    + "、".join(path.name for path in excels)
+                )
+
+            def incentive_named(*markers: str) -> list[Path]:
+                return [
+                    path for path in documents
+                    if any(marker in normalize_text(path.name) for marker in markers)
+                ]
+
+            settlement_candidates = incentive_named("结算单", "结算表")
+            if len(settlement_candidates) > 1:
+                raise ArchiveInputError(
+                    f"{archive.name} 中结算单应最多1份，实际{len(settlement_candidates)}份："
+                    + "、".join(path.name for path in settlement_candidates)
+                )
+            settlement = settlement_candidates[0] if settlement_candidates else None
+            contract_candidates = incentive_named("促销合同", "促销协议")
+            if len(contract_candidates) > 1:
+                raise ArchiveInputError(
+                    f"{archive.name} 中促销合同应最多1份，实际{len(contract_candidates)}份："
+                    + "、".join(path.name for path in contract_candidates)
+                )
+            contract = contract_candidates[0] if contract_candidates else None
+            reserved = {path for path in (settlement, contract) if path is not None}
+            stamped_pos_files = [
+                path for path in documents
+                if path not in reserved
+                and any(marker in normalize_text(path.name) for marker in ("pos", "销售", "数据"))
+            ]
+            reserved.update(stamped_pos_files)
+            activity_files = [path for path in documents if path not in reserved]
+            document_roles: list[dict[str, Any]] = []
+            if contract is not None:
+                document_roles.append({"path": contract, "role": "signed_promotional_contract"})
+            if settlement is not None:
+                document_roles.append({"path": settlement, "role": "settlement"})
+            document_roles.extend(
+                {"path": path, "role": "stamped_pos_data"}
+                for path in stamped_pos_files
+            )
+            for path in activity_files:
+                name = normalize_text(path.name)
+                role = (
+                    "store_receipt"
+                    if any(marker in name for marker in ("小票", "收银", "购物凭证"))
+                    else "activity_photo"
+                    if any(marker in name for marker in ("照片", "现场", "返图", "活动"))
+                    else "other_activity_proof"
+                )
+                document_roles.append({"path": path, "role": role})
+            bound = {Path(item["path"]) for item in document_roles}
+            if bound != set(documents):
+                raise ArchiveInputError(
+                    f"{archive.name} 存在未绑定的POS达标激励资料："
+                    + "、".join(path.name for path in set(documents) - bound)
+                )
+            cases[scenario] = {
+                "scenario": scenario,
+                "source_archive": archive.resolve(),
+                "archive_sha256": extracted["archive_sha256"],
+                "source_root": root,
+                "pos_spreadsheet": excels[0] if excels else None,
+                "promotional_contract": contract,
+                "settlement_document": settlement,
+                "stamped_pos_files": stamped_pos_files,
+                "activity_evidence_files": activity_files,
+                "visual_files": documents,
+                "document_roles": document_roles,
+                "excluded_files": [
+                    path for path in root.rglob("*")
+                    if path.is_file() and path not in documents and path not in excels
+                ],
+            }
+        elif scenario == "entry_fee":
+            documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
+            if not documents:
+                raise ArchiveInputError(f"{archive.name} 没有进场费合同或扣款凭证")
+            lowered = [path.name.casefold() for path in documents]
+            duplicates = sorted({name for name in lowered if lowered.count(name) > 1})
+            if duplicates:
+                raise ArchiveInputError(
+                    f"{archive.name} 中存在同名进场费资料，无法稳定绑定："
+                    + "、".join(duplicates)
+                )
+
+            def entry_named(*markers: str) -> list[Path]:
+                return [
+                    path for path in documents
+                    if any(marker in normalize_text(path.name) for marker in markers)
+                ]
+
+            contract = _one(
+                entry_named("产品推广协议", "进场费合同", "条码费合同", "进场合同"),
+                "进场费合同",
+                archive.name,
+            )
+            rar_candidates = [
+                path for path in _material_files(root, {".rar"})
+                if any(
+                    marker in normalize_text(path.name)
+                    for marker in ("进场照片", "上架照片", "照片", "返图")
+                )
+            ]
+            photo_archive = _one(rar_candidates, "进场/上架照片RAR", archive.name)
+            photo_extraction = _extract_rar_archive(
+                photo_archive,
+                temp / "entry_fee_shelf_photos",
+            )
+            photo_root = Path(photo_extraction["root"])
+            shelf_photos = _material_files(photo_root, IMAGE_SUFFIXES)
+            if not shelf_photos:
+                raise ArchiveInputError(f"{photo_archive.name} 没有进场/上架照片")
+            non_images = [
+                path for path in photo_root.rglob("*")
+                if path.is_file() and path.suffix.lower() not in IMAGE_SUFFIXES
+            ]
+            if non_images:
+                raise ArchiveInputError(
+                    f"{photo_archive.name} 含非图片成员："
+                    + "、".join(path.name for path in non_images)
+                )
+            _unique_image_names(shelf_photos, photo_archive.name)
+
+            outer_other = [path for path in documents if path != contract]
+            deduction_proofs = [
+                path for path in outer_other
+                if any(
+                    marker in normalize_text(path.name)
+                    for marker in ("系统扣款", "扣款凭证", "上架凭证", "费用扣款")
+                )
+            ]
+            remaining_outer = [path for path in outer_other if path not in deduction_proofs]
+            document_roles: list[dict[str, Any]] = [
+                {"path": contract, "role": "entry_fee_contract"},
+                *(
+                    {"path": path, "role": "system_deduction_proof"}
+                    for path in deduction_proofs
+                ),
+                *(
+                    {"path": path, "role": "other"}
+                    for path in remaining_outer
+                ),
+            ]
+            for path in shelf_photos:
+                relative = path.relative_to(photo_root)
+                parent_parts = list(relative.parts[:-1])
+                document_roles.append(
+                    {
+                        "path": path,
+                        "role": "shelf_photo",
+                        "relative_path": relative.as_posix(),
+                        "store_hint": parent_parts[-1] if parent_parts else None,
+                    }
+                )
+            cases[scenario] = {
+                "scenario": scenario,
+                "source_archive": archive.resolve(),
+                "archive_sha256": extracted["archive_sha256"],
+                "source_root": root,
+                "entry_fee_contract": contract,
+                "photo_archive": photo_archive,
+                "photo_archive_sha256": photo_extraction["archive_sha256"],
+                "shelf_photo_files": shelf_photos,
+                "system_deduction_proof_files": deduction_proofs,
+                "visual_files": [*documents, *shelf_photos],
+                "document_roles": document_roles,
+                "excluded_files": [
+                    path for path in root.rglob("*")
+                    if path.is_file()
+                    and path not in documents
+                    and path != photo_archive
+                ],
+            }
+        elif scenario == "self_procured_gift_material":
+            documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
+            legacy_workbooks = _material_files(root, {".xls"})
+            if len(excels) > 1:
+                raise ArchiveInputError(
+                    f"{archive.name} 中POS电子表应最多1份，实际{len(excels)}份："
+                    + "、".join(path.name for path in excels)
+                )
+
+            def self_named(*markers: str) -> list[Path]:
+                return [
+                    path for path in documents
+                    if any(marker in normalize_text(path.name) for marker in markers)
+                ]
+
+            contract = _one(self_named("促销协议", "促销合同"), "签章促销合同", archive.name)
+            settlement = _one(self_named("结算单", "结算表"), "结算单", archive.name)
+            purchase_receipt = _one(
+                self_named("购买凭证", "发票", "收据"),
+                "发票或收据",
+                archive.name,
+            )
+            payment_records = [
+                path for path in documents
+                if path not in {contract, settlement, purchase_receipt}
+                and any(marker in normalize_text(path.name) for marker in ("付款记录", "转账", "付款凭证"))
+            ]
+            reserved = {contract, settlement, purchase_receipt, *payment_records}
+            stamped_pos_files = [
+                path for path in documents
+                if path not in reserved
+                and any(marker in normalize_text(path.name) for marker in ("销售pos", "pos数据", "销售数据"))
+            ]
+            if not stamped_pos_files:
+                raise ArchiveInputError(f"{archive.name} 缺少名称可识别的盖章POS数据")
+            reserved.update(stamped_pos_files)
+            unclassified_visuals = [path for path in documents if path not in reserved]
+            activity_workbook = _one(legacy_workbooks, "活动返图.xls", archive.name)
+            activity = extract_activity_return_workbook(
+                activity_workbook,
+                temp / "self_procured_gift_material_activity_photos",
+            )
+            photo_files = [Path(item["photo_file"]) for item in activity["records"]]
+            _unique_image_names(photo_files, activity_workbook.name)
+            document_roles: list[dict[str, Any]] = [
+                {"path": contract, "role": "signed_promotional_contract"},
+                {"path": settlement, "role": "settlement"},
+                {"path": purchase_receipt, "role": "purchase_invoice_or_receipt"},
+                *({"path": path, "role": "purchase_payment_record"} for path in payment_records),
+                *({"path": path, "role": "stamped_pos_data"} for path in stamped_pos_files),
+                *({"path": path, "role": "unclassified_visual"} for path in unclassified_visuals),
+            ]
+            for record in activity["records"]:
+                document_roles.append(
+                    {
+                        "path": Path(record["photo_file"]),
+                        "role": "activity_photo",
+                        "store_hint": record["store_name"],
+                        "period_hint": record["period_text"],
+                        "customer_code_hint": record["customer_code"],
+                        "activity_excel_row": record["excel_row"],
+                    }
+                )
+            cases[scenario] = {
+                "scenario": scenario,
+                "source_archive": archive.resolve(),
+                "archive_sha256": extracted["archive_sha256"],
+                "source_root": root,
+                "promotional_contract": contract,
+                "settlement_document": settlement,
+                "purchase_invoice_or_receipt": purchase_receipt,
+                "purchase_payment_records": payment_records,
+                "stamped_pos_files": stamped_pos_files,
+                "pos_spreadsheet": excels[0] if excels else None,
+                "activity_return_workbook": activity_workbook,
+                "activity_return": activity,
+                "activity_photo_files": photo_files,
+                "visual_files": [*documents, *photo_files],
+                "document_roles": document_roles,
+                "excluded_files": [
+                    path for path in root.rglob("*")
+                    if path.is_file()
+                    and path not in documents
+                    and path not in excels
+                    and path != activity_workbook
+                ],
             }
         else:
             documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)

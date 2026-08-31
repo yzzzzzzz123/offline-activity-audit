@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "giveaway_promotion",
+  "skill_name": "audit-giveaway-promotion",
+  "display_name": "额外搭赠",
+  "aliases": ["搭赠", "额外赠品", "赠品支持"],
+  "order": 6,
+  "provenance": {
+    "source_zip_basename": "SQ202512170055-HX202601150043-搭赠.zip",
+    "source_zip_sha256": "b5ad40e7007d2dc4f0817063318535ab1bae78ebd23819ebd068f463e0307664",
+    "source_zip_size": 5344635,
+    "generator_skill_version": "1.0",
+    "business_requirements_summary": [
+      "额外搭赠是需要正式核销的独立业务方式。",
+      "正常系统出货金额与额外赠品核销金额必须分开识别和核对。",
+      "促销合同、经销商盖章结算、系统销售或出货明细、门店小票和活动照片形成核销证据链。",
+      "缺失材料进入正式补正清单，不因代表包不完整而拒绝生成核销结果。"
+    ]
+  },
+  "scope": {
+    "in_scope": [
+      "经销商按促销合同执行买赠活动后申请额外赠品价值核销",
+      "额外赠品的合同预算、结算申报、系统出货、门店小票和现场执行一致性审核"
+    ],
+    "excluded": [
+      "正常商品出货金额不是额外搭赠申报金额",
+      "维护费用、其他费用、人员激励、堆头陈列、展示道具和直营费用均按各自场景处理"
+    ],
+    "audit_object": "一份额外搭赠申报包及其分组阻断问题"
+  },
+  "evidence_roles": [
+    {
+      "role_id": "visual_document",
+      "description": "待按可见标题和内容确定业务类型的额外搭赠图片或PDF",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 1,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["合同", "结算", "出货", "销售", "小票", "照片"],
+      "ai_visible": true,
+      "required": true,
+      "binding_rule": "入口将每份可视文件唯一绑定为visual_document；视觉阶段只识别可见document_type，确定性校验再要求合同、结算和出货单各唯一，小票和活动照片至少一份。"
+    }
+  ],
+  "ai_stages": [
+    {
+      "stage_id": "extract_visible_documents",
+      "input_roles": ["visual_document"],
+      "reference_scope": [],
+      "schema_file": "references/evidence.schema.json",
+      "source_coverage_rule": "每个输入文件必须按原始basename返回一次；不得重复、遗漏、虚构或改写neutral role。"
+    }
+  ],
+  "authority_edges": [
+    {"from": "signed_promotional_contract", "to": "settlement", "purpose": "核对经销商、活动期、买赠比例、赠品计划、预算和核销要求。"},
+    {"from": "sales_delivery_statement", "to": "settlement", "purpose": "核对正常系统出货金额，且不把该金额当作赠品申报。"},
+    {"from": "signed_promotional_contract", "to": "store_receipt", "purpose": "核对活动期、合格购买商品、赠品商品和买赠比例。"},
+    {"from": "signed_promotional_contract", "to": "activity_photo", "purpose": "核对活动期、地点、参与商品和额外搭赠执行。"},
+    {"from": "signed_promotional_contract", "to": "supported_amount", "purpose": "以明确赠品数量、单价和预算建立金额基线。"},
+    {"from": "settlement", "to": "supported_amount", "purpose": "以经销商盖章的额外赠品申报金额作为上限。"}
+  ],
+  "forbidden_edges": [
+    {"from": "shipment_amount", "to": "claimed_gift_amount", "purpose": "正常出货金额不得替代或推导额外赠品申报金额。"},
+    {"from": "store_receipt", "to": "activity_photo", "purpose": "小票不得替代现场活动照片。"},
+    {"from": "settlement", "to": "missing_contract_fact", "purpose": "结算不得补写合同缺失的比例、产品范围或单价。"},
+    {"from": "matching_total", "to": "missing_product_identity", "purpose": "总额一致不得修复商品行或角色缺失。"}
+  ],
+  "controls": [
+    {"control_id": "required_materials", "source": "全部提交文件", "object": "核销证据链", "expectation": "合同、结算、系统出货、门店小票和活动照片齐全", "comparison": "deterministic", "blocking": true, "error_group": "资料完整性", "resubmission": "补交缺失的指定材料。"},
+    {"control_id": "fee_nature", "source": "合同和结算", "object": "费用性质", "expectation": "正文明确为额外搭赠或赠品支持", "comparison": "visible", "blocking": true, "error_group": "费用归类", "resubmission": "提交费用性质明确且一致的合同与结算。"},
+    {"control_id": "promotional_contract", "source": "促销合同", "object": "合同基线", "expectation": "经销商签章、周期、商品、比例、数量、单价、预算和核销证据完整", "comparison": "visible", "blocking": true, "error_group": "促销合同", "resubmission": "补交签章及条款完整的额外搭赠合同。"},
+    {"control_id": "settlement", "source": "结算单", "object": "申报金额", "expectation": "模板、盖章、出货金额、赠品明细、公式和申报金额完整", "comparison": "visible", "blocking": true, "error_group": "结算单", "resubmission": "补交经销商盖章且明细完整的结算单。"},
+    {"control_id": "sales_delivery_statement", "source": "系统销售或出货明细", "object": "正常出货", "expectation": "明细和总额完整可核", "comparison": "visible", "blocking": true, "error_group": "系统出货", "resubmission": "补交完整系统销售或出货明细。"},
+    {"control_id": "party_alignment", "source": "合同、结算和出货明细", "object": "经销商与门店", "expectation": "主体唯一对应", "comparison": "unique_fuzzy", "blocking": true, "error_group": "主体对应", "resubmission": "更正或补交主体清楚且相互一致的资料。"},
+    {"control_id": "period_alignment", "source": "合同、结算、小票、出货和照片", "object": "活动周期", "expectation": "执行证据均在合同期内", "comparison": "deterministic", "blocking": true, "error_group": "活动周期", "resubmission": "补交日期清楚且在合同期内的证据。"},
+    {"control_id": "shipment_reconciliation", "source": "出货明细和结算", "object": "正常出货金额", "expectation": "两者精确一致", "comparison": "exact", "blocking": true, "error_group": "出货金额", "resubmission": "补正出货明细或结算的正常出货金额。"},
+    {"control_id": "product_correspondence", "source": "合同、出货和小票", "object": "购买商品与赠品", "expectation": "商品唯一对应，已有编码和69码严格一致", "comparison": "unique_fuzzy", "blocking": true, "error_group": "商品对应", "resubmission": "补交商品名称、规格、编码及数量清楚的材料。"},
+    {"control_id": "receipt_execution", "source": "门店小票", "object": "买赠执行", "expectation": "活动期内每张小票均有付费购买和零金额赠品且比例一致", "comparison": "deterministic", "blocking": true, "error_group": "门店小票", "resubmission": "补交购买、赠品、数量、金额和日期完整的小票。"},
+    {"control_id": "activity_execution", "source": "活动照片", "object": "现场执行", "expectation": "活动期内可见门店、参与商品和额外搭赠", "comparison": "visible", "blocking": true, "error_group": "活动照片", "resubmission": "补交活动期内门店现场照片。"},
+    {"control_id": "duplicate_evidence", "source": "全部图片", "object": "证据独立性", "expectation": "不存在完全相同图片重复充当不同证据", "comparison": "deterministic", "blocking": true, "error_group": "重复证据", "resubmission": "替换重复图片并提供各角色的原始证据。"},
+    {"control_id": "amount_recalculation", "source": "合同和结算", "object": "额外搭赠金额", "expectation": "赠品数量乘明确单价或逐项求和后与预算和申报精确一致", "comparison": "deterministic", "blocking": true, "error_group": "金额复算", "resubmission": "补正数量、单价、明细或申报金额，使可复算并一致。"}
+  ],
+  "amount_policy": {
+    "claim_source": "经销商盖章结算单的额外搭赠申报金额",
+    "supported_amount_rule": "全部阻断控制通过且赠品明细复算值同时等于签章合同预算和盖章结算申报时支持全额，否则为0。",
+    "rounding": "人民币元，ROUND_HALF_UP保留两位小数",
+    "blocked_rule": "任一阻断项失败时全额暂缓并要求补正",
+    "conclusions": ["pass", "human_review"]
+  },
+  "output": {
+    "sheet_name": "额外搭赠核销",
+    "html_mode": "error_only",
+    "count_unit": "个问题",
+    "required_facts": ["问题来源", "已识别事实", "额外搭赠规则", "核销影响", "补交动作", "正常出货金额与赠品申报金额"],
+    "prohibited_terms": ["prompt", "schema", "模型推理", "临时目录", "系统内部路径", "SHA-256"]
+  },
+  "dependencies": [
+    {"name": "jsonschema", "purpose": "校验视觉证据、场景manifest和最终结果结构。"},
+    {"name": "image fingerprinting", "purpose": "确定性识别完全重复图片，避免一份证据重复证明多个角色。"},
+    {"name": "canonical HTML shell", "purpose": "将额外搭赠错误清单合并到唯一自包含核销HTML。"}
+  ]
+}

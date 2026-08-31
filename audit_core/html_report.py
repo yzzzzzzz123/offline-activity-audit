@@ -17,6 +17,11 @@ SHEET_SCENARIOS = {
     "海报物料核销": "poster_material",
     "其他费用核销": "other_expense",
     "维护费用核销": "maintenance_fee",
+    "额外搭赠核销": "giveaway_promotion",
+    "价格补差核销": "price_difference_support",
+    "POS达标激励核销": "pos_target_incentive",
+    "进场费核销": "entry_fee",
+    "自采赠品物料核销": "self_procured_gift_material",
 }
 SCENARIO_SHEETS = {value: key for key, value in SHEET_SCENARIOS.items()}
 SUMMARY_PREFIXES = (
@@ -121,6 +126,11 @@ def _row_section(
         "poster_material",
         "other_expense",
         "maintenance_fee",
+        "giveaway_promotion",
+        "price_difference_support",
+        "pos_target_incentive",
+        "entry_fee",
+        "self_procured_gift_material",
     }:
         raise AuditError(f"HTML不支持的核销场景：{scenario}")
     first = values[0].lstrip() if values else ""
@@ -273,7 +283,7 @@ def _workbook_payload(workbook_path: str | Path) -> dict[str, Any]:
             issue_rows = [row for row in all_rows if row["status"] == "issue"]
             visible_rows = (
                 issue_rows
-                if scenario in {"poster_material", "other_expense", "maintenance_fee"}
+                if scenario in {"poster_material", "other_expense", "maintenance_fee", "giveaway_promotion", "price_difference_support", "pos_target_incentive", "entry_fee", "self_procured_gift_material"}
                 else all_rows
             )
             sheets.append(
@@ -465,7 +475,7 @@ def verify_html_report(
     for sheet in payload.get("sheets", []):
         for row in sheet.get("rows") or []:
             if (
-                sheet.get("scenario") in {"poster_material", "other_expense", "maintenance_fee"}
+                sheet.get("scenario") in {"poster_material", "other_expense", "maintenance_fee", "giveaway_promotion", "price_difference_support", "pos_target_incentive", "entry_fee", "self_procured_gift_material"}
                 and row.get("status") != "issue"
             ):
                 raise AuditError(

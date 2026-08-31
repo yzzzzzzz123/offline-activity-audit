@@ -299,14 +299,14 @@
         return { count: rows.length, upstream: rows.length, local: 0, html: cards || '<div class="eo-empty">没有发现核销错误</div>' };
       };
 
-      const otherExpenseView = (sheet) => {
+      const groupedIssueView = (sheet, scope) => {
         const rows = issueRows(sheet);
         const cards = rows.map((row, index) => {
           const title = String(row.heading || '').replace(/^问题：/, '');
           const source = afterPrefix(row.values?.[0], '文件：');
           const problem = textBlock([row.values?.[1], row.values?.[2], row.values?.[3], row.values?.[4]].filter(Boolean).join('\n'));
           const action = afterPrefix(row.values?.[5], '处理方式：') || actionText(row);
-          return errorCard({ index: index + 1, title, scope: '其他费用', source, problem, action, search: (row.values || []).join(' ') });
+          return errorCard({ index: index + 1, title, scope, source, problem, action, search: (row.values || []).join(' ') });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards || '<div class="eo-empty">没有发现核销错误</div>' };
       };
@@ -315,7 +315,14 @@
         if (sheet.scenario === 'personnel_incentive') return { sheet, ...personnelView(sheet), label: '人员激励' };
         if (sheet.scenario === 'promotional_display') return { sheet, ...displayView(sheet), label: '堆头陈列' };
         if (sheet.scenario === 'poster_material') return { sheet, ...posterView(sheet), label: '展示道具' };
-        return { sheet, ...otherExpenseView(sheet), label: '其他费用' };
+        if (sheet.scenario === 'other_expense') return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
+        if (sheet.scenario === 'maintenance_fee') return { sheet, ...groupedIssueView(sheet, '维护费用'), label: '维护费用' };
+        if (sheet.scenario === 'giveaway_promotion') return { sheet, ...groupedIssueView(sheet, '额外搭赠'), label: '额外搭赠' };
+        if (sheet.scenario === 'price_difference_support') return { sheet, ...groupedIssueView(sheet, '价格补差'), label: '价格补差' };
+        if (sheet.scenario === 'pos_target_incentive') return { sheet, ...groupedIssueView(sheet, 'POS达标激励'), label: 'POS达标激励' };
+        if (sheet.scenario === 'entry_fee') return { sheet, ...groupedIssueView(sheet, '进场费'), label: '进场费' };
+        if (sheet.scenario === 'self_procured_gift_material') return { sheet, ...groupedIssueView(sheet, '客户自采赠品物料'), label: '自采赠品物料' };
+        return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
       });
       const total = projections.reduce((sum, item) => sum + item.count, 0);
       const materialTotal = projections.reduce((sum, item) => sum + (item.upstream || 0), 0);
@@ -333,6 +340,30 @@
         if (item.sheet.scenario === 'poster_material') return {
           code: 'PR', queue: String(index + 1).padStart(2, '0'), accent: '#238b84', eyebrow: 'DISPLAY PROPS', navNote: '展示材料错误',
           note: '仅列展示道具材料中需要重新提交的错误。', parts: [['展示道具', item.upstream || item.count]],
+        };
+        if (item.sheet.scenario === 'maintenance_fee') return {
+          code: 'MF', queue: String(index + 1).padStart(2, '0'), accent: '#2f75b5', eyebrow: 'MAINTENANCE FEE', navNote: '资料 / 金额错误',
+          note: '仅列维护费用资料链、费用性质与金额复算中的处理项。', parts: [['资料与金额', item.upstream || item.count]],
+        };
+        if (item.sheet.scenario === 'giveaway_promotion') return {
+          code: 'GP', queue: String(index + 1).padStart(2, '0'), accent: '#4f8b57', eyebrow: 'EXTRA GIVEAWAY', navNote: '搭赠 / 执行错误',
+          note: '仅列额外搭赠合同、出货、结算、小票与活动执行中的处理项。', parts: [['搭赠与执行', item.upstream || item.count]],
+        };
+        if (item.sheet.scenario === 'price_difference_support') return {
+          code: 'PD', queue: String(index + 1).padStart(2, '0'), accent: '#c55a11', eyebrow: 'PRICE DIFFERENCE', navNote: 'POS / 照片错误',
+          note: '仅列价格补差合同、POS、结算、全门店活动价照片与金额复算中的处理项。', parts: [['补差与执行', item.upstream || item.count]],
+        };
+        if (item.sheet.scenario === 'pos_target_incentive') return {
+          code: 'PT', queue: String(index + 1).padStart(2, '0'), accent: '#00a6a6', eyebrow: 'POS TARGET INCENTIVE', navNote: '达标 / 满减错误',
+          note: '仅列经销商POS达标合同、销售基数、结算、满减活动证明和比例复算中的处理项。', parts: [['达标与活动', item.upstream || item.count]],
+        };
+        if (item.sheet.scenario === 'entry_fee') return {
+          code: 'EF', queue: String(index + 1).padStart(2, '0'), accent: '#7f6000', eyebrow: 'ENTRY FEE', navNote: '合同 / 上架错误',
+          note: '仅列进场费合同、合同门店和商品上架、系统扣款凭证与条码费复算中的处理项。', parts: [['进场与扣款', item.upstream || item.count]],
+        };
+        if (item.sheet.scenario === 'self_procured_gift_material') return {
+          code: 'SG', queue: String(index + 1).padStart(2, '0'), accent: '#a64d79', eyebrow: 'SELF-PROCURED GIFT', navNote: '赠品 / POS错误',
+          note: '仅列客户自采赠品物料合同、票据付款、盖章POS及电子表、全门店水印返图、结算和赠送数量复算中的处理项。', parts: [['赠品物料与执行', item.upstream || item.count]],
         };
         return {
           code: 'OE', queue: String(index + 1).padStart(2, '0'), accent: '#7b5aa6', eyebrow: 'OTHER EXPENSE', navNote: '归类 / 审批错误',

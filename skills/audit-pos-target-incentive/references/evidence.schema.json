@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/offline-activity-audit/pos-target-incentive-evidence.schema.json",
+  "title": "POS target incentive visible evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario", "documents", "extraction_notes"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "scenario": {"type": "string", "const": "pos_target_incentive"},
+    "documents": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/document"}},
+    "extraction_notes": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "visibility": {"type": "string", "enum": ["visible", "not_visible", "unclear", "not_applicable"]},
+    "tier": {
+      "type": "object", "additionalProperties": false,
+      "required": ["threshold_amount", "rate"],
+      "properties": {"threshold_amount": {"type": "number", "minimum": 0}, "rate": {"type": "number", "minimum": 0, "maximum": 1}}
+    },
+    "pos_row": {
+      "type": "object", "additionalProperties": false,
+      "required": ["period_text", "store_name", "sales_amount"],
+      "properties": {
+        "period_text": {"type": ["string", "null"], "minLength": 1},
+        "store_name": {"type": ["string", "null"], "minLength": 1},
+        "sales_amount": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "document": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "source_file", "role", "document_type", "title", "party_names", "dealer_name",
+        "recipient_type", "channel_name", "channel_eligibility_visible", "activity_start",
+        "activity_end", "fee_type", "promotion_mechanic", "pos_scope", "target_tiers",
+        "amount_ceiling", "pos_sales_amount", "calculated_amount", "claimed_amount",
+        "company_template_visible", "dealer_seal_visible", "signed_visible", "pos_rows",
+        "pos_total_sales_amount", "activity_date", "activity_time", "activity_location",
+        "watermark_date_visible", "watermark_time_visible", "watermark_address_visible",
+        "receipt_number", "receipt_amount", "activity_exists_visible", "visible_summary", "limitations"
+      ],
+      "properties": {
+        "source_file": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "enum": ["signed_promotional_contract", "settlement", "stamped_pos_data", "activity_photo", "store_receipt", "other_activity_proof", "other"]},
+        "document_type": {"type": "string", "minLength": 1},
+        "title": {"type": ["string", "null"], "minLength": 1},
+        "party_names": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "dealer_name": {"type": ["string", "null"], "minLength": 1},
+        "recipient_type": {"type": "string", "enum": ["dealer", "store", "other", "unclear", "not_applicable"]},
+        "channel_name": {"type": ["string", "null"], "minLength": 1},
+        "channel_eligibility_visible": {"$ref": "#/$defs/visibility"},
+        "activity_start": {"type": ["string", "null"], "format": "date"},
+        "activity_end": {"type": ["string", "null"], "format": "date"},
+        "fee_type": {"type": ["string", "null"], "minLength": 1},
+        "promotion_mechanic": {"type": ["string", "null"], "minLength": 1},
+        "pos_scope": {"type": ["string", "null"], "minLength": 1},
+        "target_tiers": {"type": "array", "items": {"$ref": "#/$defs/tier"}},
+        "amount_ceiling": {"type": ["number", "null"], "minimum": 0},
+        "pos_sales_amount": {"type": ["number", "null"], "minimum": 0},
+        "calculated_amount": {"type": ["number", "null"], "minimum": 0},
+        "claimed_amount": {"type": ["number", "null"], "minimum": 0},
+        "company_template_visible": {"$ref": "#/$defs/visibility"},
+        "dealer_seal_visible": {"$ref": "#/$defs/visibility"},
+        "signed_visible": {"$ref": "#/$defs/visibility"},
+        "pos_rows": {"type": "array", "items": {"$ref": "#/$defs/pos_row"}},
+        "pos_total_sales_amount": {"type": ["number", "null"], "minimum": 0},
+        "activity_date": {"type": ["string", "null"], "format": "date"},
+        "activity_time": {"type": ["string", "null"], "minLength": 1},
+        "activity_location": {"type": ["string", "null"], "minLength": 1},
+        "watermark_date_visible": {"$ref": "#/$defs/visibility"},
+        "watermark_time_visible": {"$ref": "#/$defs/visibility"},
+        "watermark_address_visible": {"$ref": "#/$defs/visibility"},
+        "receipt_number": {"type": ["string", "null"], "minLength": 1},
+        "receipt_amount": {"type": ["number", "null"], "minimum": 0},
+        "activity_exists_visible": {"$ref": "#/$defs/visibility"},
+        "visible_summary": {"type": "string", "minLength": 1},
+        "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

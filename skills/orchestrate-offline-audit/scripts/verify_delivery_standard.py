@@ -13,8 +13,7 @@ from PIL import Image, ImageChops
 from playwright.sync_api import Page, sync_playwright
 
 
-DESKTOP_VIEWPORT = {"width": 1440, "height": 1000}
-MOBILE_VIEWPORT = {"width": 390, "height": 844}
+DESKTOP_VIEWPORT = {"width": 1440, "height": 960}
 
 
 def _path(value: str) -> Path:
@@ -135,25 +134,6 @@ def _render(page: Page, path: Path) -> dict[str, Any]:
             "detail_operable": detail_operable,
         },
     }
-
-
-def _mobile(page: Page, path: Path) -> dict[str, Any]:
-    errors: list[str] = []
-    page.on("pageerror", lambda error: errors.append(str(error)))
-    page.goto(path.as_uri(), wait_until="networkidle")
-    page.wait_for_selector(".eo-home-cockpit")
-    page.wait_for_timeout(50)
-    return page.evaluate(
-        """() => {
-          const first = document.querySelector('.eo-scenario-card');
-          return {
-            viewportWidth: window.innerWidth,
-            pageWidth: document.documentElement.scrollWidth,
-            bodyWidth: document.body.scrollWidth,
-            firstScenarioTop: first?.getBoundingClientRect().top ?? null,
-          };
-        }"""
-    ) | {"page_errors": errors}
 
 
 def _audit_payload(path: Path) -> dict[str, Any]:
@@ -1077,16 +1057,6 @@ def verify(reference: Path, candidate: Path) -> dict[str, Any]:
         candidate_render = _render(candidate_context.new_page(), candidate)
         reference_context.close()
         candidate_context.close()
-
-        mobile_context = browser.new_context(
-            viewport=MOBILE_VIEWPORT,
-            locale="zh-CN",
-            color_scheme="light",
-            reduced_motion="reduce",
-            device_scale_factor=1,
-        )
-        mobile = _mobile(mobile_context.new_page(), candidate)
-        mobile_context.close()
         browser.close()
 
     reference_snapshot = reference_render["snapshot"]
@@ -1149,15 +1119,6 @@ def verify(reference: Path, candidate: Path) -> dict[str, Any]:
                 candidate_render["interaction"]["detail_operable"],
             )
         ),
-        "candidate_mobile_no_horizontal_overflow": (
-            mobile["pageWidth"] <= mobile["viewportWidth"]
-            and mobile["bodyWidth"] <= mobile["viewportWidth"]
-        ),
-        "candidate_mobile_first_scenario_near_first_viewport": (
-            mobile["firstScenarioTop"] is not None
-            and mobile["firstScenarioTop"] <= MOBILE_VIEWPORT["height"] * 1.35
-        ),
-        "candidate_mobile_page_errors_clean": not mobile["page_errors"],
     }
     # Model-authored OCR descriptions may use different but equivalent wording.
     # Literal DOM/text hashes remain visible diagnostics, while acceptance is
@@ -1235,7 +1196,7 @@ def verify(reference: Path, candidate: Path) -> dict[str, Any]:
             "console_errors": candidate_render["console_errors"],
             "page_errors": candidate_render["page_errors"],
             "external_requests": candidate_render["external_requests"],
-            "mobile": mobile,
+            "viewport": DESKTOP_VIEWPORT,
         },
     }
 

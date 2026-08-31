@@ -1,0 +1,4 @@
+interface:
+  display_name: "POS达标激励核销"
+  short_description: "核验经销商POS达标、满减存在证明和比例返还"
+  default_prompt: "Use $audit-pos-target-incentive through the parent orchestrator to audit one registered pos_target_incentive package and return the verified self-contained HTML."

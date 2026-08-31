@@ -854,7 +854,7 @@ class HtmlReportTests(unittest.TestCase):
             self.assertEqual(verification["button_count"], 6)
             self.assertTrue(verification["workbook_content_equal"])
             self.assertTrue(verification["static_template_equal"])
-            self.assertEqual(verification["template_version"], "3.2.0")
+            self.assertEqual(verification["template_version"], "3.7.0")
             self.assertRegex(verification["style_sha256"], r"^[0-9a-f]{64}$")
             self.assertRegex(verification["shell_sha256"], r"^[0-9a-f]{64}$")
 
@@ -908,7 +908,7 @@ class HtmlReportTests(unittest.TestCase):
             self.assertIn("const personnelView = (sheet) =>", html)
             self.assertIn("const displayView = (sheet) =>", html)
             self.assertIn("const posterView = (sheet) =>", html)
-            self.assertIn("const otherExpenseView = (sheet) =>", html)
+            self.assertIn("const groupedIssueView = (sheet, scope) =>", html)
             self.assertIn("const openView = (id) =>", html)
             self.assertIn("合同销售附件第1行", html)
             self.assertIn("['合同位置', '合同商品', '知识库商品', '具体错误']", html)

@@ -2,13 +2,17 @@
 
 ## Current registered scope
 
-This repository audits five offline-activity scenarios only:
+This repository audits nine offline-activity scenarios only:
 
 - `personnel_incentive` through `skills/audit-personnel-incentive`;
 - `promotional_display` through `skills/audit-promotional-display`;
 - `poster_material` through `skills/audit-poster-material`.
 - `other_expense` through `skills/audit-other-expense`.
 - `maintenance_fee` through `skills/audit-maintenance-fee`.
+- `giveaway_promotion` through `skills/audit-giveaway-promotion`.
+- `price_difference_support` through `skills/audit-price-difference-support`.
+- `pos_target_incentive` through `skills/audit-pos-target-incentive`.
+- `entry_fee` through `skills/audit-entry-fee`.
 
 Personnel and promotional-display product identity share the project-level catalog at
 `shared/canban-product-multimodal-knowledge-base`. No scenario Skill owns a private copy.
@@ -19,14 +23,14 @@ The only formal command is:
 py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--scenario <scenario>]
 ```
 
-`input/` must contain one to five ZIP files. Each supported scenario may appear at most once. Reject unknown, ambiguous, duplicate-type, or unsafe archives with a specific error. A maintenance-fee package whose marker and POS/settlement structure are unambiguous may continue to audit so missing mandatory roles become customer-facing blocking issues; ambiguous duplicate singleton roles still stop intake. `--scenario` may select one submitted type for a scenario-only formal result.
+`input/` must contain one to ten ZIP files. Each supported scenario may appear at most once. Reject unknown, ambiguous, duplicate-type, or unsafe archives with a specific error. A maintenance-fee package whose marker and POS/settlement structure are unambiguous may continue to audit so missing mandatory roles become customer-facing blocking issues; ambiguous duplicate singleton roles still stop intake. A marked all-visual extra-giveaway package may similarly continue so generic camera filenames are classified from visible content and missing roles become blocking report issues; duplicate contract, settlement, or delivery candidates stop evidence acceptance. A marked price-difference package accepts zero or one POS Excel so a missing electronic sheet becomes a blocking report issue, while singleton-role ambiguity still stops intake. A marked POS-target-incentive package likewise accepts missing singleton roles so the contract/activity-proof gaps remain reportable. A marked entry-fee package requires one unique contract and one safely extractable shelf-photo RAR; missing system deduction proof remains a blocking audit issue. A marked self-procured-gift-material package requires one legacy activity-return `.xls`, extracts every embedded DISPIMG photo for visual review, and never treats that workbook as the POS electronic spreadsheet. `--scenario` may select one submitted type for a scenario-only formal result.
 
 ## New scenario onboarding
 
 When the user supplies one representative ZIP plus a business prompt and asks to create another
 audit scenario, use `skills/create-offline-audit-scenario/SKILL.md`. This is a development workflow,
 not a formal audit run. First decide whether the request is a new reusable evidence/decision chain or
-only another case of one of the five registered scenarios. Reuse or update the existing scenario
+only another case of one of the nine registered scenarios. Reuse or update the existing scenario
 when its material roles, authority graph, deterministic controls, amount rule, and output object are
 the same; never create one Skill per customer, month, activity number, or ZIP filename.
 
@@ -55,6 +59,9 @@ Keep extraction and judgment separate. AI or vision steps may only extract visib
 - maintenance fee: every deterministically bound stamped-POS visual, signed promotional contract,
   settlement, fee-specific support, and activity photo. The POS spreadsheet is excluded from vision;
   deterministic Python reads it and compares its rows and totals with the stamped POS facts.
+- entry fee: the signed entry contract/product-promotion agreement, every safely extracted shelf
+  photo, and every explicit system-deduction proof. Folder/store hints are routing-only and never
+  establish a visible store, location, date, time, product, or activity.
 
 Product-reference views are not field evidence. They may resolve a catalog product name,
 product code, and 69 code, but must never establish a store, date, display, promotion, price,
@@ -62,7 +69,7 @@ photo uniqueness, or reimbursement decision and must never be returned as submit
 
 Never give the model a sales Excel or access to repository inputs, prior results, caches, history, or the acceptance workbook. AI must not calculate amounts, select Excel product names, or make reimbursement decisions.
 
-Deterministic Python must safely unpack and route ZIPs, read Excel cells, preserve original source names and rows, aggregate quantities, map products, calculate differences and supported amounts, detect duplicate images, validate results, and publish the one canonical self-contained HTML. A temporary workbook or other intermediate representation may exist only inside the run-scoped temporary area for deterministic rendering and verification; it is never a delivery file.
+Deterministic Python must safely unpack and route ZIPs, read Excel cells, preserve original source names and rows, aggregate quantities, map products, calculate differences and supported amounts, detect duplicate images, validate results, and publish a versioned run snapshot into `worktrees/`. The only customer-facing page is the persistent root `offline-activity-audit.html`, served by the trusted local workbench service. A temporary workbook or assembled legacy projection may exist only inside the run-scoped temporary area for deterministic rendering and verification; neither is a delivery file.
 
 Across every scenario and every product-to-product comparison, a product name never has to be
 character-for-character equal. Exact equality is only a score-1 special case; a unique, specification-
@@ -202,7 +209,7 @@ filenames, recognized facts, impact, confidence, and exact resubmission action. 
 unrelated files stay out of that list.
 
 For `other_expense`, first compare every visible fee description with the established categories:
-赠品、陈列堆头、人员激励、海报/物料制作、维护费用、补差、搭赠、POS达标激励 and 进场费.
+赠品、陈列堆头、人员激励、海报/物料制作、维护费用、补差、额外搭赠、POS达标激励 and 进场费.
 The ZIP marker `其他` is routing only. A recognizable existing type must be reclassified; a genuinely
 new type must have independent special approval naming the new type, approver, approval statement,
 date, and approval mark. Then require a signed promotional contract, company-template settlement with
@@ -219,6 +226,39 @@ POS data, and supports the settlement claim only when the contractual recalculat
 0.01. Missing roles, another visible fee nature (including personnel incentive or direct-operation),
 or an unreproducible amount blocks the full claim. `other_expense` remains a separate scenario.
 
+For `giveaway_promotion`, keep the chain `dealer-executed extra-giveaway contract → dealer-stamped
+settlement → system sales/delivery statement → store receipts → activity photos`. Keep the normal
+shipment amount separate from the extra-gift claim. Deterministic code must check dealer and store
+identities, contract period, eligible purchased and gift products, explicit buy/gift ratio,
+zero-value gift rows on each receipt, system shipment total, gift quantities and explicit unit value,
+contract budget, stamped claim, and exact duplicate images. Product names may be uniquely fuzzy and
+specification-compatible; comparable product codes and 69 codes remain strict. A receipt cannot
+replace the required activity photo. Missing roles or any failed control holds the full gift claim.
+
+For `price_difference_support`, keep the chain `signed promotional contract → dealer-stamped POS
+visual ↔ POS electronic spreadsheet → company-template dealer-stamped settlement → every-store
+activity-price photos`. Treat original price, activity price, and the contract support unit amount as
+three distinct facts; never derive the reimbursement unit from the retail price reduction. Every POS
+or contract store needs its own in-period photo with visible date, address, shooting time, and activity
+price. Calculate eligible POS quantity × contract support unit, capped by contract quantity and budget;
+any missing role, incomplete store coverage, or failed reconciliation holds the full claim.
+
+For `pos_target_incentive`, the incentive recipient is the dealer. Keep the chain `signed contract →
+approved strategic/special-channel eligibility and target tiers → dealer-stamped POS visual ↔ POS
+electronic spreadsheet → full-reduction activity proof → dealer-stamped company-template settlement`.
+The settlement cannot establish missing contract rates. Deterministic code selects the highest reached
+contract tier, calculates eligible POS × rate, applies the contract cap, and compares the claim. Missing
+contract or activity proof holds the full claim even when POS and settlement arithmetic appear correct.
+
+For `entry_fee`, keep the chain `both-party signed entry contract → contract product/barcode and store
+scope → watermarked shelf photos → system deduction proof`. The contract is the authority for the fee
+per product barcode and total. A product row's store count is a coverage requirement and must not be
+multiplied into a barcode fee unless the contract explicitly states per-store charging. Photos must be
+matched from their own visible watermarks, not folder names; every contract product must be visibly
+shelved across the required contract stores when the contract limits support to actual shelving.
+Missing system deduction proof, incomplete store/product coverage, or a failed contract calculation
+holds the full claim.
+
 ## Output contract
 
 Every Agent executing an audit must invoke the repository-bundled runner and no other production
@@ -228,36 +268,52 @@ entrypoint:
 py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--scenario <scenario>]
 ```
 
-An Agent must not call internal report/render functions as an alternative workflow, handwrite an
-HTML result, copy a prior page, patch a generated page after the run, or rebuild the frontend from a
-description or screenshot. The bundled runner is responsible for extraction, deterministic business
-logic, rendering, verification, and atomic publication.
+An Agent must not call internal report/render functions as an alternative workflow, handwrite a run
+result page, copy a prior page, patch the persistent root page during a run, or rebuild the frontend
+from a description or screenshot. The bundled runner is responsible for extraction, deterministic
+business logic, verification, append-only event logging, DOM-data checkpoints, and atomic snapshot
+publication.
 
-Publish exactly one formal delivery file per run:
+The repository contains exactly one customer-facing HTML entrypoint:
 
-`worktrees/<YYYYMMDD>-<producer-model>.html`
+`offline-activity-audit.html`
 
-Do not publish an `.xlsx`, JSON sidecar, asset directory, or second scenario page. `producer-model`
-must be supplied by the model that actually executes the run: Codex uses `codex`; another model uses
-a clear safe label such as `qwen3.7`. `run-id` must begin with a valid `YYYYMMDD` business date; later
-tracking text does not enter the delivery name. The first Codex result is
-`20260818-codex.html`; same-date same-producer reruns become `20260818-codex-1.1.html`, then
-`20260818-codex-1.2.html`. Never overwrite or refill a missing revision, and keep an independent
-sequence for each producer. Do not create persistent run directories, Git run branches, repository
-snapshots, caches, or another delivery location.
+It is a persistent, versioned two-level system shell and is never regenerated or filled on disk by an
+ordinary audit run. The trusted local service serves it at `http://127.0.0.1:8080/` and on the
+machine's approved LAN address while exposing read-only relative APIs. It must not use a CDN,
+downloaded font, third-party script, or remote business-data dependency.
 
-The HTML is the complete formal result. It must be one UTF-8, self-contained `file://` document with
-all verified business data, CSS, JavaScript, and interaction state inline; it must require no server,
-network, CDN, font download, sibling workbook, or separate asset. A temporary workbook may still be
-created from empty state inside the run-scoped temporary directory as a deterministic data/rendering
-intermediate. It must pass its internal verification, must never be exposed to the model, and must be
-deleted before the run finishes. A failed run publishes nothing.
+Each formal run publishes one persistent run directory instead of another HTML:
 
-The one HTML is the fixed error-only desk plus one error list for every submitted scenario, not
-separate files. Its home metrics are exactly `核销场景`, `错误总数`, `材料 / 结算错误`, and
-`商品 / 门店错误`. Counts represent grouped customer actions, not internal failed fields. Passing
-records, passing contract facts, the contract baseline, audit-process narration, and informational
-watermark policy remain in deterministic evidence but are hidden from the customer view.
+`worktrees/<YYYYMMDD>-<producer-model>[-1.N]/`
+
+The directory contains `manifest.json`, an atomic `snapshot.json`, append-only
+`logs/events.jsonl`, observable `logs/run.log`, schema-validated files under `analysis/`, and replayable
+data checkpoints under `dom/checkpoints/`. It must not contain a generated customer HTML or a
+published workbook. `producer-model` is required provenance; `run-id` must begin with a valid
+`YYYYMMDD` business date. Same-date same-producer reruns use monotonic `-1.1`, `-1.2`, and later
+revisions without overwrite or gap refill. Existing legacy HTML files reserve their historical IDs
+and remain read-only compatibility inputs for the workbench catalog.
+
+The fixed page has a one-to-many, two-level information architecture. `/` is the level-one audit
+management system with overview, complete run ledger, and technical archives; runtime monitoring is
+embedded in the overview and must not appear as a separate navigation view.
+Every catalog entry expands through `/?run=<workspace-id>` into its own level-two record. A completed
+record must use the approved original error-desk interface and show only that run's submitted scenarios;
+a running or failed record gets a status/diagnostic level-two page and must not impersonate a completed
+business result. Level-two pages return to the level-one ledger and may switch directly to another run.
+Counts inside the completed error desk represent grouped customer actions, not internal failed fields.
+Passing records, passing contract facts, the contract baseline, audit-process narration, and
+informational watermark policy remain in deterministic analysis but are hidden from the default
+customer result. Explicit technical archives may expose schema-validated evidence, deterministic
+result objects, verification receipts, observable events, and DOM-data checkpoints; they must never
+expose model-private reasoning or treat an AI narrative as decision authority.
+
+A temporary workbook and assembled legacy projection may be created from empty state inside a
+run-scoped system temporary directory solely to shape and verify the customer view payload. They must
+never be exposed to the model or published, and must be deleted before the run finishes. A failed run
+keeps its manifest, safe logs, analysis already validated, and failure checkpoint for diagnosis, but
+must not claim a completed business result.
 
 - personnel shows only failed product and settlement/payment rows;
 - promotional display groups all contract-attachment knowledge failures into one expandable card,
@@ -265,6 +321,8 @@ watermark policy remain in deterministic evidence but are hidden from the custom
   with their own photo/date/location/display/product error. Never repeat upstream failures per store;
 - poster/material shows only grouped blocking errors and preserves every affected photo basename and
   visible date/time/location, finished content, placement, and dimension limitation.
+- entry fee shows only grouped contract-authority, fee-calculation, store/product shelf-photo,
+  system-deduction, and source-integrity errors.
 
 For promotional display, render evidence in this fixed order: contract core six controls; contract
 core/attachment products → knowledge base; page- and line-preserving contract sales attachment;
@@ -298,31 +356,52 @@ photo with corrected watermark location. Do not call it unreadable or ask only f
 the filename cannot override a conflicting watermark. Reserve missing/unreadable wording for a photo
 that truly lacks reliable visible location evidence.
 
-The canonical interface bundle is rooted at
-`skills/orchestrate-offline-audit/assets/canban-audit-shell.html` with the maintained
-`error-only.css` and `error-only.js` components beside it. The production generator assembles and
-hashes all three, then injects verified run data only through the designated data and integrity slots.
-The published HTML inlines the components and has no sibling dependency. Every other assembled byte,
-including template version, CSS, visible copy, layout, interactions, and button set, remains unchanged.
-`audit_core.html_report.verify_html_report` must rebuild the bundle and verify its version, combined
-style hash, and assembled-shell fingerprint before publication.
+The canonical customer interface is the root `offline-activity-audit.html`, currently Audit System
+`2.2.0`. Its level-one system, approved original level-two error desk, copy, layout,
+customer/technical separation, run-history behavior, relative API contract, responsive behavior, and
+controls remain unchanged during an ordinary audit. It reads only the trusted service's `/api/config`,
+`/api/runs`, run `snapshot`, `log`, `events`, approved `analysis`, and `checkpoints` resources. The
+trusted server injects the selected run payload into the fixed HTML response for `/?run=<workspace-id>`
+without modifying the file on disk. Direct `file://` opening redirects to the loopback service; LAN
+clients use the same relative endpoints. Future audit runs must never rewrite this file.
 
-Future audit runs and ordinary feature/fix tasks must not restyle, regenerate, paraphrase, reorder, or
-extend the canonical shell; they must not change its CSS, static DOM, visible copy, interaction model,
-or add buttons. The shell may change only when the user explicitly asks for a frontend redesign. That
-same redesign change must deliberately update the asset version, expected fingerprint/structural
-verification, affected tests, and this output contract. Do not silently weaken or bypass the
-verification to accept a changed shell.
+The older bundle under `skills/orchestrate-offline-audit/assets/` remains a deterministic, run-scoped
+view-payload compiler and verifier. `audit_core.html_report` may assemble it only in system temporary
+space to prove the six-column projection, extract the verified `audit-data` payload, and then delete the
+temporary HTML. It is not the customer entrypoint and must never be published into `worktrees/`.
 
-Template `3.2.0` freezes the approved error-only delivery standard for every submitted supported scenario: white Canban header, cold-gray
-grid, dark clipped rail, rejected-only hero, four error metrics, error-composition strip, wide scenario
-queue rows, and complete error cards ordered as problem file, optional baseline, cause, and handling
-action. The contract-product detail table is the only default-collapsed evidence disclosure. The only
-controls are scenario tabs, queue-entry buttons, return-to-home buttons, that native disclosure, and
-the floating back-to-top button. At 390 px the page has no horizontal overflow and the first scenario
-entry stays in or immediately adjacent to the first viewport.
+Future ordinary feature/fix tasks must not restyle or extend the root system or its approved original
+record view. They may change only when the user explicitly requests a frontend redesign or system
+behavior change. That same change must update the system version, read-only API contract, affected
+tests, PC browser verification at 1440×960, this output contract, the orchestration Skill, and
+README; never weaken verification to accept a changed page.
 
-Legacy or acceptance workbooks under `worktrees/` are test-only, are not formal output, and must never
+Audit System `2.2.0` freezes the persistent audit-ledger standard: a level-one management center with
+system overview, full audit ledger, and technical archive. Runtime monitoring is part of the overview
+and has no separate navigation entry. It uses the selected run's real snapshot to show a six-stage chain
+(bootstrap, intake, analysis, evidence, decision, verification) as a planet-and-orbit inspection path,
+plus the four newest observable events. The canonical six-task main-flow checklist comes from
+`audit_core.workbench_store.main_flow_task_list`, is persisted in every new manifest, and is exposed by
+the read-only workbench context and `/api/config`; the frontend must not maintain a differently ordered
+stage list. Multi-scenario execution is stage-batched: every analysis event precedes every evidence
+validation event, every evidence event precedes every deterministic decision event, and verification
+comes last, so the run-level stage index never regresses. Running pages may probe silently, but visible content updates only when the selected
+workspace, terminal status, or stage progress index changes. Events within the same stage never rerender
+the overview, and a running level-two record never reloads on a fixed timer. A full-page reload always
+opens system overview; the ledger state saved before opening a
+level-two record is consumed only once when returning. Module actions never cross-nest: overview summaries
+and runtime monitoring have no record buttons, ledger rows only open the record, and technical-archive
+cards only open logs and checkpoints. The system also has one approved original
+error-desk level-two page per completed run and a truthful diagnostic level-two page for incomplete
+runs. The original record view retains its dark scenario rail, cold-gray grid canvas, error-only hero,
+four grouped-error metrics, and scenario queues. Formal frontend delivery is PC-only: verify at 1440×960
+and keep desktop widths of 1280px or greater usable. Narrow-screen CSS is best-effort fallback, not a
+mobile configuration or acceptance promise.
+Customer output must translate engineering enums and keys into business-readable Chinese; technical
+JSON stays inside explicitly labeled technical views.
+
+Legacy HTML files already under `worktrees/` are read-only compatibility results and may be projected by
+the trusted server without modification. Legacy or acceptance workbooks remain test-only and must never
 be read, copied, or used by runtime code or model prompts.
 
 ## Change verification
@@ -334,11 +413,15 @@ py -3 -B -m unittest discover -s tests -v
 py -3 -B -m compileall -q audit_core skills
 ```
 
-Also validate all JSON files and Skill frontmatter, run the bundled formal command against the retained real ZIP inputs when the execution path changes, verify that only the canonical self-contained HTML is published and that its template version/static fingerprint pass, confirm every temporary workbook is removed, and finish with `git diff --check` and `git status --short`.
+Also validate all JSON files and Skill frontmatter, run the bundled formal command against retained real
+ZIP inputs when the execution path changes, verify that no per-run HTML or workbook is published, every
+temporary workbook/page/source tree is removed, and the worktree contains an atomic manifest/snapshot,
+append-only events, safe observable log, analysis index, and DOM-data checkpoints. Start the trusted
+service on loopback and `0.0.0.0`, exercise the relative APIs and SSE, and verify the fixed workbench at
+1440×960 desktop with zero console/page errors before finishing with `git diff --check` and
+`git status --short`.
 
-When a user designates an approved reference HTML, run
-`skills/orchestrate-offline-audit/scripts/verify_delivery_standard.py` only after the formal runner has
-published its candidate. The reference is acceptance-only: runtime code and model prompts must never
-read or copy it. Do not finish until the exact approved shell/CSS and desktop pixels, rendered error
-structure and business facts, candidate source-derived invariants, interactions, offline behavior,
-and 390px responsive checks all pass.
+When a user designates an approved reference HTML, use it only for explicit workbench redesign
+acceptance. Runtime code, model prompts, evidence extraction, and run snapshots must never read or copy
+it. Compare the root fixed page after the local service loads a source-derived test snapshot; do not
+compare or patch a generated per-run page.

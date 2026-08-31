@@ -1,0 +1,4 @@
+interface:
+  display_name: "进场费核销"
+  short_description: "核验条码费合同、门店上架照片和系统扣款凭证"
+  default_prompt: "Use $audit-entry-fee through the parent orchestrator to audit one registered entry_fee package and return the verified self-contained HTML."

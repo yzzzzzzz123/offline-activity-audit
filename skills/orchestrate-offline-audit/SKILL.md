@@ -1,6 +1,6 @@
 ---
 name: orchestrate-offline-audit
-description: Generate one verified self-contained Canban offline-activity reimbursement HTML from one to five ZIP submissions, covering personnel incentives, promotional/stack displays, poster/material production, specially approved other expenses, maintenance fees, or a selected combination. Use whenever input/ contains new offline audit materials and Codex must safely classify them, extract only visual facts with AI, deterministically close document/product/store/photo/amount controls, and publish the canonical local interface without using prior outputs or a gold workbook at runtime.
+description: Generate one verified persistent run archive for the fixed Canban offline-activity audit workbench from one to ten ZIP submissions, covering personnel incentives, promotional/stack displays, poster/material production, specially approved other expenses, maintenance fees, extra giveaways, price-difference support, dealer POS-target incentives, entry/barcode fees, customer self-procured gift materials, or a selected combination. Use whenever input/ contains new offline audit materials and Codex must safely classify them, extract only visual facts with AI, deterministically close document/product/store/photo/amount controls, and publish schema-validated analysis, logs, DOM-data checkpoints, and a customer snapshot without regenerating the root HTML or using prior outputs or a gold workbook at runtime.
 ---
 
 # Orchestrate Offline Audit
@@ -12,20 +12,44 @@ py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --produc
 ```
 
 Every Agent executing an audit must call this bundled runner. Do not call internal report/render
-functions as a substitute, handwrite the final HTML, copy or patch a prior result, rebuild the frontend,
-or introduce a second CLI, Git run branch, persistent snapshot, separate delivery directory,
-template-copy step, or post-run replacement workflow. The runner publishes the one formal HTML.
+functions as a substitute, handwrite a run page, copy or patch a prior result, rebuild the frontend,
+or introduce a second CLI, Git run branch, alternate worktree root, template-copy step, or post-run
+replacement workflow. The runner publishes one versioned run archive; the root workbench stays fixed.
+
+## Main-flow task checklist
+
+Every formal run uses this exact six-task main flow, in this order:
+
+- [ ] `01 bootstrap` — 运行初始化：建立持久化运行目录。
+- [ ] `02 intake` — 材料分流：识别场景与资料角色。
+- [ ] `03 analysis` — AI 识别：提取材料中的可见事实。
+- [ ] `04 evidence` — 证据校验：核对 Schema 与来源边界。
+- [ ] `05 decision` — 核销决策：执行确定性业务规则。
+- [ ] `06 verification` — 结果封存：验证页面投影与技术档案。
+
+The ordered runtime source of truth is `audit_core.workbench_store.main_flow_task_list`. Persist the
+same list in every new run manifest, expose it through the read-only workbench context and
+`/api/config`, and render the overview from that list. Do not maintain a differently named, reordered,
+or shortened frontend-only stage list. Multi-scenario runs are stage-batched, not scenario-interleaved:
+finish AI recognition for every selected scenario before any evidence-validation event; finish evidence
+validation for every scenario before any deterministic decision event; finish every decision before
+report verification. The observable stage index must therefore be monotonic for the whole run.
 
 ## Input contract
 
-Read only ZIP files directly inside `<project>/input/`. Require one to five ZIPs. Read [routing-rules.md](references/routing-rules.md) before changing classification or extraction.
+Read only ZIP files directly inside `<project>/input/`. Require one to ten ZIPs. Read [routing-rules.md](references/routing-rules.md) before changing classification or extraction.
 
 - A personnel-incentive ZIP contains exactly one sales Excel, no PDF, exactly one identifiable settlement image, and at least one transfer/red-packet screenshot.
 - A promotional-display ZIP contains exactly one contract PDF, exactly one sales Excel, and at least one field photo.
 - A poster/material-production ZIP contains one signed-contract image, one invoice/receipt image, one settlement-form image, and one nested field-photo ZIP; unrelated POS evidence is excluded.
 - An other-expense ZIP is explicitly marked `其他`, has no Excel or nested ZIP, and contains exactly one promotional contract, exactly one settlement, at least one independent agreement/contract/invoice/receipt, plus any activity photos, POS, or special-approval evidence. The marker routes the package but never proves eligibility.
 - A maintenance-fee ZIP is explicitly marked `维护费用` or `维护费`, has no nested ZIP, and contains at least one visual POS or settlement candidate. Bind a maximum of one POS spreadsheet, one promotional contract, and one settlement; missing mandatory roles remain blocking audit issues so the incomplete representative package can produce an exact resubmission list, while duplicate singleton candidates remain an intake error.
-- Accept any supported type alone or one of each. Reject zero ZIPs, more than five ZIPs, two ZIPs of the same type, unknown type, or ambiguous roles with a specific error. Use `--scenario other_expense` or `--scenario maintenance_fee` when only that submitted package must be published.
+- An extra-giveaway ZIP is explicitly marked `额外搭赠` or `搭赠`, has no Excel or nested ZIP, and contains one or more visual documents. Every visual source is neutrally bound once; visible titles then distinguish the signed promotional contract, dealer-stamped settlement, system sales/delivery statement, store receipts, activity photos, support, or other document. Missing roles remain blocking report issues, while duplicate contract/settlement/delivery candidates fail evidence acceptance.
+- A price-difference ZIP is explicitly marked `补差` or `价格补差`, contains one signed promotional contract, one settlement, stamped POS visuals, zero or one POS Excel, and one safely extracted activity-photo RAR. Missing Excel becomes a blocking issue; every contract/POS store must have its own in-period date/address/time-watermarked photo showing the contract activity price.
+- A POS-target-incentive ZIP is explicitly marked `POS激励达标`, `POS达标激励`, or `POS激励`, has no nested archive, and binds at most one POS Excel, promotional contract, and settlement plus stamped POS and full-reduction activity proof. Missing roles remain blocking issues. The recipient is the dealer; the signed contract establishes approved-channel eligibility, tiers, rates and cap.
+- An entry-fee ZIP is explicitly marked `进场费` or `条码费`, has no Excel/nested ZIP, contains one clearly named signed entry contract/product-promotion agreement and one safely extracted shelf-photo RAR. Bind any explicit system-deduction proof separately; missing proof remains a blocking issue because shelf photos cannot prove an actual system deduction.
+- A self-procured-gift-material ZIP is explicitly marked `自采赠品物料`, `自采赠品`, or `自采物料`, binds one signed promotional contract, one customer-stamped settlement, one itemized invoice/receipt, payment records, stamped POS visuals, at most one modern POS spreadsheet, and exactly one legacy activity-return `.xls`. Extract every embedded return photo through its WPS DISPIMG relationship and retain workbook row/store hints only for routing. The legacy return workbook is not the POS spreadsheet; a missing modern POS spreadsheet remains blocking.
+- Accept any supported type alone or one of each. Reject zero ZIPs, more than ten ZIPs, two ZIPs of the same type, unknown type, or ambiguous roles with a specific error. Use `--scenario other_expense`, `--scenario maintenance_fee`, `--scenario giveaway_promotion`, `--scenario price_difference_support`, `--scenario pos_target_incentive`, `--scenario entry_fee`, or `--scenario self_procured_gift_material` when only that submitted package must be published.
 - Reject unsafe ZIP paths, links, encryption, duplicate/case-colliding paths, excessive expansion, suspicious compression ratios, and duplicate image basenames.
 
 Extract only into a run-scoped temporary directory that is removed automatically. Do not create `input/.prepared`, `.audit-tmp`, a cache, or a persistent run directory.
@@ -40,6 +64,11 @@ AI may act only as the eyes:
 - display: read the contract PDF and field photos;
 - poster/material: read the contract, invoice/receipt, settlement, and every finished-product field photo;
 - maintenance fee: read only the stamped-POS visual, signed promotional contract, settlement, fee-specific documents, and activity photos; never expose the POS spreadsheet to AI;
+- extra giveaway: read every isolated submitted visual document so generic camera-export names can be classified from visible content; never calculate or decide the claim in the visual stage;
+- price difference: read the signed contract, settlement, stamped POS visuals, and every safely extracted field photo; never expose the POS spreadsheet or infer a support unit amount from the retail price reduction;
+- POS target incentive: read the signed contract, stamped POS, dealer-stamped settlement, and activity photos/receipts/other proof; never expose the POS spreadsheet or treat settlement tiers as a substitute for contract authority;
+- entry fee: read the signed entry contract, every safely extracted shelf photo and explicit system-deduction proof; treat folder/store hints as routing-only and never as visible business evidence;
+- self-procured gift material: read the signed promotional contract, customer-stamped settlement, itemized invoice/receipt, each payment record, every stamped POS visual, and every activity photo extracted from the legacy return workbook; never expose or infer the POS spreadsheet, and treat workbook row/store/period hints as routing-only;
 - return schema-valid JSON with visible text, dates, locations, packaging, display observations, transfer occurrences, limitations, and source basenames.
 
 Do not give the AI a copy of the sales Excel. Instruct it not to read `input/`, `worktrees/`, caches, history, prior results, or the gold-standard workbook. The AI must not calculate supported amounts, choose Excel barcodes/names, or make the final reimbursement decision.
@@ -75,10 +104,14 @@ Deterministic Python owns all remaining work:
   ticket and settlement line items, quantities, unit prices, subtotals, total, company, date, and
   seals; then require watermarked photo coverage for period, time, location, finished content,
   dimensions, placement, and every contracted unit/store without extrapolation;
+- extra-giveaway contract-first reconciliation: keep normal shipment value separate from the gift claim; compare contract period, eligible purchase/gift products and ratio to the stamped settlement, system sales/delivery statement, store receipts, and activity photos; deterministically verify zero-value receipt gifts, receipt-local ratio, product correspondence, shipment total, gift quantity × explicit unit value, budget, claim, and duplicate evidence;
+- price-difference contract-first reconciliation: distinguish original price, activity price, and contract support unit amount; reconcile stamped POS to the electronic spreadsheet; require every activity store's own valid watermarked activity-price photo; calculate eligible POS quantity × contract support unit and apply contract quantity/budget limits before comparison with the stamped settlement;
+- POS-target contract-first reconciliation: require dealer recipient and strategic/approved-special-channel eligibility; reconcile period/store/sales amounts between stamped POS and the unique electronic summary; require full-reduction activity existence proof; select the highest reached contract tier, multiply the POS base by its rate, apply the contract cap, and compare the stamped settlement;
+- entry-fee contract-first reconciliation: verify both-party execution, channel, product-barcode rows, contracted stores, fee sum, payment method and actual-shelving conditions; uniquely match each photo's visible watermark to a contract store, require each contract product across all required stores, and cap support by the contract total and visible system-deduction amount without multiplying a per-barcode fee by store count;
 - image hashes and duplicate screening;
 - dates, quantities, rewards, transfers, claims, supported amounts, and final pass/supplement decisions;
-- result-schema validation, temporary intermediate generation/verification, canonical HTML rendering,
-  naming, static-shell verification, and atomic publication.
+- result-schema validation, temporary view-payload rendering/verification, persistent archive naming,
+  append-only logs, DOM-data checkpoints, snapshot hashing, and atomic publication.
 
 ## Routing and audit
 
@@ -89,6 +122,11 @@ Process scenarios in this fixed order when both exist:
 3. `poster_material` → read [audit-poster-material](../audit-poster-material/SKILL.md) and its linked rules/schema completely.
 4. `other_expense` → read [audit-other-expense](../audit-other-expense/SKILL.md) and its linked rules/schema completely.
 5. `maintenance_fee` → read [audit-maintenance-fee](../audit-maintenance-fee/SKILL.md) and its linked rules/schema completely.
+6. `giveaway_promotion` → read [audit-giveaway-promotion](../audit-giveaway-promotion/SKILL.md) and its linked rules/schema completely.
+7. `price_difference_support` → read [audit-price-difference-support](../audit-price-difference-support/SKILL.md) and its linked rules/schema completely.
+8. `pos_target_incentive` → read [audit-pos-target-incentive](../audit-pos-target-incentive/SKILL.md) and its linked rules/schema completely.
+9. `entry_fee` → read [audit-entry-fee](../audit-entry-fee/SKILL.md) and its linked rules/schema completely.
+10. `self_procured_gift_material` → read [audit-self-procured-gift-material](../audit-self-procured-gift-material/SKILL.md) and its linked rules/schema completely.
 
 Validate AI evidence before calculation and validate each deterministic result against
 `contracts/audit-result.schema.json` before rendering. An aggregate match never substitutes for a
@@ -100,25 +138,31 @@ Do not infer or create a new scenario during an ordinary formal run. When the us
 representative ZIP plus a business prompt and asks to extend this system, use
 [create-offline-audit-scenario](../create-offline-audit-scenario/SKILL.md). That workflow first checks
 whether the package is an instance of `personnel_incentive`, `promotional_display`,
-`poster_material`, `other_expense`, or `maintenance_fee`; only a genuinely different reusable material/authority/decision chain gets a new
+`poster_material`, `other_expense`, `maintenance_fee`, `giveaway_promotion`, `price_difference_support`, `pos_target_incentive`, `entry_fee`, or `self_procured_gift_material`; only a genuinely different reusable material/authority/decision chain gets a new
 `audit-*` Skill. The new scenario must be registered from safe routing through deterministic audit,
-result Schema, six-column intermediate, canonical HTML, CLI selection, documentation, and tests
+result Schema, six-column intermediate, fixed-workbench projection, persistent trace, CLI selection, documentation, and tests
 before it is advertised here or accepted by this runner.
 
-## Canonical HTML contract
+## Persistent workbench contract
 
-The formal result is one self-contained UTF-8 HTML file. A temporary workbook may be created from an
-empty `openpyxl.Workbook` only as a run-scoped deterministic intermediate for data shaping and
-verification. Never load a prior workbook as a template, publish the temporary workbook, expose it to
-the model, or leave it behind after success or failure. Legacy/acceptance workbooks are test-only.
+The only customer-facing HTML is the repository-root `offline-activity-audit.html`. It is the
+persistent Audit System `2.2.0` shell served by the trusted local service and must not be regenerated,
+copied, or patched by an audit run. `/` is the level-one management system; each catalog entry expands
+through `/?run=<workspace-id>` into a level-two record. Completed records retain the approved original
+error-desk interface, while incomplete records receive a truthful diagnostic page. A temporary
+workbook and assembled legacy projection may be created from an empty `openpyxl.Workbook` only in
+system temporary space for deterministic data shaping and verification. Never load a prior workbook
+as a template, publish either temporary artifact, expose them to the model, or leave them behind after
+success or failure. Legacy/acceptance workbooks are test-only.
 
 The run-scoped workbook retains every deterministic source row and comparison for schema and coverage
-verification. The customer-facing HTML is an **error-only projection** of that verified payload:
+verification. The fixed workbench's customer view is an **error-only projection** of that verified payload:
 passing rows, passing contract facts, the contract baseline, audit-process narration, and the
 informational watermark policy are not rendered. Hiding them is presentation filtering only; they
 remain available to every downstream decision and to the embedded verification payload.
 
-The single HTML contains the fixed error desk and one error list for every submitted scenario:
+Each completed level-two record contains the fixed original error desk and one error list for every
+scenario submitted in that run:
 
 - the home view shows exactly four metrics: `核销场景`, `错误总数`, `材料 / 结算错误`, and
   `商品 / 门店错误`; its total is the number of grouped customer actions, not the number of internal
@@ -141,6 +185,10 @@ The single HTML contains the fixed error desk and one error list for every submi
 - maintenance fee renders only grouped blocking errors for required materials, fee nature, POS seal,
   POS spreadsheet/correspondence, contract, settlement, party/period alignment, fee-specific support,
   and amount recalculation. It never merges with the other-expense special-approval queue;
+- extra giveaway renders only grouped blocking errors for required materials, fee nature, contract,
+  settlement, system sales/delivery, party/period/product correspondence, receipt ratio and zero-value
+  gifts, activity photos, duplicate evidence, shipment reconciliation, and gift-amount recalculation.
+  Normal shipment value is never displayed as the gift claim;
 - other expense renders only classification, special-approval, document, amount, or final manual-
   review actions. It first names every visible fee description that belongs to an established type;
   only a genuinely unclassifiable fee moves to the special-approval gate. Even when complete, the
@@ -265,87 +313,79 @@ price, discount, gift, multi-buy, `1+1`, `3+2`, or value-pack signal and is mand
 core contract requires it. Calculate amount only from an explicit per-store or per-stack unit basis;
 never divide a total automatically.
 
-## Frozen interface asset
+## Frozen persistent interface
 
-The canonical frontend bundle is rooted at
-`skills/orchestrate-offline-audit/assets/canban-audit-shell.html` and contains exactly two maintained
-components beside it: `error-only.css` and `error-only.js`. The production generator is
-`audit_core.html_report.create_html_report_from_workbook`. It first assembles those three repository
-assets, hashes the complete assembled shell and both style blocks, and may then replace only the
-verified-data and integrity-hash slots. The components are build-time assets only; the published page
-inlines them and has no sibling dependency. `audit_core.html_report.verify_html_report` must rebuild
-the canonical bundle and reject a template-version mismatch, assembled-shell fingerprint mismatch,
-style mismatch, external dependency, missing business content, unexpected control, or any byte outside
-the designated injection slots.
+The canonical customer page is the root `offline-activity-audit.html`. The trusted service in
+`audit_core.workbench_server` serves its level-one system at `/`, injects the selected verified view
+payload into the same fixed HTML response for `/?run=<workspace-id>`, and exposes only relative,
+read-only workbench APIs. Injection changes the response, never the file on disk. The page reads the
+run catalog, atomic snapshot, append-only events, observable log, manifest-approved analysis files,
+and DOM-data checkpoints. A direct `file://` open redirects to loopback; LAN clients use the same
+relative API paths. The page has no CDN, remote font, third-party script, or remote business-data
+dependency.
 
-Do not handwrite or redesign the page during an audit. Do not reproduce it from prose, a screenshot,
-or prior output; do not patch generated HTML after the runner; and do not add a new button, style,
-layout, label, or interaction for an ordinary business or bug-fix request. Future tasks must reuse the
-canonical shell byte-for-byte outside the designated injection slots. The shell may change only when
-the user explicitly requests a frontend redesign. The same redesign change must update the asset
-version, expected fingerprint/structural verification, affected tests, and this Skill contract; never
-weaken verification merely to accept a modified shell.
+The assets under `skills/orchestrate-offline-audit/assets/` are retained only as the deterministic
+run-scoped view-payload compiler. `audit_core.html_report.create_html_report_from_workbook` may assemble
+them in system temporary space, `verify_html_report` must still reject structural or data drift, and
+the persistent runner extracts the verified `audit-data` payload before deleting the temporary page.
+No assembled per-run HTML is published.
 
-The generated page remains one `file://`-openable document with all business data, CSS, and JavaScript
-inline and no server, network, CDN, font download, sibling Excel, JSON sidecar, or output asset
-directory. Its fixed navigation, queue buttons, error-detail disclosure, back-to-home control,
-back-to-top control, responsive behavior, copy, and exact button set come from the canonical bundle.
+Do not handwrite or redesign the root page during an audit. Do not reproduce it from prose, a
+screenshot, or prior output; do not patch it after a run; and do not add a new button, style, layout,
+label, or interaction for an ordinary business request. The page may change only when the user
+explicitly requests a frontend/workbench redesign. The same change must update its version, read-only
+API contract, browser verification, affected tests, AGENTS/README, and this Skill contract.
 
-Template `3.2.0` freezes the approved error-only delivery standard for up to five submitted scenarios. Keep the white `参半` + small
-lower-right `CANBAN` header, cold-gray grid canvas, dark clipped left rail, white clipped rejected-only
-hero, four equal metric cards, error-composition strip, and one wide queue row per submitted scenario. The home
-hero reads `核销错误处置总览`; the rail and queue show only grouped errors. Personnel uses the coral
-accent, promotional display amber, display props teal, other-expense special approval purple, and maintenance-fee blue. Do not restore the former pass/object
-dashboard, contract-baseline panels, passing records, search/filter toolbar, expand-all control, store
-evidence wall, generic card pile, health ring, clock, online decoration, fake action, external asset,
-or another presentation layer.
-
-Each scenario page has one dark `核销错误清单` header followed by complete error cards. Cards use the
-fixed order `问题文件`, optional `对照文件`, `错误原因`, `处理方式`. The contract-product card alone
-may contain the native, initially collapsed detail disclosure with its complete error table. That
-disclosure remains keyboard-operable. The only scenario navigation is the left-rail tab, queue-entry
-button, and `返回错误总览`; `返回顶部` is the only floating button.
-
-At 1120 px the grid may reflow; below 880 px the rail becomes a horizontal scenario strip; below
-620 px the home, cards, and tables stack. At 390×844 the page must have no horizontal overflow and the
-first scenario queue entry must remain in or immediately adjacent to the first viewport. Narrow-screen
-detail tables become labeled blocks without dropping a PDF line, product, source file, cause, or action.
+Audit System `2.2.0` freezes the persistent two-level standard: the level-one page contains system
+overview, full run ledger, and technical archives. Runtime monitoring is embedded in the overview and
+must not appear as a separate navigation view. It reads the selected run snapshot and renders a truthful
+six-stage planet-and-orbit inspection chain (bootstrap, intake, analysis, evidence, decision,
+verification) plus the four newest observable events. A silent probe may inspect a running snapshot,
+but the visible system updates only when the selected workspace, terminal status, or six-stage progress
+index changes; events written inside the same stage must not rerender the overview. A running level-two
+record reloads under the same boundary rule, never on a fixed timer. Inactive catalog discovery is
+silent, and the ledger also retains its explicit manual refresh. A full-page reload always opens system
+overview; the ledger state saved
+before opening a level-two record is consumed only once when returning. Module actions stay exclusive:
+overview summaries and runtime monitoring have no record buttons, ledger rows only open records, and
+technical-archive cards only open logs and checkpoints. Every run expands into its own
+level-two page. A completed level-two page preserves the approved original dark scenario rail,
+cold-gray grid canvas, error-only hero, four grouped-error metrics, and scenario queues. A running or
+failed page preserves only truthful status and diagnostic data. Customer output uses Chinese business
+labels. Technical JSON is visible only in the explicitly labeled technical archive and must never
+include model-private reasoning. Formal frontend delivery is PC-only: verify at 1440×960 and keep
+desktop widths of 1280px or greater usable. Narrow-screen CSS is best-effort fallback and is not a
+mobile configuration or acceptance requirement. Error cards must not drop a source file, cause, action,
+impact, or conclusion.
 
 ## Output and verification
 
-Publish exactly one file directly to:
+Keep exactly one customer-facing HTML at:
 
-`worktrees/<YYYYMMDD>-<producer-model>.html`
+`offline-activity-audit.html`
 
-Do not publish an `.xlsx`, JSON sidecar, second scenario page, or asset directory. `producer-model` is
-required provenance supplied by the executing model: use `codex` for Codex and an explicit safe label
-such as `qwen3.7` for another model. Require `run-id` to begin with a valid `YYYYMMDD` business date
-and omit the rest of the run identity from the delivery filename. The first Codex result is
-`20260818-codex.html`. Never overwrite: another result for the same date and producer becomes
-`20260818-codex-1.1.html`, then `20260818-codex-1.2.html`; keep an independent monotonic sequence for
-each producer and never refill a deleted revision.
+An ordinary run never rewrites that file. Publish its persistent archive to
+`worktrees/<YYYYMMDD>-<producer-model>[-1.N]/`. `producer-model` is required provenance supplied by the
+executing model: use `codex` for Codex and an explicit safe label such as `qwen3.7` for another model.
+Require `run-id` to begin with a valid `YYYYMMDD` business date. Never overwrite: another result for
+the same date and producer becomes `20260818-codex-1.1/`, then `20260818-codex-1.2/`; keep an independent
+monotonic sequence and let legacy HTML files reserve their historical IDs.
 
-Before publication, verify the deterministic business/result schemas, any temporary intermediate,
-complete scenario/record coverage, UTF-8/self-contained output, canonical asset version, static-shell
-fingerprint, fixed controls, and zero external dependencies. Confirm the final run publishes only the
-HTML and removes every temporary workbook, extracted source, model workspace, and temporary page. A
-failed run must leave no formal output.
+Each archive contains `manifest.json`, atomic `snapshot.json`, `logs/events.jsonl`, `logs/run.log`,
+schema-validated `analysis/` files, and `dom/checkpoints/`. Do not publish a run HTML or workbook.
+Before completion, verify business/result schemas, temporary six-column and HTML projections, complete
+scenario/record coverage, the fixed workbench API payload, and all listed analysis/checkpoint hashes.
+Confirm every temporary workbook, extracted source, model workspace, and temporary page is removed.
+A failed run preserves only its safe diagnostic archive and must not claim a completed customer result.
 
-When the user designates an approved reference HTML as the delivery standard, that file is
-acceptance-only and must never be read by the generator, copied into the output, exposed to the model,
-or used to fill business evidence. After the bundled formal command publishes its candidate, run:
+Start the trusted service with:
 
 ```powershell
-py -3 -B skills/orchestrate-offline-audit/scripts/verify_delivery_standard.py `
-  --reference <approved-reference.html> `
-  --candidate <published-worktree.html>
+py -3 -B skills/orchestrate-offline-audit/scripts/serve.py --host 0.0.0.0 --port 8080
 ```
 
-Do not finish the task until this verifier returns `passed: true`. It requires the exact approved
-error-only title, shell, CSS and 1440-pixel desktop screenshot; it also compares the rendered error
-structure and business facts, then independently validates the candidate's complete source-derived
-business invariants. It exercises scenario navigation and the native detail disclosure, requires zero
-browser errors or HTTP(S) requests, and checks the candidate at 390×844 for horizontal overflow and
-first-queue-entry placement. A failed comparison means the business extraction, deterministic result,
-report projection, or canonical asset must be corrected and the formal run repeated; never patch the
-published HTML.
+Verify `/api/config`, `/api/runs`, the selected run snapshot/log/events, every manifest-approved
+analysis/checkpoint resource, legacy HTML compatibility, desktop rendering, scenario and technical-tab
+interactions, refresh-to-overview behavior, and zero browser errors at 1440×960. When the user designates an
+approved reference HTML, use it only for an explicit root-workbench redesign acceptance; runtime code
+and model prompts must never use it to fill business evidence or run data.

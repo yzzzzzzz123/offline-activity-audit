@@ -525,6 +525,226 @@ def read_maintenance_pos(path: str | Path) -> dict[str, Any]:
         value_book.close()
 
 
+def read_pos_target_summary(path: str | Path) -> dict[str, Any]:
+    """Read the unique store-period-sales summary used by POS target incentives."""
+
+    source = Path(path).resolve()
+    formula_book = load_workbook(source, read_only=True, data_only=False)
+    value_book = load_workbook(source, read_only=True, data_only=True)
+    try:
+        selected: tuple[Any, Any, int, dict[str, int]] | None = None
+        aliases = {
+            "period": {"日期", "期间", "活动时间", "销售期间"},
+            "store": {"系统门店名称", "门店名称", "门店", "客户名称"},
+            "amount": {"销售金额", "销售额", "销售合计", "金额"},
+        }
+        for sheet_name in formula_book.sheetnames:
+            formula_ws = formula_book[sheet_name]
+            value_ws = value_book[sheet_name]
+            scan_rows = min(int(formula_ws.max_row), 50)
+            scan_columns = min(int(formula_ws.max_column), 30)
+            for row in range(1, scan_rows + 1):
+                columns: dict[str, int] = {}
+                for column in range(1, scan_columns + 1):
+                    text = normalize_text(formula_ws.cell(row, column).value)
+                    for field, candidates in aliases.items():
+                        if text in {normalize_text(value) for value in candidates}:
+                            columns.setdefault(field, column)
+                if set(columns) == {"period", "store", "amount"}:
+                    if selected is not None:
+                        raise AuditError(
+                            f"POS电子表存在多个门店销售汇总候选：{selected[0].title}、{sheet_name}"
+                        )
+                    selected = (formula_ws, value_ws, row, columns)
+                    break
+        if selected is None:
+            raise AuditError("POS电子表未找到日期、系统门店名称、销售金额三列表头")
+        formula_ws, value_ws, header_row, columns = selected
+        records: list[dict[str, Any]] = []
+        printed_totals: list[dict[str, Any]] = []
+        formula_cells: list[str] = []
+        external_formula_cells: list[str] = []
+        last_row = min(int(formula_ws.max_row), header_row + 10_000)
+        for row in range(header_row + 1, last_row + 1):
+            raw_values = [
+                formula_ws.cell(row, column).value
+                for column in range(1, int(formula_ws.max_column) + 1)
+            ]
+            for column, raw in enumerate(raw_values, 1):
+                if isinstance(raw, str) and raw.startswith("="):
+                    coordinate = formula_ws.cell(row, column).coordinate
+                    formula_cells.append(coordinate)
+                    if "[" in raw:
+                        external_formula_cells.append(coordinate)
+            normalized = {normalize_text(value) for value in raw_values if value is not None}
+            amount = _number(value_ws.cell(row, columns["amount"]).value)
+            if normalized & {"合计", "总计"}:
+                printed_totals.append(
+                    {"excel_row": row, "sales_amount": _json_quantity(amount) if amount is not None else None}
+                )
+                continue
+            period_value = formula_ws.cell(row, columns["period"]).value
+            store_value = formula_ws.cell(row, columns["store"]).value
+            if period_value is None and store_value is None and amount is None:
+                continue
+            if not store_value or amount is None:
+                continue
+            records.append(
+                {
+                    "excel_row": row,
+                    "period_text": str(period_value or "").strip(),
+                    "store_name": str(store_value).strip(),
+                    "sales_amount": _json_quantity(amount),
+                }
+            )
+        if not records:
+            raise AuditError(f"POS电子表没有可读取的门店销售金额明细：{source.name}")
+        stores = [normalize_text(item["store_name"]) for item in records]
+        if len(stores) != len(set(stores)):
+            raise AuditError("POS电子表门店汇总存在重复门店，无法唯一对应盖章POS")
+        total = sum(float(item["sales_amount"]) for item in records)
+        printed_total = printed_totals[0] if len(printed_totals) == 1 else None
+        printed_status = (
+            _money_pair_status(printed_total.get("sales_amount"), total)
+            if printed_total is not None
+            else "unverifiable"
+        )
+        return {
+            "source_file": source.name,
+            "sheet": formula_ws.title,
+            "header_row": header_row,
+            "detail_row_count": len(records),
+            "store_count": len(records),
+            "total_sales_amount": _json_quantity(total),
+            "printed_total_rows": printed_totals,
+            "printed_amount_status": printed_status,
+            "period_values": sorted({item["period_text"] for item in records if item["period_text"]}),
+            "formula_cells": sorted(set(formula_cells)),
+            "external_formula_cells": sorted(set(external_formula_cells)),
+            "records": records,
+        }
+    finally:
+        formula_book.close()
+        value_book.close()
+
+
+def read_self_procured_pos_summary(path: str | Path) -> dict[str, Any]:
+    """Read one unique store-period-quantity-amount POS summary for gift-material audit."""
+
+    source = Path(path).resolve()
+    formula_book = load_workbook(source, read_only=True, data_only=False)
+    value_book = load_workbook(source, read_only=True, data_only=True)
+    try:
+        selected: tuple[Any, Any, int, dict[str, int]] | None = None
+        aliases = {
+            "period": {"日期", "期间", "活动时间", "活动周期", "销售期间"},
+            "store": {"系统门店名称", "门店名称", "门店", "客户名称"},
+            "quantity": {"销售数量", "销量", "数量"},
+            "amount": {"销售金额", "销售收入", "销售额", "销售合计", "金额"},
+        }
+        normalized_aliases = {
+            field: {normalize_text(value) for value in values}
+            for field, values in aliases.items()
+        }
+        for sheet_name in formula_book.sheetnames:
+            formula_ws = formula_book[sheet_name]
+            value_ws = value_book[sheet_name]
+            for row in range(1, min(int(formula_ws.max_row), 50) + 1):
+                columns: dict[str, int] = {}
+                for column in range(1, min(int(formula_ws.max_column), 30) + 1):
+                    cell_text = normalize_text(formula_ws.cell(row, column).value)
+                    for field, candidates in normalized_aliases.items():
+                        if cell_text in candidates:
+                            columns.setdefault(field, column)
+                if set(columns) == {"period", "store", "quantity", "amount"}:
+                    if selected is not None:
+                        raise AuditError(
+                            f"POS电子表存在多个门店数量金额汇总候选：{selected[0].title}、{sheet_name}"
+                        )
+                    selected = (formula_ws, value_ws, row, columns)
+                    break
+        if selected is None:
+            raise AuditError("POS电子表未找到日期、门店名称、销售数量、销售金额四列表头")
+        formula_ws, value_ws, header_row, columns = selected
+        records: list[dict[str, Any]] = []
+        printed_totals: list[dict[str, Any]] = []
+        formula_cells: list[str] = []
+        external_formula_cells: list[str] = []
+        for row in range(header_row + 1, min(int(formula_ws.max_row), header_row + 10_000) + 1):
+            raw_values = [
+                formula_ws.cell(row, column).value
+                for column in range(1, int(formula_ws.max_column) + 1)
+            ]
+            for column, raw in enumerate(raw_values, 1):
+                if isinstance(raw, str) and raw.startswith("="):
+                    coordinate = formula_ws.cell(row, column).coordinate
+                    formula_cells.append(coordinate)
+                    if "[" in raw:
+                        external_formula_cells.append(coordinate)
+            normalized = {normalize_text(value) for value in raw_values if value is not None}
+            quantity = _number(value_ws.cell(row, columns["quantity"]).value)
+            amount = _number(value_ws.cell(row, columns["amount"]).value)
+            if normalized & {"合计", "总计"}:
+                printed_totals.append(
+                    {
+                        "excel_row": row,
+                        "sales_quantity": _json_quantity(quantity) if quantity is not None else None,
+                        "sales_amount": _json_quantity(amount) if amount is not None else None,
+                    }
+                )
+                continue
+            period_value = formula_ws.cell(row, columns["period"]).value
+            store_value = formula_ws.cell(row, columns["store"]).value
+            if period_value is None and store_value is None and quantity is None and amount is None:
+                continue
+            if not store_value or quantity is None or amount is None:
+                continue
+            records.append(
+                {
+                    "excel_row": row,
+                    "period_text": str(period_value or "").strip(),
+                    "store_name": str(store_value).strip(),
+                    "sales_quantity": _json_quantity(quantity),
+                    "sales_amount": _json_quantity(amount),
+                }
+            )
+        if not records:
+            raise AuditError(f"POS电子表没有可读取的门店数量金额明细：{source.name}")
+        normalized_stores = [normalize_text(item["store_name"]) for item in records]
+        if len(normalized_stores) != len(set(normalized_stores)):
+            raise AuditError("POS电子表门店汇总存在重复门店，无法唯一对应盖章POS")
+        total_quantity = sum(float(item["sales_quantity"]) for item in records)
+        total_amount = sum(float(item["sales_amount"]) for item in records)
+        printed_total = printed_totals[0] if len(printed_totals) == 1 else None
+        return {
+            "source_file": source.name,
+            "sheet": formula_ws.title,
+            "header_row": header_row,
+            "detail_row_count": len(records),
+            "store_count": len(records),
+            "total_sales_quantity": _json_quantity(total_quantity),
+            "total_sales_amount": _json_quantity(total_amount),
+            "printed_total_rows": printed_totals,
+            "printed_quantity_status": (
+                _money_pair_status(printed_total.get("sales_quantity"), total_quantity)
+                if printed_total is not None
+                else "unverifiable"
+            ),
+            "printed_amount_status": (
+                _money_pair_status(printed_total.get("sales_amount"), total_amount)
+                if printed_total is not None
+                else "unverifiable"
+            ),
+            "period_values": sorted({item["period_text"] for item in records if item["period_text"]}),
+            "formula_cells": sorted(set(formula_cells)),
+            "external_formula_cells": sorted(set(external_formula_cells)),
+            "records": records,
+        }
+    finally:
+        formula_book.close()
+        value_book.close()
+
+
 def _difference_hash(path: Path) -> str:
     with Image.open(path) as image:
         gray = image.convert("L").resize((9, 8))

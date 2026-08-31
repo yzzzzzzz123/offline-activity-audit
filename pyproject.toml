@@ -1,7 +1,7 @@
 [project]
 name = "offline-activity-audit"
 version = "0.2.0"
-description = "Generate one deterministic self-contained HTML for registered offline-activity audit scenarios"
+description = "Persist deterministic offline-activity audit runs for one fixed two-level LAN system"
 requires-python = ">=3.11"
 dependencies = [
   "jsonschema>=4.20,<5",

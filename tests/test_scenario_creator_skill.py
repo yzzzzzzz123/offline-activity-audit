@@ -96,13 +96,18 @@ class ScenarioZipProfilerTests(unittest.TestCase):
 
 
 class ScenarioCreatorContractTests(unittest.TestCase):
-    def test_current_main_flow_registers_all_five_scenarios(self) -> None:
+    def test_current_main_flow_registers_all_ten_scenarios(self) -> None:
         expected = (
             "personnel_incentive",
             "promotional_display",
             "poster_material",
             "other_expense",
             "maintenance_fee",
+            "giveaway_promotion",
+            "price_difference_support",
+            "pos_target_incentive",
+            "entry_fee",
+            "self_procured_gift_material",
         )
         self.assertEqual(SCENARIO_ORDER, expected)
         self.assertEqual(tuple(EVIDENCE_SCHEMA), expected)
@@ -131,6 +136,11 @@ class ScenarioCreatorContractTests(unittest.TestCase):
             "audit-poster-material",
             "audit-other-expense",
             "audit-maintenance-fee",
+            "audit-giveaway-promotion",
+            "audit-price-difference-support",
+            "audit-pos-target-incentive",
+            "audit-entry-fee",
+            "audit-self-procured-gift-material",
             "create-offline-audit-scenario",
             "orchestrate-offline-audit",
         ):

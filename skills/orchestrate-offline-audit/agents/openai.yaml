@@ -1,4 +1,4 @@
 interface:
   display_name: "Offline Audit Orchestrator"
-  short_description: "Audit 1-5 ZIPs into one verified offline HTML"
-  default_prompt: "Use $orchestrate-offline-audit to process one to five registered scenario ZIPs in input and publish one verified self-contained HTML; pass a run-id beginning with the YYYYMMDD business date and the actual executor identity as producer-model."
+  short_description: "Audit 1-10 ZIPs into the fixed two-level LAN system"
+  default_prompt: "Use $orchestrate-offline-audit to process one to ten registered scenario ZIPs in input sequentially and publish one verified persistent run archive for the fixed root system, where the level-one ledger expands each run into its own level-two record page; pass a run-id beginning with the YYYYMMDD business date and the actual executor identity as producer-model."
