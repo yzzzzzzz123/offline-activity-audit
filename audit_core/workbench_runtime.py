@@ -25,6 +25,7 @@ from .workbench_store import (
     DEFAULT_WORKTREES_ROOT,
     PROJECT_ROOT,
     WorkbenchRunStore,
+    atomic_write_json,
     reserve_workspace,
     sanitize_case,
 )
@@ -167,6 +168,24 @@ def build_parser() -> argparse.ArgumentParser:
         choices=SCENARIO_ORDER,
         help="只运行指定核销类型；不传时运行 input/ 中全部已支持类型",
     )
+    parser.add_argument(
+        "--input-dir",
+        default=str(DEFAULT_INPUT_DIR),
+        help="本次运行的 ZIP 输入目录；默认使用项目 input/",
+    )
+    parser.add_argument(
+        "--worktrees",
+        default=str(DEFAULT_WORKTREES_ROOT),
+        help="持久化运行目录；默认使用项目 worktrees/",
+    )
+    parser.add_argument(
+        "--workbench-url",
+        help="写入运行档案的工作台地址；默认读取 OFFLINE_AUDIT_WORKBENCH_URL",
+    )
+    parser.add_argument(
+        "--result-json",
+        help="将最终运行收据原子写入指定 JSON；供可信 OSS 入站适配器使用",
+    )
     return parser
 
 
@@ -176,11 +195,16 @@ def main(argv: list[str] | None = None) -> int:
         result = run_persistent_audit(
             args.run_id,
             producer_model=args.producer_model,
+            input_dir=args.input_dir,
+            worktrees_root=args.worktrees,
             model=os.environ.get("OFFLINE_AUDIT_MODEL") or None,
             scenario=args.scenario,
+            workbench_url=args.workbench_url,
         )
     except AuditError as exc:
         print(f"核销失败：{exc}", file=sys.stderr)
         return 2
+    if args.result_json:
+        atomic_write_json(Path(args.result_json).resolve(), result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

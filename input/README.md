@@ -22,7 +22,9 @@ py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <YYYYMMDD-run-id>
 ```
 
 程序会安全检查、自动分类并在临时目录解压。类型未知、同类重复或材料角色无法唯一绑定时会停止并提示；维护费用中可明确识别的缺失角色会进入正式错误清单。
-最终文件名只使用业务日期与实际模型名，例如 `20260818-codex.html`；同日期、同模型重跑时追加 `-1.1`、`-1.2`。
+最终档案目录只使用业务日期与实际模型名，例如 `worktrees/20260818-codex/`；同日期、同模型重跑时追加 `-1.1`、`-1.2`，不生成每次运行独立的 HTML 或 Excel。
+
+OSS 自动投递不会把远程对象复制到本目录。启用的工作台服务会把每个 OSS ZIP 持久下载到相邻的 [`input-oss/<job_id>/`](../input-oss/README.md)，校验后把该任务子目录交给同一个正式 `run.py`；因此本目录中的人工材料与 OSS 自动任务不会互相覆盖或混跑。接口配置和请求格式见根目录 [`README.md`](../README.md#oss-自动投递接口一期)。
 
 如果这里放入的是一个尚未登记的新业务类型，并且同时提供了业务规则提示，请先使用
 `skills/create-offline-audit-scenario/SKILL.md` 完成“新场景生成与接入”。开发阶段的未知 ZIP

@@ -4,7 +4,9 @@ import argparse
 import hashlib
 import json
 import mimetypes
+import os
 import re
+import secrets
 import socket
 import sys
 import time
@@ -16,6 +18,21 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .html_report import DATA_CLOSE, DATA_OPEN
+from .oss_intake import (
+    CALLBACK_PATH,
+    DEFAULT_CALLBACK_ATTEMPTS,
+    DEFAULT_CALLBACK_TIMEOUT_SECONDS,
+    DEFAULT_DOWNLOAD_TIMEOUT_SECONDS,
+    DEFAULT_MAX_DOWNLOAD_BYTES,
+    DEFAULT_OSS_INPUT_ROOT,
+    MAX_REQUEST_BYTES,
+    OSSIntakeConfig,
+    OSSIntakeConflictError,
+    OSSIntakeRequestError,
+    OSSIntakeService,
+    OSSIntakeUnavailableError,
+    public_job,
+)
 from .workbench_runtime import ROOT_HTML
 from .workbench_store import (
     DEFAULT_WORKTREES_ROOT,
@@ -25,7 +42,7 @@ from .workbench_store import (
 )
 
 
-API_VERSION = "1.1"
+API_VERSION = "1.2"
 SYSTEM_VERSION = "2.2.0"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8080
@@ -312,7 +329,18 @@ class WorkbenchCatalog:
 
 class WorkbenchHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # On Windows, SO_REUSEADDR can let two unrelated workbench processes bind
+    # the same port and make requests reach the older process unpredictably.
+    allow_reuse_address = os.name != "nt"
+
+    def server_bind(self) -> None:
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_EXCLUSIVEADDRUSE,
+                1,
+            )
+        super().server_bind()
 
     def __init__(
         self,
@@ -320,10 +348,19 @@ class WorkbenchHTTPServer(ThreadingHTTPServer):
         handler: type[BaseHTTPRequestHandler],
         *,
         catalog: WorkbenchCatalog,
+        intake: OSSIntakeService | None = None,
     ) -> None:
-        super().__init__(address, handler)
+        # socketserver calls server_close() when binding fails, so fields used
+        # by our override must exist before the base constructor starts.
         self.catalog = catalog
+        self.intake = intake
+        super().__init__(address, handler)
         self.started_at = _utc_now()
+
+    def server_close(self) -> None:
+        if self.intake is not None:
+            self.intake.close()
+        super().server_close()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -383,7 +420,10 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "响应数据过大")
             return
         etag = hashlib.sha256(encoded).hexdigest()
-        if self.headers.get("If-None-Match", "").strip('"') == etag:
+        if (
+            self.command in {"GET", "HEAD"}
+            and self.headers.get("If-None-Match", "").strip('"') == etag
+        ):
             self._headers(HTTPStatus.NOT_MODIFIED, "application/json; charset=utf-8", 0)
             return
         self._headers(
@@ -397,6 +437,56 @@ class Handler(BaseHTTPRequestHandler):
 
     def _error(self, status: int, message: str) -> None:
         self._json({"error": message, "status": int(status)}, status)
+
+    def _intake_authenticated(self) -> bool:
+        intake = self.server.intake
+        if intake is None:
+            return False
+        authorization = str(self.headers.get("Authorization") or "").strip()
+        supplied = ""
+        if authorization.lower().startswith("bearer "):
+            supplied = authorization[7:].strip()
+        if not supplied:
+            supplied = str(self.headers.get("X-Offline-Audit-Token") or "").strip()
+        return secrets.compare_digest(
+            supplied.encode("utf-8"),
+            intake.secret.encode("utf-8"),
+        )
+
+    def _require_intake(self) -> OSSIntakeService | None:
+        if self.server.intake is None:
+            self._error(HTTPStatus.SERVICE_UNAVAILABLE, "OSS 入站接口未启用")
+            return None
+        if not self._intake_authenticated():
+            self._error(HTTPStatus.UNAUTHORIZED, "OSS 入站鉴权失败")
+            return None
+        return self.server.intake
+
+    def _read_request_json(self) -> dict[str, Any]:
+        media_type = str(self.headers.get("Content-Type") or "").split(";", 1)[0]
+        if media_type.strip().lower() != "application/json":
+            raise OSSIntakeRequestError("Content-Type 必须是 application/json")
+        raw_length = self.headers.get("Content-Length")
+        if raw_length is None:
+            raise OSSIntakeRequestError("请求必须提供 Content-Length")
+        try:
+            length = int(raw_length)
+        except ValueError as exc:
+            raise OSSIntakeRequestError("Content-Length 无效") from exc
+        if not 1 <= length <= MAX_REQUEST_BYTES:
+            raise OSSIntakeRequestError(
+                f"请求体必须在 1 到 {MAX_REQUEST_BYTES} 字节之间"
+            )
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            raise OSSIntakeRequestError("请求体未完整接收")
+        try:
+            value = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise OSSIntakeRequestError("请求体不是有效 UTF-8 JSON") from exc
+        if not isinstance(value, dict):
+            raise OSSIntakeRequestError("请求 JSON 顶层必须是对象")
+        return value
 
     def _serve_html(self, query: dict[str, list[str]]) -> None:
         if not ROOT_HTML.is_file():
@@ -466,6 +556,31 @@ class Handler(BaseHTTPRequestHandler):
             ],
             "worktrees": self.server.catalog.root.name,
             "read_only": True,
+            "workbench_read_only": True,
+            "oss_intake": {
+                "enabled": self.server.intake is not None,
+                "endpoint": "/api/intake/oss",
+                "status_endpoint": "/api/intake/jobs/{job_id}",
+                "authenticated": True,
+                "single_worker": True,
+                "request_fields": ["verifyCode", "fileId", "downloadUrl"],
+                "callback_path": CALLBACK_PATH,
+                "callback_configured": (
+                    bool(self.server.intake.config.callback_url)
+                    if self.server.intake is not None
+                    else False
+                ),
+                "input_directory": (
+                    self.server.intake.input_root.name
+                    if self.server.intake is not None
+                    else None
+                ),
+                "max_download_bytes": (
+                    self.server.intake.config.max_download_bytes
+                    if self.server.intake is not None
+                    else None
+                ),
+            },
         }
 
     def _serve_events(self, workspace_id: str, query: dict[str, list[str]]) -> None:
@@ -526,6 +641,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"runs": runs, "count": len(runs)})
                 return
 
+            intake_match = re.fullmatch(r"/api/intake/jobs/([a-f0-9]{24})", route)
+            if intake_match:
+                intake = self._require_intake()
+                if intake is None:
+                    return
+                job = intake.get(intake_match.group(1))
+                self._json({"job": public_job(job)})
+                return
+
             match = re.fullmatch(r"/api/runs/([^/]+)(?:/(.*))?", route)
             if not match:
                 self._error(HTTPStatus.NOT_FOUND, "接口不存在")
@@ -569,6 +693,35 @@ class Handler(BaseHTTPRequestHandler):
         except OSError as exc:
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"读取失败：{exc}")
 
+    def do_POST(self) -> None:  # noqa: N802
+        route = urlparse(self.path).path.rstrip("/") or "/"
+        if route != "/api/intake/oss":
+            self._error(HTTPStatus.NOT_FOUND, "接口不存在")
+            return
+        intake = self._require_intake()
+        if intake is None:
+            return
+        try:
+            payload = self._read_request_json()
+            job, created = intake.submit(payload)
+            active = str(job.get("status")) not in {"completed", "failed"}
+            self._json(
+                {
+                    "job": public_job(job),
+                    "duplicate": not created,
+                    "status_url": f"/api/intake/jobs/{job['job_id']}",
+                },
+                HTTPStatus.ACCEPTED if active else HTTPStatus.OK,
+            )
+        except OSSIntakeConflictError as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
+        except OSSIntakeRequestError as exc:
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
+        except OSSIntakeUnavailableError as exc:
+            self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(exc))
+        except OSError as exc:
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"OSS 入站写入失败：{exc}")
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="启动线下活动核销固定局域网工作台")
@@ -579,7 +732,71 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(DEFAULT_WORKTREES_ROOT),
         help="持久化运行目录",
     )
+    parser.add_argument(
+        "--enable-oss-intake",
+        action="store_true",
+        help="启用带鉴权的 OSS 自动投递接口",
+    )
+    parser.add_argument(
+        "--oss-allowed-host",
+        action="append",
+        default=[],
+        help="允许下载 OSS 对象的精确 HTTPS 域名；可重复传入",
+    )
+    parser.add_argument(
+        "--oss-producer-model",
+        default=os.environ.get("OFFLINE_AUDIT_OSS_PRODUCER_MODEL", "codex"),
+        help="OSS 自动任务的 producer-model，默认 codex",
+    )
+    parser.add_argument(
+        "--oss-max-bytes",
+        type=int,
+        help="单个 OSS ZIP 最大下载字节数；默认 1 GiB",
+    )
+    parser.add_argument(
+        "--oss-download-timeout",
+        type=int,
+        help="OSS 单次网络操作超时秒数；默认 60",
+    )
+    parser.add_argument(
+        "--oss-allow-private-hosts",
+        action="store_true",
+        help="允许白名单 OSS 域名解析到私网地址；仅专有网络场景使用",
+    )
+    parser.add_argument(
+        "--oss-callback-url",
+        help=f"分析完成后的完整 HTTPS 回调地址；路径必须为 {CALLBACK_PATH}",
+    )
+    parser.add_argument(
+        "--oss-callback-timeout",
+        type=int,
+        help="结果回调单次超时秒数；默认 30",
+    )
+    parser.add_argument(
+        "--oss-callback-attempts",
+        type=int,
+        help="结果回调最多尝试次数；默认 3",
+    )
     return parser
+
+
+def _environment_flag(name: str) -> bool:
+    return str(os.environ.get(name) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _environment_int(name: str, default: int) -> int:
+    raw = str(os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise OSSIntakeRequestError(f"环境变量 {name} 必须是整数") from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -588,11 +805,93 @@ def main(argv: list[str] | None = None) -> int:
         print("端口必须在 1 到 65535 之间", file=sys.stderr)
         return 2
     catalog = WorkbenchCatalog(Path(args.worktrees))
-    server = WorkbenchHTTPServer(
-        (args.host, args.port),
-        Handler,
-        catalog=catalog,
+    try:
+        server = WorkbenchHTTPServer(
+            (args.host, args.port),
+            Handler,
+            catalog=catalog,
+        )
+    except OSError as exc:
+        print(
+            f"工作台启动失败：无法监听 {args.host}:{args.port}；{exc}",
+            file=sys.stderr,
+        )
+        return 2
+    intake_enabled = args.enable_oss_intake or _environment_flag(
+        "OFFLINE_AUDIT_OSS_ENABLED"
     )
+    if intake_enabled:
+        allowed_hosts = list(args.oss_allowed_host)
+        if not allowed_hosts:
+            allowed_hosts = [
+                value.strip()
+                for value in str(
+                    os.environ.get("OFFLINE_AUDIT_OSS_ALLOWED_HOSTS") or ""
+                ).split(",")
+                if value.strip()
+            ]
+        try:
+            config = OSSIntakeConfig(
+                webhook_secret=os.environ.get(
+                    "OFFLINE_AUDIT_OSS_WEBHOOK_SECRET", ""
+                ),
+                allowed_hosts=tuple(allowed_hosts),
+                producer_model=args.oss_producer_model,
+                max_download_bytes=(
+                    args.oss_max_bytes
+                    if args.oss_max_bytes is not None
+                    else _environment_int(
+                        "OFFLINE_AUDIT_OSS_MAX_BYTES",
+                        DEFAULT_MAX_DOWNLOAD_BYTES,
+                    )
+                ),
+                download_timeout_seconds=(
+                    args.oss_download_timeout
+                    if args.oss_download_timeout is not None
+                    else _environment_int(
+                        "OFFLINE_AUDIT_OSS_DOWNLOAD_TIMEOUT",
+                        DEFAULT_DOWNLOAD_TIMEOUT_SECONDS,
+                    )
+                ),
+                allow_private_hosts=(
+                    args.oss_allow_private_hosts
+                    or _environment_flag("OFFLINE_AUDIT_OSS_ALLOW_PRIVATE_HOSTS")
+                ),
+                workbench_url=(
+                    os.environ.get("OFFLINE_AUDIT_WORKBENCH_URL")
+                    or f"http://127.0.0.1:{server.server_address[1]}/"
+                ),
+                callback_url=(
+                    args.oss_callback_url
+                    or os.environ.get("OFFLINE_AUDIT_OSS_CALLBACK_URL")
+                ),
+                callback_token=os.environ.get("OFFLINE_AUDIT_OSS_CALLBACK_TOKEN"),
+                callback_timeout_seconds=(
+                    args.oss_callback_timeout
+                    if args.oss_callback_timeout is not None
+                    else _environment_int(
+                        "OFFLINE_AUDIT_OSS_CALLBACK_TIMEOUT",
+                        DEFAULT_CALLBACK_TIMEOUT_SECONDS,
+                    )
+                ),
+                callback_attempts=(
+                    args.oss_callback_attempts
+                    if args.oss_callback_attempts is not None
+                    else _environment_int(
+                        "OFFLINE_AUDIT_OSS_CALLBACK_ATTEMPTS",
+                        DEFAULT_CALLBACK_ATTEMPTS,
+                    )
+                ),
+            )
+            server.intake = OSSIntakeService(
+                worktrees_root=catalog.root,
+                input_root=DEFAULT_OSS_INPUT_ROOT,
+                config=config,
+            )
+        except OSSIntakeRequestError as exc:
+            server.server_close()
+            print(f"OSS 入站接口配置失败：{exc}", file=sys.stderr)
+            return 2
     config = {
         "local": f"http://127.0.0.1:{args.port}/",
         "lan": [
@@ -602,6 +901,15 @@ def main(argv: list[str] | None = None) -> int:
         ],
         "html": str(ROOT_HTML),
         "worktrees": str(catalog.root),
+        "oss_input": (
+            str(server.intake.input_root) if server.intake is not None else None
+        ),
+        "oss_intake": server.intake is not None,
+        "oss_callback": (
+            bool(server.intake.config.callback_url)
+            if server.intake is not None
+            else False
+        ),
     }
     print(json.dumps(config, ensure_ascii=False, indent=2), flush=True)
     try:

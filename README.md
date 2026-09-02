@@ -24,8 +24,8 @@
 py -3 -B skills/orchestrate-offline-audit/scripts/serve.py --host 0.0.0.0 --port 8080
 ```
 
-也可以运行 [`start-workbench.ps1`](start-workbench.ps1)。直接双击根 HTML 会跳转到本机
-`http://192.0.0.108:8080/`；同一局域网内的设备也统一使用该地址。
+直接双击根 HTML 会跳转到已配置的本机工作台地址；同一局域网内的设备使用服务启动时输出的
+`lan` 地址。
 
 3. 在项目根目录运行唯一正式核销入口：
 
@@ -40,6 +40,77 @@ py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id 20260827-poster-m
 ```
 
 视觉提取默认固定使用 `gpt-5.6-sol`，并隔离本机 Codex 的插件、Hook 和其他个人配置，避免正式运行受本机配置漂移影响。Windows 会优先使用当前 Codex 桌面版自带的 CLI，并为每次运行加载该 CLI 的临时内置模型目录，避免全局 CLI、在线刷新和本机模型缓存之间的版本冲突。可通过 `OFFLINE_AUDIT_MODEL` 替换为当前 CLI 内置的其他模型，或通过 `OFFLINE_AUDIT_CODEX` 显式指定 CLI 文件。商品候选预检只提取现场可见锚点，固定使用 `medium` 推理；合同、人员材料和最终现场图—参考图联合判断继续使用 `high` 推理。正式入口会逐阶段打印实际耗时；超时和传输类失败可按上限重试，非法 Schema、无效请求、认证/权限或模型配置错误立即失败关闭，不重复提交同一无效请求。
+
+## OSS 自动投递与结果回调
+
+一次 OSS 请求对应一份 ZIP 和一次正式核销运行。上游只提交 `verifyCode`、`fileId`、
+`downloadUrl` 三个业务字段；服务下载并校验 ZIP，持久保存到
+`input-oss/<job_id>/<原始文件名>.zip`，再把该任务目录作为 `--input-dir` 调用唯一正式
+`run.py`。分析完成并原子保存 worktree 后，服务向上游的
+`POST /api/v1/ai/analyze/callback` 回传同一个 `verifyCode`、`fileId` 和中文 `result`。
+
+启动前配置入站鉴权、OSS 下载域名白名单和完整回调地址：
+
+```powershell
+$env:OFFLINE_AUDIT_OSS_WEBHOOK_SECRET = "请替换为至少16位的随机密钥"
+$env:OFFLINE_AUDIT_OSS_CALLBACK_URL = "https://业务系统.example/api/v1/ai/analyze/callback"
+# 如果业务回调接口要求 Bearer Token，再设置这一项：
+$env:OFFLINE_AUDIT_OSS_CALLBACK_TOKEN = "请替换为回调密钥"
+
+py -3 -B skills/orchestrate-offline-audit/scripts/serve.py `
+  --host 0.0.0.0 `
+  --port 8080 `
+  --enable-oss-intake `
+  --oss-allowed-host audit-materials.oss-cn-hangzhou.aliyuncs.com
+```
+
+`OFFLINE_AUDIT_OSS_CALLBACK_URL` 必须是完整 HTTPS 地址，且路径固定为
+`/api/v1/ai/analyze/callback`；只有相对路径还不足以发送回调。也可以用
+`--oss-callback-url` 传入。`OFFLINE_AUDIT_OSS_ALLOWED_HOSTS` 可用逗号分隔多个精确下载
+域名；下载上限、下载超时、回调超时和回调次数分别由
+`OFFLINE_AUDIT_OSS_MAX_BYTES`、`OFFLINE_AUDIT_OSS_DOWNLOAD_TIMEOUT`、
+`OFFLINE_AUDIT_OSS_CALLBACK_TIMEOUT`、`OFFLINE_AUDIT_OSS_CALLBACK_ATTEMPTS` 调整。
+
+上游向本项目提交：
+
+```http
+POST /api/intake/oss HTTP/1.1
+Authorization: Bearer <OFFLINE_AUDIT_OSS_WEBHOOK_SECRET>
+Content-Type: application/json; charset=utf-8
+
+{
+  "verifyCode": "HX202603250014",
+  "fileId": 123,
+  "downloadUrl": "https://白名单OSS域名/维护费用.zip?临时签名"
+}
+```
+
+正式分析完成后，本项目向配置的业务系统回调：
+
+```http
+POST /api/v1/ai/analyze/callback HTTP/1.1
+Content-Type: application/json; charset=utf-8
+Idempotency-Key: HX202603250014:123
+
+{
+  "verifyCode": "HX202603250014",
+  "fileId": 123,
+  "result": "核销分析完成，共1个场景，发现2个错误项。维护费用核销：当前结论：资料需补正；建议核销0元。"
+}
+```
+
+- `verifyCode:fileId` 是稳定幂等身份。同一组合与同一对象路径重复投递只返回原任务，不会重复下载或再次调用 AI；同一组合改投另一个对象路径返回 `409`。
+- `downloadUrl` 必须是白名单域名的 HTTPS 443 地址。临时签名查询串只保存在内存，不进入任务收据、日志、worktree 或结果回调。
+- 下载响应或 URL 路径应保留 Windows 安全的原始 `.zip` 文件名及业务场景标记。服务记录响应 ETag、实际字节数和自行计算的 SHA-256，并验证文件确实为 ZIP；残缺或无效下载会删除。
+- `verifyCode` 中首个有效 `YYYYMMDD` 用作运行业务日期；没有有效日期时按上海时区收件当天生成。`fileId` 必须是 64 位正整数。
+- `result` 来自正式 worktree 快照中的确定性中文结论，不由 HTTP handler 另做业务分析。回调不会包含 `downloadUrl`、本地绝对路径或密钥。
+- 回调以 `2xx` 为成功；网络错误、`408`、`429` 和 `5xx` 按配置有限重试。重试只重新投递已保存结果，绝不重新运行 AI。
+- 状态依次为 `accepted → downloading → running → callback → completed | failed`。分析成功但回调失败时，任务记录为 `callback_failed`，已完成的 worktree 和原始 ZIP 仍然保留。
+- 状态查询为带同一入站鉴权的 `GET /api/intake/jobs/<job_id>`。任务收据位于隐藏的 `worktrees/.intake/jobs/`，不进入工作台正式运行台账。
+
+代码暂时保留旧一期事件体的兼容解析，但正式 OSS 对接和测试合同均以上述三个字段为准。
+Windows 上工作台端口采用独占绑定；若已有旧服务占用相同端口，新进程会明确启动失败，
+避免请求被旧版本进程接收。
 
 ## 主流程任务清单
 
@@ -175,7 +246,7 @@ Excel 都没有权威门店列，不能分摊到某一家门店或冒充单店�
 
 销售 Excel 不提供给 AI。Excel 单元格读取、商品映射、数量汇总、金额复算、日期/地点/重复检查、核销结论、客户视图投影和运行快照发布均由确定性 Python 完成。
 
-每次运行只使用本次 ZIP。业务判断不会读取历史结果、缓存或验收工作簿；解压目录、临时工作簿、模型工作区和临时投影会在结束时删除。只有本次运行的结构化证据、确定性结果、验证收据、可观察日志和 DOM 数据断点进入自己的持久化 worktree。
+每次运行只使用本次 ZIP。业务判断不会读取历史结果、缓存或验收工作簿；解压目录、临时工作簿、模型工作区和临时投影会在结束时删除。人工原包仍由 `input/` 管理，OSS 已验证原包按任务保存在 `input-oss/`；只有本次运行的结构化证据、确定性结果、验证收据、可观察日志和 DOM 数据断点进入自己的持久化 worktree。
 
 ## 输出内容
 
@@ -242,7 +313,7 @@ Excel 行/字段、结算行、转账截图或现场照片内容，不再使用�
 配置或验收。
 
 页面外观和交互来自根目录唯一版本化前端 `offline-activity-audit.html`，当前合同为 Audit System
-`2.2.0`，只读工作台 API 合同为 `1.1`；`/api/config` 同时返回六项主流程任务和
+`2.2.0`，工作台 API 合同为 `1.2`：已有运行查询资源保持只读，同时新增独立鉴权的 OSS 入站接口；`/api/config` 同时返回六项主流程任务和
 `stage_boundary` 刷新策略。正式运行只能调用仓库自带的
 `skills/orchestrate-offline-audit/scripts/run.py`；不要
 手工写运行页面、复制旧页面、运行后修改根页面或另做第二套前端。一级系统负责历史与台账，

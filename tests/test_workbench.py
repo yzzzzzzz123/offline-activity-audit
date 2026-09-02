@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -352,8 +353,10 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.1")
+        self.assertEqual(config["api_version"], "1.2")
         self.assertEqual(config["system_version"], "2.2.0")
+        self.assertTrue(config["workbench_read_only"])
+        self.assertFalse(config["oss_intake"]["enabled"])
         self.assertEqual(config["main_flow_tasks"], main_flow_task_list())
         self.assertEqual(config["refresh_policy"]["mode"], "stage_boundary")
         self.assertEqual(
@@ -405,6 +408,24 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(snapshot["run"]["storage_type"], "legacy_html")
         self.assertEqual(snapshot["run"]["error_count"], 1)
         self.assertEqual(snapshot["run"]["main_flow_tasks"], main_flow_task_list())
+
+    @unittest.skipUnless(os.name == "nt", "Windows requires exclusive workbench ports")
+    def test_windows_rejects_a_second_server_on_the_same_port(self) -> None:
+        first = WorkbenchHTTPServer(
+            ("127.0.0.1", 0),
+            Handler,
+            catalog=WorkbenchCatalog(self.root / "exclusive-first"),
+        )
+        try:
+            port = int(first.server_address[1])
+            with self.assertRaises(OSError):
+                WorkbenchHTTPServer(
+                    ("0.0.0.0", port),
+                    Handler,
+                    catalog=WorkbenchCatalog(self.root / "exclusive-second"),
+                )
+        finally:
+            first.server_close()
 
 
 if __name__ == "__main__":

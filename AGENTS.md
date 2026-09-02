@@ -2,7 +2,7 @@
 
 ## Current registered scope
 
-This repository audits nine offline-activity scenarios only:
+This repository audits ten offline-activity scenarios only:
 
 - `personnel_incentive` through `skills/audit-personnel-incentive`;
 - `promotional_display` through `skills/audit-promotional-display`;
@@ -13,11 +13,12 @@ This repository audits nine offline-activity scenarios only:
 - `price_difference_support` through `skills/audit-price-difference-support`.
 - `pos_target_incentive` through `skills/audit-pos-target-incentive`.
 - `entry_fee` through `skills/audit-entry-fee`.
+- `self_procured_gift_material` through `skills/audit-self-procured-gift-material`.
 
 Personnel and promotional-display product identity share the project-level catalog at
 `shared/canban-product-multimodal-knowledge-base`. No scenario Skill owns a private copy.
 
-The only formal command is:
+The only formal audit runner is:
 
 ```powershell
 py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--scenario <scenario>]
@@ -25,12 +26,14 @@ py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --produc
 
 `input/` must contain one to ten ZIP files. Each supported scenario may appear at most once. Reject unknown, ambiguous, duplicate-type, or unsafe archives with a specific error. A maintenance-fee package whose marker and POS/settlement structure are unambiguous may continue to audit so missing mandatory roles become customer-facing blocking issues; ambiguous duplicate singleton roles still stop intake. A marked all-visual extra-giveaway package may similarly continue so generic camera filenames are classified from visible content and missing roles become blocking report issues; duplicate contract, settlement, or delivery candidates stop evidence acceptance. A marked price-difference package accepts zero or one POS Excel so a missing electronic sheet becomes a blocking report issue, while singleton-role ambiguity still stops intake. A marked POS-target-incentive package likewise accepts missing singleton roles so the contract/activity-proof gaps remain reportable. A marked entry-fee package requires one unique contract and one safely extractable shelf-photo RAR; missing system deduction proof remains a blocking audit issue. A marked self-procured-gift-material package requires one legacy activity-return `.xls`, extracts every embedded DISPIMG photo for visual review, and never treats that workbook as the POS electronic spreadsheet. `--scenario` may select one submitted type for a scenario-only formal result.
 
+The authenticated `POST /api/intake/oss` endpoint is a transport adapter, not another audit pipeline. Its production request contract is exactly `verifyCode`, positive-integer `fileId`, and the temporary pre-signed HTTPS `downloadUrl`; the stable internal idempotency identity is the unchanged `verifyCode:fileId` pair. Keep the signed URL in memory only, persist the verified original archive under `input-oss/<job_id>/`, and invoke the bundled `skills/orchestrate-offline-audit/scripts/run.py` in a child process with that job directory as `--input-dir`. After the formal run and its worktree snapshot are durably complete, POST exactly `verifyCode`, `fileId`, and a deterministic Chinese `result` string to the configured full HTTPS `/api/v1/ai/analyze/callback` URL. Callback retry must retry delivery only and must never download again or rerun AI; a callback failure retains the completed worktree and is recorded separately as `callback_failed`. Preserve the same safe archive routing, six-stage observer flow, AI/deterministic trust boundary, worktree layout, and no-overwrite rule as a manual run. Never copy an OSS object into the shared repository `input/`, flatten different jobs into one directory, persist its signed URL or callback token, accept an arbitrary/non-allowlisted download host, return `downloadUrl` in the callback, or implement business analysis in the HTTP handler. Job receipts live only under hidden `worktrees/.intake/jobs/`, and the visible catalog continues to list formal worktrees only. Verified OSS ZIPs remain in `input-oss` after completion or failure; partial or transport-invalid downloads are removed, while extracted sources and all other run intermediates remain temporary.
+
 ## New scenario onboarding
 
 When the user supplies one representative ZIP plus a business prompt and asks to create another
 audit scenario, use `skills/create-offline-audit-scenario/SKILL.md`. This is a development workflow,
 not a formal audit run. First decide whether the request is a new reusable evidence/decision chain or
-only another case of one of the nine registered scenarios. Reuse or update the existing scenario
+only another case of one of the ten registered scenarios. Reuse or update the existing scenario
 when its material roles, authority graph, deterministic controls, amount rule, and output object are
 the same; never create one Skill per customer, month, activity number, or ZIP filename.
 
@@ -280,7 +283,8 @@ The repository contains exactly one customer-facing HTML entrypoint:
 
 It is a persistent, versioned two-level system shell and is never regenerated or filled on disk by an
 ordinary audit run. The trusted local service serves it at `http://127.0.0.1:8080/` and on the
-machine's approved LAN address while exposing read-only relative APIs. It must not use a CDN,
+machine's approved LAN address while exposing read-only workbench APIs plus the separately authenticated
+OSS intake endpoint. It must not use a CDN,
 downloaded font, third-party script, or remote business-data dependency.
 
 Each formal run publishes one persistent run directory instead of another HTML:
@@ -417,7 +421,11 @@ Also validate all JSON files and Skill frontmatter, run the bundled formal comma
 ZIP inputs when the execution path changes, verify that no per-run HTML or workbook is published, every
 temporary workbook/page/source tree is removed, and the worktree contains an atomic manifest/snapshot,
 append-only events, safe observable log, analysis index, and DOM-data checkpoints. Start the trusted
-service on loopback and `0.0.0.0`, exercise the relative APIs and SSE, and verify the fixed workbench at
+service on loopback and `0.0.0.0`, exercise the relative APIs and SSE, verify OSS intake authentication,
+three-field idempotency, allowlisted URL and response-integrity validation, status polling, per-job
+`input-oss` persistence without overwrite, partial-download cleanup, exact callback payload, callback
+failure retention, and delegation to the bundled
+runner, and verify the fixed workbench at
 1440×960 desktop with zero console/page errors before finishing with `git diff --check` and
 `git status --short`.
 

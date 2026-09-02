@@ -1,6 +1,6 @@
 ---
 name: orchestrate-offline-audit
-description: Generate one verified persistent run archive for the fixed Canban offline-activity audit workbench from one to ten ZIP submissions, covering personnel incentives, promotional/stack displays, poster/material production, specially approved other expenses, maintenance fees, extra giveaways, price-difference support, dealer POS-target incentives, entry/barcode fees, customer self-procured gift materials, or a selected combination. Use whenever input/ contains new offline audit materials and Codex must safely classify them, extract only visual facts with AI, deterministically close document/product/store/photo/amount controls, and publish schema-validated analysis, logs, DOM-data checkpoints, and a customer snapshot without regenerating the root HTML or using prior outputs or a gold workbook at runtime.
+description: Generate one verified persistent run archive for the fixed Canban offline-activity audit workbench from one to ten local ZIP submissions or one authenticated OSS ZIP event, covering personnel incentives, promotional/stack displays, poster/material production, specially approved other expenses, maintenance fees, extra giveaways, price-difference support, dealer POS-target incentives, entry/barcode fees, customer self-procured gift materials, or a selected combination. Use whenever local input or the OSS intake adapter supplies new offline audit materials and Codex must safely classify them, extract only visual facts with AI, deterministically close document/product/store/photo/amount controls, and publish schema-validated analysis, logs, DOM-data checkpoints, and a customer snapshot without regenerating the root HTML or using prior outputs or a gold workbook at runtime.
 ---
 
 # Orchestrate Offline Audit
@@ -15,6 +15,12 @@ Every Agent executing an audit must call this bundled runner. Do not call intern
 functions as a substitute, handwrite a run page, copy or patch a prior result, rebuild the frontend,
 or introduce a second CLI, Git run branch, alternate worktree root, template-copy step, or post-run
 replacement workflow. The runner publishes one versioned run archive; the root workbench stays fixed.
+The authenticated OSS endpoint is allowed only as a transport adapter: it persists one verified ZIP
+under `<project>/input-oss/<job_id>/` and launches this same bundled runner in a child process with that
+job directory as `--input-dir`. Its external request contains only `verifyCode`, `fileId`, and
+`downloadUrl`. After the durable formal snapshot is complete, the adapter sends the same `verifyCode`
+and `fileId` plus the deterministic Chinese `result` to the configured HTTPS
+`/api/v1/ai/analyze/callback`; callback retries never rerun this Skill.
 
 ## Main-flow task checklist
 
@@ -53,6 +59,18 @@ Read only ZIP files directly inside `<project>/input/`. Require one to ten ZIPs.
 - Reject unsafe ZIP paths, links, encryption, duplicate/case-colliding paths, excessive expansion, suspicious compression ratios, and duplicate image basenames.
 
 Extract only into a run-scoped temporary directory that is removed automatically. Do not create `input/.prepared`, `.audit-tmp`, a cache, or a persistent run directory.
+
+## OSS transport adapter
+
+When the source is an OSS object event, read [oss-intake.md](references/oss-intake.md) before changing
+the HTTP contract, downloader, job store, or runner invocation. Keep the shared repository `input/`
+untouched. The adapter owns authentication, idempotency, allowlisted HTTPS download, transport-level
+response-size/ETag/SHA-256 checks, per-job persistent source staging, asynchronous status, deterministic
+result projection, and callback delivery only; archive routing, AI
+extraction, deterministic decisions, verification, and worktree publication remain owned by this
+formal runner. Retain each verified original ZIP after success or failure without flattening job
+directories or committing runtime files. Remove incomplete or transport-invalid downloads; extracted
+sources, model workspaces, temporary projections, and result receipts remain run-scoped temporary data.
 
 ## Trust boundary
 
@@ -317,8 +335,10 @@ never divide a total automatically.
 
 The canonical customer page is the root `offline-activity-audit.html`. The trusted service in
 `audit_core.workbench_server` serves its level-one system at `/`, injects the selected verified view
-payload into the same fixed HTML response for `/?run=<workspace-id>`, and exposes only relative,
-read-only workbench APIs. Injection changes the response, never the file on disk. The page reads the
+payload into the same fixed HTML response for `/?run=<workspace-id>`, and exposes relative,
+read-only workbench APIs plus the separately authenticated OSS transport endpoint. API contract `1.2`
+keeps all workbench resources read-only; only `/api/intake/oss` and its authenticated job status resource
+belong to the transport adapter. Injection changes the response, never the file on disk. The page reads the
 run catalog, atomic snapshot, append-only events, observable log, manifest-approved analysis files,
 and DOM-data checkpoints. A direct `file://` open redirects to loopback; LAN clients use the same
 relative API paths. The page has no CDN, remote font, third-party script, or remote business-data
@@ -383,6 +403,10 @@ Start the trusted service with:
 ```powershell
 py -3 -B skills/orchestrate-offline-audit/scripts/serve.py --host 0.0.0.0 --port 8080
 ```
+
+Add `--enable-oss-intake --oss-allowed-host <exact-host>` and set
+`OFFLINE_AUDIT_OSS_WEBHOOK_SECRET` only when the authenticated OSS adapter is required. Never place the
+secret or a pre-signed object URL in a command line, tracked file, job receipt, worktree, or log.
 
 Verify `/api/config`, `/api/runs`, the selected run snapshot/log/events, every manifest-approved
 analysis/checkpoint resource, legacy HTML compatibility, desktop rendering, scenario and technical-tab
