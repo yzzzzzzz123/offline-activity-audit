@@ -72,47 +72,47 @@ def atomic_write_json(path: Path, value: Any) -> None:
     atomic_write_text(path, _json_text(value))
 
 
-def _reserved_workspace_ids(root: Path, base: str) -> set[str]:
-    reserved: set[str] = set()
-    if not root.exists():
-        return reserved
-    pattern = re.compile(rf"^{re.escape(base)}(?:-1\.\d+)?$")
-    for path in root.iterdir():
-        stem = path.stem if path.is_file() else path.name
-        if pattern.fullmatch(stem):
-            reserved.add(stem)
-    return reserved
+def _workspace_model_label(value: str) -> str:
+    raw = str(value or "").strip().lower()
+    compact = re.sub(r"[-_\s]+", "", raw)
+    if not compact or re.fullmatch(r"[a-z0-9][a-z0-9.]{0,39}", compact) is None:
+        raise AuditError("核销模型名称无法安全写入 worktree 目录名")
+    return compact
+
+
+def _workspace_reasoning_label(value: str) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw or re.fullmatch(r"[a-z0-9][a-z0-9]{0,19}", raw) is None:
+        raise AuditError("推理强度无法安全写入 worktree 目录名")
+    return raw
 
 
 def reserve_workspace(
     run_id: str,
     producer_model: str,
     root: str | Path = DEFAULT_WORKTREES_ROOT,
+    *,
+    audit_model: str | None = None,
+    reasoning_effort: str = "high",
+    started_at: datetime | None = None,
 ) -> Path:
     worktrees_root = Path(root).resolve()
     worktrees_root.mkdir(parents=True, exist_ok=True)
     output_date = output_date_from_run_id(run_id)
     producer = normalize_producer_model(producer_model)
-    base = f"{output_date}-{producer}"
-
-    for _ in range(1000):
-        reserved = _reserved_workspace_ids(worktrees_root, base)
-        if base not in reserved:
-            candidate_id = base
-        else:
-            revisions = [
-                int(match.group(1))
-                for value in reserved
-                if (match := re.fullmatch(rf"{re.escape(base)}-1\.(\d+)", value))
-            ]
-            candidate_id = f"{base}-1.{max(revisions, default=0) + 1}"
-        candidate = worktrees_root / candidate_id
-        try:
-            candidate.mkdir()
-        except FileExistsError:
-            continue
-        return candidate
-    raise AuditError("无法为本次核销保留唯一 worktree 运行目录")
+    timestamp = started_at or datetime.now().astimezone()
+    model_label = _workspace_model_label(audit_model or producer)
+    reasoning_label = _workspace_reasoning_label(reasoning_effort)
+    candidate_id = (
+        f"{output_date}_{timestamp.strftime('%H%M_%S')}-"
+        f"{model_label}_{reasoning_label}"
+    )
+    candidate = worktrees_root / candidate_id
+    try:
+        candidate.mkdir()
+    except FileExistsError as exc:
+        raise AuditError(f"同一秒的 worktree 运行目录已存在：{candidate_id}") from exc
+    return candidate
 
 
 def sanitize_case(value: Any) -> Any:
@@ -145,6 +145,8 @@ class WorkbenchRunStore:
         producer_model: str,
         root_html: Path,
         workbench_url: str,
+        audit_model: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.workspace = workspace.resolve()
         self.workspace_id = self.workspace.name
@@ -165,12 +167,15 @@ class WorkbenchRunStore:
         self._analysis_files: list[dict[str, Any]] = []
         self._checkpoints: list[dict[str, Any]] = []
         now = utc_now()
+        normalized_producer = normalize_producer_model(producer_model)
         self.manifest: dict[str, Any] = {
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "workspace_id": self.workspace_id,
             "run_id": run_id,
             "business_date": output_date_from_run_id(run_id),
-            "producer_model": normalize_producer_model(producer_model),
+            "producer_model": normalized_producer,
+            "audit_model": str(audit_model or normalized_producer),
+            "reasoning_effort": str(reasoning_effort or "high"),
             "status": "running",
             "created_at": now,
             "updated_at": now,

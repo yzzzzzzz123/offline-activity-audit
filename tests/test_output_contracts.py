@@ -870,7 +870,7 @@ class HtmlReportTests(unittest.TestCase):
                 ["人员激励核销", "堆头核销"],
             )
             self.assertEqual(verification["external_dependency_count"], 0)
-            self.assertEqual(verification["button_count"], 22)
+            self.assertEqual(verification["button_count"], 26)
             self.assertTrue(verification["workbook_content_equal"])
             self.assertTrue(verification["static_template_equal"])
             self.assertEqual(verification["template_version"], "3.9.0")
@@ -907,6 +907,7 @@ class HtmlReportTests(unittest.TestCase):
                 'class="eo-table"',
                 'id="eoErrorList"',
                 'id="eoErrorType"',
+                'id="eoErrorCategory"',
                 'id="eoErrorConfidence"',
                 'id="eoErrorKeyword"',
                 'id="eoErrorVisible"',
@@ -929,6 +930,11 @@ class HtmlReportTests(unittest.TestCase):
                 "种核销方式",
                 "核销类型",
                 "核销类型 ·",
+                "错误原因分类",
+                'data-error-categories=',
+                'data-error-confidence-score=',
+                'data-pass-confidence-score=',
+                'class="eo-chip eo-error-reason"',
                 "错误总数",
                 "材料 / 结算错误",
                 "商品 / 门店错误",
@@ -940,6 +946,7 @@ class HtmlReportTests(unittest.TestCase):
             self.assertNotIn('class="eo-pass-warning"', html)
             self.assertNotIn("核销方式始终展示全部；置信度随核销方式和关键词联动", html)
             self.assertNotIn("核销方式始终展示全部；检查分类和置信度只保留当前存在项", html)
+            self.assertNotIn(".eo-chip.eo-error-reason {", html)
 
             self.assertIn(
                 '<div class="brand-mark" aria-label="参半 CANBAN"><strong>参半</strong><small>CANBAN</small></div>',

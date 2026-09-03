@@ -50,7 +50,7 @@ DEFAULT_MODEL = "gpt-5.6-sol"
 DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 1200
 DEFAULT_REASONING_EFFORT = "high"
 PRODUCT_QUERY_REASONING_EFFORT = "medium"
-ALLOWED_REASONING_EFFORTS = frozenset({"low", "medium", "high", "xhigh"})
+ALLOWED_REASONING_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max"})
 
 
 class CodexExtractionError(AuditError):
@@ -2399,6 +2399,7 @@ def extract_with_codex(
     temporary_root: str | Path,
     *,
     model: str | None = None,
+    reasoning_effort: str | None = None,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     attempt_timeout_seconds: int = DEFAULT_ATTEMPT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
@@ -2416,6 +2417,9 @@ def extract_with_codex(
     root.mkdir(parents=True, exist_ok=True)
     full_schema = skill_dir / "references" / "evidence.schema.json"
     selected_model = model or DEFAULT_MODEL
+    selected_reasoning_effort = reasoning_effort or DEFAULT_REASONING_EFFORT
+    if selected_reasoning_effort not in ALLOWED_REASONING_EFFORTS:
+        raise AuditError(f"不支持的模型推理强度：{selected_reasoning_effort}")
     model_catalog = root / ".codex-model-catalog.json"
     if not model_catalog.is_file():
         _write_bundled_model_catalog(codex, model_catalog, selected_model)
@@ -2438,7 +2442,7 @@ def extract_with_codex(
             label="人员激励材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_personnel_sources(case, value),
         )
 
@@ -2465,7 +2469,7 @@ def extract_with_codex(
             label="海报/物料制作材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_poster_material_sources(case, value),
         )
         _apply_poster_material_document_calibrations(
@@ -2501,7 +2505,7 @@ def extract_with_codex(
             label="其他费用材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_other_expense_sources(case, value),
         )
 
@@ -2526,7 +2530,7 @@ def extract_with_codex(
             label="维护费用材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_maintenance_fee_sources(case, value),
         )
 
@@ -2551,7 +2555,7 @@ def extract_with_codex(
             label="额外搭赠材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_giveaway_promotion_sources(case, value),
         )
 
@@ -2576,7 +2580,7 @@ def extract_with_codex(
             label="价格补差材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_price_difference_support_sources(case, value),
         )
 
@@ -2601,7 +2605,7 @@ def extract_with_codex(
             label="POS达标激励材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_pos_target_incentive_sources(case, value),
         )
 
@@ -2626,7 +2630,7 @@ def extract_with_codex(
             label="进场费材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_entry_fee_sources(case, value),
         )
 
@@ -2655,7 +2659,7 @@ def extract_with_codex(
             label="客户自采赠品物料材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_self_procured_gift_material_sources(
                 case,
                 value,
@@ -2687,7 +2691,7 @@ def extract_with_codex(
         label="堆头合同",
         max_attempts=max_attempts,
         attempt_timeout_seconds=attempt_timeout_seconds,
-        reasoning_effort=DEFAULT_REASONING_EFFORT,
+        reasoning_effort=selected_reasoning_effort,
         post_validate=lambda value: _validate_contract_result(
             case,
             value,
@@ -2726,7 +2730,7 @@ def extract_with_codex(
             label="堆头合同附件商品格二次复核",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=DEFAULT_REASONING_EFFORT,
+            reasoning_effort=selected_reasoning_effort,
             post_validate=lambda value: _validate_contract_product_cells(
                 attachment_records,
                 value,
@@ -2802,7 +2806,7 @@ def extract_with_codex(
         label="堆头现场照片",
         max_attempts=max_attempts,
         attempt_timeout_seconds=attempt_timeout_seconds,
-        reasoning_effort=DEFAULT_REASONING_EFFORT,
+        reasoning_effort=selected_reasoning_effort,
         post_validate=lambda value: _validate_photo_result(
             case,
             contract_result,
@@ -2832,7 +2836,7 @@ def extract_with_codex(
         label="堆头陈列标准聚焦复核",
         max_attempts=max_attempts,
         attempt_timeout_seconds=attempt_timeout_seconds,
-        reasoning_effort=DEFAULT_REASONING_EFFORT,
+        reasoning_effort=selected_reasoning_effort,
         post_validate=lambda value: _validate_display_standard_review(
             photo_result["photo_reviews"],
             value,

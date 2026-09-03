@@ -172,12 +172,13 @@ def _item(
     source_files: Iterable[str] = (),
     source_file_count: int | None = None,
     confidence: str = "high",
+    confidence_score: Any = None,
     scope: str = "material",
 ) -> dict[str, Any]:
     files = _unique(_basename(value) for value in source_files)
     total_files = max(len(files), int(source_file_count or 0))
     normalized_confidence = confidence if confidence in {"high", "medium", "low"} else "high"
-    return {
+    item = {
         "check_id": "",
         "category": category,
         "title": title,
@@ -188,6 +189,13 @@ def _item(
         "confidence": normalized_confidence,
         "scope": scope if scope in {"material", "product", "store", "amount"} else "material",
     }
+    try:
+        normalized_score = round(float(confidence_score), 2)
+    except (TypeError, ValueError):
+        normalized_score = None
+    if normalized_score is not None and 0 <= normalized_score <= 1:
+        item["confidence_score"] = normalized_score
+    return item
 
 
 def _generic_control_items(
@@ -219,6 +227,7 @@ def _generic_control_items(
                 source_files=files,
                 source_file_count=file_count,
                 confidence=_text(control.get("confidence")) or "high",
+                confidence_score=control.get("confidence_score"),
                 scope=scope,
             )
         )
@@ -251,6 +260,7 @@ def _display_items(result: dict[str, Any]) -> list[dict[str, Any]]:
                     subject=subject,
                     basis=_text(check.get("basis")),
                     source_files=[core_file],
+                    confidence_score=check.get("confidence_score"),
                     scope="material",
                 )
             )
@@ -353,6 +363,9 @@ def _display_items(result: dict[str, Any]) -> list[dict[str, Any]]:
                     basis=basis,
                     source_files=photo_files,
                     confidence=confidence,
+                    confidence_score=resolution.get("confidence_score")
+                    if resolution.get("confidence_score") is not None
+                    else store.get("confidence_score"),
                     scope="store",
                 )
             )
@@ -440,6 +453,7 @@ def _personnel_items(result: dict[str, Any]) -> list[dict[str, Any]]:
                     basis=basis,
                     source_files=[sales_file],
                     confidence=confidence,
+                    confidence_score=record.get("confidence_score"),
                     scope="product",
                 )
             )
@@ -455,6 +469,7 @@ def _personnel_items(result: dict[str, Any]) -> list[dict[str, Any]]:
                     ),
                     source_files=[sales_file, settlement_file],
                     confidence=confidence,
+                    confidence_score=record.get("confidence_score"),
                     scope="product",
                 )
             )
@@ -706,6 +721,7 @@ def _fallback_view_items(sheet: dict[str, Any]) -> list[dict[str, Any]]:
                 subject=_text(row.get("heading")) or f"第{row.get('excel_row') or '?'}行",
                 basis=basis,
                 confidence=_text(row.get("confidence")) or "high",
+                confidence_score=row.get("confidence_score"),
                 scope="material" if _text(row.get("section")) != "detail" else "product",
             )
         )

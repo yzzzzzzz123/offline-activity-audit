@@ -9,6 +9,7 @@ import re
 import secrets
 import socket
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -38,13 +39,14 @@ from .workbench_runtime import ROOT_HTML
 from .workbench_store import (
     DEFAULT_WORKTREES_ROOT,
     WORKSPACE_ID_PATTERN,
+    atomic_write_json,
     main_flow_task_list,
     read_json_file,
 )
 
 
-API_VERSION = "1.5"
-SYSTEM_VERSION = "2.6.0"
+API_VERSION = "1.6"
+SYSTEM_VERSION = "2.7.0"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8080
 MAX_API_BYTES = 24 * 1024 * 1024
@@ -144,6 +146,9 @@ class WorkbenchCatalog:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self.review_root = self.root / ".reviews"
+        self.review_root.mkdir(parents=True, exist_ok=True)
+        self._review_lock = threading.RLock()
 
     def _workspace(self, workspace_id: str) -> Path:
         safe_id = _safe_workspace_id(workspace_id)
@@ -151,6 +156,52 @@ class WorkbenchCatalog:
         if candidate.parent != self.root:
             raise ValueError("运行路径越出 worktrees")
         return candidate
+
+    def _review_path(self, workspace_id: str) -> Path:
+        safe_id = _safe_workspace_id(workspace_id)
+        candidate = (self.review_root / f"{safe_id}.json").resolve()
+        if candidate.parent != self.review_root:
+            raise ValueError("人工核验状态路径越出 worktrees/.reviews")
+        return candidate
+
+    def review_state(self, workspace_id: str) -> dict[str, Any]:
+        path = self._review_path(workspace_id)
+        if not path.is_file():
+            return {
+                "manual_reviewed": False,
+                "manual_reviewed_at": None,
+            }
+        value = read_json_file(path)
+        return {
+            "manual_reviewed": bool(value.get("reviewed")),
+            "manual_reviewed_at": value.get("reviewed_at")
+            if value.get("reviewed")
+            else None,
+        }
+
+    def set_manual_review(self, workspace_id: str, reviewed: bool) -> dict[str, Any]:
+        workspace = self._workspace(workspace_id)
+        legacy = self.root / f"{workspace_id}.html"
+        if not workspace.is_dir() and not legacy.is_file():
+            raise FileNotFoundError(workspace_id)
+        if workspace.is_dir():
+            manifest = read_json_file(workspace / "manifest.json")
+            if str(manifest.get("status") or "") != "completed":
+                raise ValueError("只有已完成的核销记录可以标记人工核验")
+        now = _utc_now()
+        payload = {
+            "schema_version": "1.0",
+            "workspace_id": workspace_id,
+            "reviewed": reviewed,
+            "reviewed_at": now if reviewed else None,
+            "updated_at": now,
+        }
+        with self._review_lock:
+            atomic_write_json(self._review_path(workspace_id), payload)
+        return {
+            "manual_reviewed": reviewed,
+            "manual_reviewed_at": payload["reviewed_at"],
+        }
 
     def list_runs(self) -> list[dict[str, Any]]:
         runs: list[dict[str, Any]] = []
@@ -160,7 +211,9 @@ class WorkbenchCatalog:
             try:
                 if path.is_dir() and (path / "manifest.json").is_file():
                     manifest = read_json_file(path / "manifest.json")
-                    runs.append(self._summary(manifest, storage_type="worktree"))
+                    summary = self._summary(manifest, storage_type="worktree")
+                    summary.update(self.review_state(str(summary.get("workspace_id") or path.name)))
+                    runs.append(summary)
                 elif path.is_file() and path.suffix.lower() == ".html":
                     payload = _legacy_payload(path)
                     modified = datetime.fromtimestamp(
@@ -171,23 +224,27 @@ class WorkbenchCatalog:
                         for sheet in payload.get("sheets") or []
                         if isinstance(sheet, dict) and sheet.get("scenario")
                     ]
-                    runs.append(
-                        {
-                            "workspace_id": path.stem,
-                            "run_id": path.stem,
-                            "business_date": path.stem[:8],
-                            "producer_model": "legacy",
-                            "status": "completed",
-                            "created_at": modified,
-                            "updated_at": modified,
-                            "completed_at": modified,
-                            "scenarios": scenarios,
-                            "scenario_count": len(scenarios),
-                            "error_count": _error_count(payload),
-                            "storage_type": "legacy_html",
-                            "snapshot_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                        }
-                    )
+                    run = {
+                        "workspace_id": path.stem,
+                        "run_id": path.stem,
+                        "business_date": path.stem[:8],
+                        "producer_model": "legacy",
+                        "audit_model": "legacy",
+                        "reasoning_effort": None,
+                        "status": "completed",
+                        "created_at": modified,
+                        "updated_at": modified,
+                        "completed_at": modified,
+                        "scenarios": scenarios,
+                        "scenario_count": len(scenarios),
+                        "error_count": _error_count(payload),
+                        "storage_type": "legacy_html",
+                        "snapshot_sha256": hashlib.sha256(
+                            path.read_bytes()
+                        ).hexdigest(),
+                    }
+                    run.update(self.review_state(path.stem))
+                    runs.append(run)
             except (OSError, ValueError, json.JSONDecodeError):
                 continue
         runs.sort(
@@ -207,6 +264,8 @@ class WorkbenchCatalog:
             "run_id": manifest.get("run_id"),
             "business_date": manifest.get("business_date"),
             "producer_model": manifest.get("producer_model"),
+            "audit_model": manifest.get("audit_model") or manifest.get("producer_model"),
+            "reasoning_effort": manifest.get("reasoning_effort"),
             "status": manifest.get("status"),
             "created_at": manifest.get("created_at"),
             "updated_at": manifest.get("updated_at"),
@@ -229,6 +288,7 @@ class WorkbenchCatalog:
             # Older or already-running archives predate the canonical checklist. Keep the
             # worktree immutable and normalize only the read-only API projection.
             manifest["main_flow_tasks"] = main_flow_task_list()
+            manifest.update(self.review_state(workspace_id))
             if snapshot_path.is_file():
                 snapshot = read_json_file(snapshot_path)
             else:
@@ -260,6 +320,7 @@ class WorkbenchCatalog:
             for sheet in view.get("sheets") or []
             if isinstance(sheet, dict) and sheet.get("scenario")
         ]
+        review = self.review_state(workspace_id)
         return {
             "schema_version": "1.0",
             "run": {
@@ -267,6 +328,8 @@ class WorkbenchCatalog:
                 "run_id": workspace_id,
                 "business_date": workspace_id[:8],
                 "producer_model": "legacy",
+                "audit_model": "legacy",
+                "reasoning_effort": None,
                 "status": "completed",
                 "created_at": modified,
                 "updated_at": modified,
@@ -277,6 +340,7 @@ class WorkbenchCatalog:
                 "storage_type": "legacy_html",
                 "failure": None,
                 "main_flow_tasks": main_flow_task_list(),
+                **review,
             },
             "view": view,
             "verification": {"legacy_import": True},
@@ -567,8 +631,14 @@ class Handler(BaseHTTPRequestHandler):
                 if address != "127.0.0.1"
             ],
             "worktrees": self.server.catalog.root.name,
-            "read_only": True,
-            "workbench_read_only": True,
+            "read_only": False,
+            "workbench_read_only": False,
+            "business_results_read_only": True,
+            "manual_review": {
+                "writable": True,
+                "endpoint": "/api/runs/{workspace_id}/manual-review",
+                "request_fields": ["reviewed"],
+            },
             "oss_intake": {
                 "enabled": self.server.intake is not None,
                 "endpoint": "/api/intake/oss",
@@ -707,6 +777,34 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         route = urlparse(self.path).path.rstrip("/") or "/"
+        review_match = re.fullmatch(r"/api/runs/([^/]+)/manual-review", route)
+        if review_match:
+            try:
+                workspace_id = _safe_workspace_id(review_match.group(1))
+                payload = self._read_request_json()
+                if set(payload) != {"reviewed"} or not isinstance(
+                    payload.get("reviewed"), bool
+                ):
+                    raise OSSIntakeRequestError(
+                        "人工核验请求必须且只能包含布尔字段 reviewed"
+                    )
+                review = self.server.catalog.set_manual_review(
+                    workspace_id,
+                    payload["reviewed"],
+                )
+                self._json({"workspace_id": workspace_id, **review})
+            except FileNotFoundError:
+                self._error(HTTPStatus.NOT_FOUND, "运行不存在")
+            except OSSIntakeRequestError as exc:
+                self._error(HTTPStatus.BAD_REQUEST, str(exc))
+            except (ValueError, json.JSONDecodeError) as exc:
+                self._error(HTTPStatus.BAD_REQUEST, str(exc))
+            except OSError as exc:
+                self._error(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    f"人工核验状态写入失败：{exc}",
+                )
+            return
         if route != "/api/intake/oss":
             self._error(HTTPStatus.NOT_FOUND, "接口不存在")
             return

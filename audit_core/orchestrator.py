@@ -186,9 +186,17 @@ def next_output_path(
         revision += 1
 
 
-def _default_provider(model: str | None) -> EvidenceProvider:
+def _default_provider(
+    model: str | None,
+    reasoning_effort: str | None,
+) -> EvidenceProvider:
     def provider(case: dict[str, Any], temporary_root: Path) -> dict[str, Any]:
-        return extract_with_codex(case, temporary_root, model=model)
+        return extract_with_codex(
+            case,
+            temporary_root,
+            model=model,
+            reasoning_effort=reasoning_effort,
+        )
 
     return provider
 
@@ -268,6 +276,7 @@ def run_audit(
     output_dir: str | Path = DEFAULT_OUTPUT_DIR,
     evidence_provider: EvidenceProvider | None = None,
     model: str | None = None,
+    reasoning_effort: str | None = None,
     scenario: str | None = None,
     observer: RunObserver | None = None,
 ) -> dict[str, Any]:
@@ -275,7 +284,7 @@ def run_audit(
     normalized_producer_model = normalize_producer_model(producer_model)
     output_root = Path(output_dir).resolve()
     output_root.mkdir(parents=True, exist_ok=True)
-    provider = evidence_provider or _default_provider(model)
+    provider = evidence_provider or _default_provider(model, reasoning_effort)
     temporary_workbook: Path | None = None
     temporary_html: Path | None = None
     temporary_root = _create_temporary_root(output_root)
@@ -428,6 +437,7 @@ def main(argv: list[str] | None = None) -> int:
             args.run_id,
             producer_model=args.producer_model,
             model=os.environ.get("OFFLINE_AUDIT_MODEL") or None,
+            reasoning_effort=os.environ.get("OFFLINE_AUDIT_REASONING_EFFORT") or None,
             scenario=args.scenario,
         )
     except AuditError as exc:

@@ -806,7 +806,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
 
         with self.opener.open(self.base + "/api/config", timeout=5) as response:
             config = json.load(response)
-        self.assertEqual(config["api_version"], "1.5")
+        self.assertEqual(config["api_version"], "1.6")
         self.assertTrue(config["oss_intake"]["enabled"])
         self.assertTrue(config["oss_intake"]["single_worker"])
         self.assertTrue(config["oss_intake"]["callback_configured"])

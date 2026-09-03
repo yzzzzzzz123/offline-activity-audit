@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw
 
 from audit_core.common import AuditError, validate_json
 from audit_core.codex_runner import (
+    ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
     MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO,
     PRODUCT_QUERY_REASONING_EFFORT,
@@ -965,6 +966,7 @@ class ProductRagTests(unittest.TestCase):
     def test_reasoning_policy_keeps_final_judgment_high(self) -> None:
         self.assertEqual(PRODUCT_QUERY_REASONING_EFFORT, "medium")
         self.assertEqual(DEFAULT_REASONING_EFFORT, "high")
+        self.assertIn("max", ALLOWED_REASONING_EFFORTS)
 
     def test_invalid_codex_request_configuration_is_not_retried(self) -> None:
         self.assertTrue(

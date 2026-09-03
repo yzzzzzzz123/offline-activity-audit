@@ -21,7 +21,7 @@ Personnel and promotional-display product identity share the project-level catal
 The only formal audit runner is:
 
 ```powershell
-py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--scenario <scenario>]
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--model <audit-model>] [--reasoning-effort <level>] [--scenario <scenario>]
 ```
 
 `input/` must contain one to ten ZIP files. Each supported scenario may appear at most once. Reject unknown, ambiguous, duplicate-type, or unsafe archives with a specific error. A maintenance-fee package whose marker and POS/settlement structure are unambiguous may continue to audit so missing mandatory roles become customer-facing blocking issues; ambiguous duplicate singleton roles still stop intake. A marked all-visual extra-giveaway package may similarly continue so generic camera filenames are classified from visible content and missing roles become blocking report issues; duplicate contract, settlement, or delivery candidates stop evidence acceptance. A marked price-difference package accepts zero or one POS Excel so a missing electronic sheet becomes a blocking report issue, while singleton-role ambiguity still stops intake. A marked POS-target-incentive package likewise accepts missing singleton roles so the contract/activity-proof gaps remain reportable. A marked entry-fee package requires one unique contract and one safely extractable shelf-photo RAR; missing system deduction proof remains a blocking audit issue. A marked self-procured-gift-material package requires one legacy activity-return `.xls`, extracts every embedded DISPIMG photo for visual review, and never treats that workbook as the POS electronic spreadsheet. `--scenario` may select one submitted type for a scenario-only formal result.
@@ -268,7 +268,7 @@ Every Agent executing an audit must invoke the repository-bundled runner and no 
 entrypoint:
 
 ```powershell
-py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--scenario <scenario>]
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--model <audit-model>] [--reasoning-effort <level>] [--scenario <scenario>]
 ```
 
 An Agent must not call internal report/render functions as an alternative workflow, handwrite a run
@@ -283,21 +283,25 @@ The repository contains exactly one customer-facing HTML entrypoint:
 
 It is a persistent, versioned two-level system shell and is never regenerated or filled on disk by an
 ordinary audit run. The trusted local service serves it at `http://127.0.0.1:8080/` and on the
-machine's approved LAN address while exposing read-only workbench APIs plus the separately authenticated
-OSS intake endpoint. It must not use a CDN,
+machine's approved LAN address while exposing read-only result APIs, the narrow same-origin
+manual-review marker mutation, and the separately authenticated OSS intake endpoint. It must not use a CDN,
 downloaded font, third-party script, or remote business-data dependency.
 
 Each formal run publishes one persistent run directory instead of another HTML:
 
-`worktrees/<YYYYMMDD>-<producer-model>[-1.N]/`
+`worktrees/<YYYYMMDD_HHMM_SS>-<audit-model>_<reasoning-effort>/`
 
 The directory contains `manifest.json`, an atomic `snapshot.json`, append-only
 `logs/events.jsonl`, observable `logs/run.log`, schema-validated files under `analysis/`, and replayable
 data checkpoints under `dom/checkpoints/`. It must not contain a generated customer HTML or a
-published workbook. `producer-model` is required provenance; `run-id` must begin with a valid
-`YYYYMMDD` business date. Same-date same-producer reruns use monotonic `-1.1`, `-1.2`, and later
-revisions without overwrite or gap refill. Existing legacy HTML files reserve their historical IDs
-and remain read-only compatibility inputs for the workbench catalog.
+published workbook. `producer-model` remains required provenance, while the path suffix records the
+actual audit model and primary reasoning effort. `run-id` must begin with a valid `YYYYMMDD` business
+date; append the local task-start time as `_HHMM_SS`. Compact safe model labels by removing separators
+such as the hyphens in `gpt-5.6-sol`, so examples include
+`20260902_1755_32-gpt5.6sol_xhigh/` and `20260902_1755_32-qwen3.8_max/`. Never use `-1.1`,
+`-1.2`, or another revision suffix for new worktrees and never overwrite an existing exact name.
+Existing legacy HTML files and old-name directories retain their historical IDs and remain read-only
+compatibility inputs for the workbench catalog.
 
 The fixed page has a one-to-many, two-level information architecture. `/` is the level-one audit
 management system with overview, complete run ledger, and technical archives. The overview contains
@@ -387,7 +391,7 @@ never prove or override a location, and a truly missing/unreadable watermark rem
 evidence gap.
 
 The canonical customer interface is the root `offline-activity-audit.html`, currently Audit System
-`2.6.0`. Its level-one system, approved original level-two audit desk, copy, layout,
+`2.7.0`. Its level-one system, approved original level-two audit desk, copy, layout,
 customer/technical separation, run-history behavior, relative API contract, responsive behavior, and
 controls remain unchanged during an ordinary audit. It reads only the trusted service's `/api/config`,
 `/api/runs`, run `snapshot`, `log`, `events`, approved `analysis`, and `checkpoints` resources. The
@@ -402,18 +406,19 @@ temporary HTML. It is not the customer entrypoint and must never be published in
 
 Future ordinary feature/fix tasks must not restyle or extend the root system or its approved original
 record view. They may change only when the user explicitly requests a frontend redesign or system
-behavior change. That same change must update the system version, read-only API contract, affected
+behavior change. That same change must update the system version, workbench API contract, affected
 tests, PC browser verification at 1440×960, this output contract, the orchestration Skill, and
 README; never weaken verification to accept a changed page.
 
-Audit System `2.6.0` freezes the persistent audit-ledger standard: a level-one management center with
+Audit System `2.7.0` freezes the persistent audit-ledger standard: a level-one management center with
 system overview, full audit ledger, and technical archive. The overview contains only aggregate metrics
 and recent run records. It does not show a runtime chain, stage nodes, or observable events, and its
 silent probe reads only `/api/runs`; visible overview content updates when the run-catalog signature
 changes. The system-overview `核销完成` metric shows the top-level input ZIP count from the newest
 completed run, not the cumulative number of completed run records. The level-one aggregate metric and
-completed-run count label both present `error_count` as `待人工核验`; the underlying count and level-two
-disposition content remain unchanged. The canonical
+completed-run count label present `error_count` as `待人工核验` only while a completed record is not
+manually reviewed; reviewed records contribute zero to that metric while the underlying count and
+level-two disposition content remain unchanged. The canonical
 six-task main-flow checklist comes from
 `audit_core.workbench_store.main_flow_task_list`, is persisted in every new manifest, and is exposed by
 the read-only workbench context and `/api/config` for technical contracts and running-record refresh;
@@ -433,16 +438,39 @@ its four grouped-error metrics and stacked error cards; the green-accented corre
 all independently passed subchecks by audit type and then by Chinese business category. Each pass entry
 shows the checked subject, concise deterministic basis, available source basenames, and confidence.
 Whole-record caveats and filter-behavior explanations remain internal rules and are not rendered as
-auxiliary customer-interface copy. The pass ledger offers
-client-side combined filters for audit type, Chinese check category, confidence, and free-text terms;
-the three enumerated filters are linked facets, omit options with no result under the other current
-conditions, and show a live result count beside every remaining option. The ledger reports the overall
-live match count and resets without mutating the snapshot. All grouped errors
-remain directly below the error summary modules and each carries one `核销类型 · <业务类型>` badge.
+auxiliary customer-interface copy. Both result views offer aligned client-side combined filters. Audit
+type always lists every type present in its view and is never narrowed by another condition. The error
+overview additionally filters by `错误原因分类`, confidence, and free text; its categories use actionable
+fine-grained labels such as `陈列标准`, `活动日期`, `门店地点低置信度`, `金额复算`, and
+`POS销售明细`, never broad umbrella labels. The pass ledger filters by Chinese check category,
+confidence, and free text. Error-reason/check category and confidence are linked
+facets: omit zero-result options under the other current conditions and show a live result count beside
+every remaining option. Both views report the overall live match count and reset without mutating the
+snapshot. All grouped errors remain directly below the error summary modules. Each card header carries
+only its `核销类型 · <业务类型>` and confidence badges. One or more category-value-only chips appear
+inside the error-reason field without an `错误原因分类` prefix and use the exact same `eo-chip` styling as
+`陈列标准`; there is no separate light category-chip treatment.
+When a view has exactly one audit type, its enabled audit-type select contains only that concrete type
+and omits the `全部核销方式` option; multi-type views retain the all option. Card audit-type values and
+facet audit-type values must use the same canonical business labels. Every error-reason category must
+belong to at least one card with a concrete audit type, and the client rejects orphan type labels.
+Both sibling views use the same judgment-confidence presentation. An explicit AI `confidence_score`
+in `[0,1]` takes precedence and is bucketed as high at `>=0.85`, medium at `>=0.60`, otherwise low.
+Without an explicit score, every level receives a bounded score from the concrete judgment context
+(specific numeric/location evidence, corroboration, ambiguity, and missing material), rather than a
+constant `0.5` or an automatic high-confidence `1`. Only an explicit fully-certain judgment may use
+`1`. Cards always render both level and score, including `置信度 高：1`; confidence filter options
+contain only high/medium/low and never numeric scores. This is confidence that the item-level judgment
+is accurate, not error severity or an internal retrieval/name-relevance score.
 There are no scenario queues, scenario-entry buttons, or per-type subpages in either sibling view.
-The read-only API contract is `1.5`: a completed snapshot's `view.pass_check_log` uses schema `1.0`
+The workbench API contract is `1.6`: a completed snapshot's `view.pass_check_log` uses schema `1.0`
 with `total`, type/scope counts, and ordered `groups[].items[]`; the server reconstructs this projection
 from immutable `analysis/results/<scenario>.json` for older archives without rewriting their worktrees.
+Error-reason classification is a deterministic client projection from the same immutable error rows and
+does not add or mutate an API business field. Completed ledger records expose a mutable
+`manual_reviewed` annotation through `POST /api/runs/<workspace-id>/manual-review`; store it atomically
+under `worktrees/.reviews/`, never rewrite the business manifest/snapshot, and exclude reviewed records'
+error counts from the level-one pending-manual-review metric. Unchecking restores the pending count.
 Formal frontend delivery is PC-only: verify at 1440×960
 and keep desktop widths of 1280px or greater usable. Narrow-screen CSS is best-effort fallback, not a
 mobile configuration or acceptance promise.

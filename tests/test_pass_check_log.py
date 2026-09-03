@@ -126,7 +126,12 @@ class PassCheckLogTests(unittest.TestCase):
                 "case_name": "维护费用.zip",
                 "maintenance_fee_audit": {
                     "controls": [
-                        {"control_id": "pos_visual_seal", "status": "pass", "basis": "全部POS可视资料盖章清楚"},
+                        {
+                            "control_id": "pos_visual_seal",
+                            "status": "pass",
+                            "basis": "全部POS可视资料盖章清楚",
+                            "confidence_score": 0.96,
+                        },
                         {"control_id": "amount_recalculation", "status": "fail", "basis": "金额无法复算"},
                     ],
                     "documents": [
@@ -152,6 +157,7 @@ class PassCheckLogTests(unittest.TestCase):
         self.assertEqual([group["item_count"] for group in log["groups"]], [1, 1])
         titles = [item["title"] for group in log["groups"] for item in group["items"]]
         self.assertEqual(titles, ["盖章POS核验通过", "合同权威性核验通过"])
+        self.assertEqual(log["groups"][0]["items"][0]["confidence_score"], 0.96)
         self.assertNotIn("申报金额复算通过", titles)
         self.assertNotIn("系统扣款凭证核验通过", titles)
 

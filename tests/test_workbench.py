@@ -7,10 +7,12 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
 from audit_core.html_report import DATA_CLOSE, DATA_OPEN
+from audit_core.common import AuditError
 from audit_core.orchestrator import run_audit
 from audit_core.workbench_server import Handler, WorkbenchCatalog, WorkbenchHTTPServer
 from audit_core.workbench_store import (
@@ -140,13 +142,42 @@ class WorkbenchStoreTests(unittest.TestCase):
             positions.append(skill.index(marker))
         self.assertEqual(positions, sorted(positions))
 
-    def test_workspace_revision_respects_legacy_html(self) -> None:
+    def test_workspace_uses_second_level_model_reasoning_name_without_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "20260828-codex.html").touch()
             (root / "20260828-codex-1.4.html").touch()
-            workspace = reserve_workspace("20260828-example", "codex", root)
-            self.assertEqual(workspace.name, "20260828-codex-1.5")
+            started_at = datetime(2026, 8, 28, 17, 55, 32)
+            workspace = reserve_workspace(
+                "20260828-example",
+                "codex",
+                root,
+                audit_model="gpt-5.6-sol",
+                reasoning_effort="xhigh",
+                started_at=started_at,
+            )
+            self.assertEqual(workspace.name, "20260828_1755_32-gpt5.6sol_xhigh")
+            with self.assertRaisesRegex(AuditError, "同一秒"):
+                reserve_workspace(
+                    "20260828-example",
+                    "codex",
+                    root,
+                    audit_model="gpt-5.6-sol",
+                    reasoning_effort="xhigh",
+                    started_at=started_at,
+                )
+
+    def test_workspace_name_supports_other_models_and_max_reasoning(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = reserve_workspace(
+                "20260902-example",
+                "qwen3.8",
+                temporary,
+                audit_model="qwen3.8",
+                reasoning_effort="max",
+                started_at=datetime(2026, 9, 2, 17, 55, 32),
+            )
+            self.assertEqual(workspace.name, "20260902_1755_32-qwen3.8_max")
 
     def test_store_persists_trace_analysis_and_dom_checkpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -202,7 +233,9 @@ class WorkbenchStoreTests(unittest.TestCase):
 
             manifest = json.loads((workspace / "manifest.json").read_text(encoding="utf-8"))
             snapshot = json.loads((workspace / "snapshot.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "1.1")
+            self.assertEqual(manifest["schema_version"], "1.2")
+            self.assertEqual(manifest["audit_model"], "codex")
+            self.assertEqual(manifest["reasoning_effort"], "high")
             self.assertEqual(manifest["status"], "completed")
             self.assertEqual(manifest["error_count"], 1)
             self.assertEqual(manifest["main_flow_tasks"], main_flow_task_list())
@@ -285,8 +318,14 @@ class WorkbenchStoreTests(unittest.TestCase):
             self.assertEqual(result["output"], str(ROOT_HTML))
             self.assertEqual(
                 result["workbench_url"],
-                "http://192.0.0.148:8080/?run=20260828-codex",
+                f"http://192.0.0.148:8080/?run={workspace.name}",
             )
+            self.assertRegex(
+                workspace.name,
+                r"^20260828_\d{4}_\d{2}-gpt5\.6sol_high$",
+            )
+            self.assertEqual(result["audit_model"], "gpt-5.6-sol")
+            self.assertEqual(result["reasoning_effort"], "high")
             self.assertEqual(list(root.glob("*.html")), [])
 
 
@@ -357,6 +396,16 @@ class WorkbenchServerTests(unittest.TestCase):
         with self.opener.open(self.base + path, timeout=5) as response:
             return response.read().decode("utf-8")
 
+    def _post_json(self, path: str, payload: dict) -> dict:
+        request = urllib.request.Request(
+            self.base + path,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
+        with self.opener.open(request, timeout=5) as response:
+            return json.load(response)
+
     @staticmethod
     def _script_payload(html: str, element_id: str) -> dict:
         marker = f'<script id="{element_id}" type="application/json">'
@@ -368,6 +417,10 @@ class WorkbenchServerTests(unittest.TestCase):
         listing = self._json("/api/runs")
         self.assertEqual(listing["count"], 1)
         self.assertEqual(listing["runs"][0]["workspace_id"], self.workspace_id)
+        self.assertEqual(listing["runs"][0]["audit_model"], "codex")
+        self.assertEqual(listing["runs"][0]["reasoning_effort"], "high")
+        self.assertFalse(listing["runs"][0]["manual_reviewed"])
+        self.assertIsNone(listing["runs"][0]["manual_reviewed_at"])
         self.assertEqual(listing["runs"][0]["main_flow_tasks"], main_flow_task_list())
         snapshot = self._json(f"/api/runs/{self.workspace_id}/snapshot")
         self.assertEqual(snapshot["run"]["status"], "completed")
@@ -376,19 +429,69 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 1)
         self.assertEqual(snapshot["view"]["pass_check_log"]["groups"][0]["audit_type"], "维护费用")
 
+    def test_manual_review_marker_persists_without_mutating_business_manifest(self) -> None:
+        manifest_path = self.root / self.workspace_id / "manifest.json"
+        original_manifest = manifest_path.read_bytes()
+        marked = self._post_json(
+            f"/api/runs/{self.workspace_id}/manual-review",
+            {"reviewed": True},
+        )
+        self.assertTrue(marked["manual_reviewed"])
+        self.assertIsNotNone(marked["manual_reviewed_at"])
+        review_path = self.root / ".reviews" / f"{self.workspace_id}.json"
+        self.assertTrue(review_path.is_file())
+        self.assertEqual(manifest_path.read_bytes(), original_manifest)
+
+        listing = self._json("/api/runs")["runs"][0]
+        snapshot = self._json(f"/api/runs/{self.workspace_id}/snapshot")
+        self.assertTrue(listing["manual_reviewed"])
+        self.assertTrue(snapshot["run"]["manual_reviewed"])
+
+        cleared = self._post_json(
+            f"/api/runs/{self.workspace_id}/manual-review",
+            {"reviewed": False},
+        )
+        self.assertFalse(cleared["manual_reviewed"])
+        self.assertIsNone(cleared["manual_reviewed_at"])
+        self.assertFalse(self._json("/api/runs")["runs"][0]["manual_reviewed"])
+
+    def test_manual_review_endpoint_rejects_invalid_or_missing_run(self) -> None:
+        for payload in ({}, {"reviewed": "yes"}, {"reviewed": True, "extra": 1}):
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                self._post_json(
+                    f"/api/runs/{self.workspace_id}/manual-review",
+                    payload,
+                )
+            try:
+                self.assertEqual(raised.exception.code, 400)
+            finally:
+                raised.exception.close()
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            self._post_json(
+                "/api/runs/20260902_1755_32-gpt5.6sol_xhigh/manual-review",
+                {"reviewed": True},
+            )
+        try:
+            self.assertEqual(raised.exception.code, 404)
+        finally:
+            raised.exception.close()
+
     def test_root_is_primary_system_and_run_query_is_secondary_record(self) -> None:
         primary = self._html("/")
         primary_context = self._script_payload(primary, "audit-workbench-context")
         self.assertEqual(primary_context["mode"], "system")
         self.assertIsNone(primary_context["selected_run"])
-        self.assertEqual(primary_context["system_version"], "2.6.0")
+        self.assertEqual(primary_context["system_version"], "2.7.0")
         self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
         self.assertIn("audit-system-extension-script", primary)
-        self.assertIn('content="2.6.0"', primary)
+        self.assertIn('content="2.7.0"', primary)
         self.assertIn("const latestCompletedZipCount", primary)
         self.assertIn("最近一次 input 的 ZIP 总数", primary)
         self.assertGreaterEqual(primary.count("待人工核验"), 2)
         self.assertIn('id="as-recent-list"', primary)
+        self.assertIn('data-as-review=', primary)
+        self.assertIn('/manual-review', primary)
+        self.assertIn("run.status === 'completed' && !run.manual_reviewed", primary)
         self.assertNotIn('id="as-monitor-list"', primary)
         self.assertNotIn("核销运行链路", primary)
         self.assertNotIn("RUNTIME MONITOR", primary)
@@ -400,9 +503,16 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.5")
-        self.assertEqual(config["system_version"], "2.6.0")
-        self.assertTrue(config["workbench_read_only"])
+        self.assertEqual(config["api_version"], "1.6")
+        self.assertEqual(config["system_version"], "2.7.0")
+        self.assertFalse(config["read_only"])
+        self.assertFalse(config["workbench_read_only"])
+        self.assertTrue(config["business_results_read_only"])
+        self.assertTrue(config["manual_review"]["writable"])
+        self.assertEqual(
+            config["manual_review"]["endpoint"],
+            "/api/runs/{workspace_id}/manual-review",
+        )
         self.assertFalse(config["oss_intake"]["enabled"])
         self.assertEqual(config["main_flow_tasks"], main_flow_task_list())
         self.assertEqual(
@@ -437,6 +547,7 @@ class WorkbenchServerTests(unittest.TestCase):
         )
         self.assertIn('id="eoErrorList"', secondary)
         self.assertIn('id="eoErrorType"', secondary)
+        self.assertIn('id="eoErrorCategory"', secondary)
         self.assertIn('id="eoErrorConfidence"', secondary)
         self.assertIn('id="eoErrorKeyword"', secondary)
         self.assertIn('id="eoErrorFacetSummary"', secondary)
@@ -449,6 +560,10 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn("正确检查项日志", secondary)
         self.assertIn("种核销方式", secondary)
         self.assertIn("核销类型 ·", secondary)
+        self.assertIn("错误原因分类", secondary)
+        self.assertIn('data-error-categories=', secondary)
+        self.assertIn('data-error-confidence-score=', secondary)
+        self.assertIn('data-pass-confidence-score=', secondary)
         self.assertIn('data-eo-view="passed"', secondary)
         self.assertNotIn("单项通过不等于整单核销通过", secondary)
         self.assertNotIn("核销方式始终展示全部；置信度随核销方式和关键词联动", secondary)

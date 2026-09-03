@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="canban-template-version" content="3.2.0">
-  <meta name="offline-audit-system-version" content="2.6.0">
+  <meta name="offline-audit-system-version" content="2.7.0">
   <script>
     if (window.location.protocol === 'file:') {
       window.location.replace('http://192.0.0.148:8080/');
@@ -1918,6 +1918,7 @@
       font-size: 10px;
       font-weight: 760;
     }
+    .eo-error-reason-list + * { margin-top: 8px; }
     .eo-error-details { margin-top: 11px; border-top: 1px solid var(--eo-line); }
     .eo-error-details > summary {
       width: fit-content;
@@ -2058,7 +2059,7 @@
     .eo-error-filter-panel .eo-pass-filter-result button:hover,
     .eo-error-filter-empty button:hover { color: #fff; background: var(--eo-danger); border-color: var(--eo-danger); }
     .eo-error-filter-panel .eo-pass-filter-result button:disabled { color: #ad9b98; background: #f7f3f2; border-color: #e6dcda; }
-    .eo-error-filter-grid { grid-template-columns: minmax(170px, .8fr) minmax(150px, .7fr) minmax(300px, 1.8fr); }
+    .eo-error-filter-grid { grid-template-columns: minmax(145px, .72fr) minmax(165px, .82fr) minmax(130px, .62fr) minmax(250px, 1.45fr); }
     .eo-error-filter-grid label > span { color: #745b57; }
     .eo-error-filter-grid select,
     .eo-error-filter-grid input { color: #4f2d29; background-color: #fffcfb; border-color: #dfd0cd; }
@@ -2263,12 +2264,95 @@
         : '未识别';
       const confidenceLabel = (value) => ({ high: '高', medium: '中', low: '低' }[value] || '高');
       const normalizedConfidence = (value) => ['high', 'medium', 'low'].includes(value) ? value : 'high';
+      const confidencePresentation = (value, explicitScore, judgmentContext = '') => {
+        const fallbackLevel = normalizedConfidence(value);
+        const hasExplicitScore = explicitScore !== undefined
+          && explicitScore !== null
+          && String(explicitScore).trim() !== ''
+          && Number.isFinite(Number(explicitScore));
+        const context = String(judgmentContext || '');
+        const inferredScore = () => {
+          let score = fallbackLevel === 'high' ? 0.9 : fallbackLevel === 'medium' ? 0.72 : 0.52;
+          if (/\d+(?:\.\d+)?\s*(?:米|元|个|件|张|家|%|天)/.test(context)) score += 0.03;
+          if (/唯一|明确|精确|已定位|证据闭环|(?:^|[^不未无])一致/.test(context)) score += 0.03;
+          if (/MCP|地图|坐标|距离|第\s*\d+\s*(?:页|行)|合同|Excel|POS/i.test(context)) score += 0.02;
+          if (/不唯一|多个候选|模糊|低置信度|待人工|无法确认|不.{0,3}一致/.test(context)) score -= 0.03;
+          if (/缺失|缺少|未提交|不完整|无法识别|不可读|未识别|没有/.test(context)) score -= 0.05;
+          const bounds = fallbackLevel === 'high'
+            ? [0.85, 0.99]
+            : fallbackLevel === 'medium'
+              ? [0.6, 0.84]
+              : [0.35, 0.59];
+          return Math.min(bounds[1], Math.max(bounds[0], Math.round(score * 100) / 100));
+        };
+        const score = hasExplicitScore
+          ? Math.min(1, Math.max(0, Math.round(Number(explicitScore) * 100) / 100))
+          : inferredScore();
+        const level = hasExplicitScore
+          ? score >= 0.85 ? 'high' : score >= 0.6 ? 'medium' : 'low'
+          : fallbackLevel;
+        const scoreText = String(Number(score.toFixed(2)));
+        const label = confidenceLabel(level);
+        return {
+          level,
+          score,
+          scoreText,
+          text: `${label}：${scoreText}`,
+          filterText: `${label}置信度`,
+        };
+      };
+      const ERROR_REASON_ORDER = [
+        '资料完整性', '费用类型', '特殊审批', '合同核心字段', '主体身份', '签章完整性',
+        '商品对应', '销售明细', 'POS销售明细', '门店地点低置信度', '门店水印缺失或无法核对',
+        '活动日期', '陈列标准', '照片复用', '现场商品知识库', '现场商品与合同', '现场照片',
+        '票据材料', '结算材料', '付款凭证', '收款人与日期', '金额复算',
+      ];
+      const errorReasonCategory = (value) => {
+        const text = String(value || '');
+        const rules = [
+          ['照片复用', /照片.{0,8}(?:重复|复用)|(?:重复|复用).{0,8}照片|相同图片|图片哈希/],
+          ['门店水印缺失或无法核对', /门店水印缺失|水印.{0,6}(?:缺失|无法识别|不可读)|filename_only/i],
+          ['门店地点低置信度', /门店地点|水印地点|合同门店|同址|临近|距离|商场|location_unverified/i],
+          ['陈列标准', /陈列标准|堆头标准|陈列.{0,8}(?:不符|未达|不足)|摆放|尺寸/],
+          ['活动日期', /活动日期|活动期|执行期|合同周期|日期水印/],
+          ['现场商品与合同', /现场商品.{0,8}合同|合同商品范围/],
+          ['现场商品知识库', /现场商品(?:.{0,8}(?:知识库|识别))|知识库图片视觉/],
+          ['POS销售明细', /POS/i],
+          ['销售明细', /销售Excel|销售明细|出库|送货|电子表|配送/i],
+          ['金额复算', /金额|单价|合计|奖励|申报|支持金额|差额|复算|计算|预算/],
+          ['付款凭证', /转账|付款|支付凭证|银行回单/],
+          ['票据材料', /发票|收据|票据/],
+          ['结算材料', /结算单|结算材料|结算申请/],
+          ['签章完整性', /签章|盖章|印章|签字/],
+          ['合同核心字段', /合同PDF核心|合同核心|合同字段|合同条款|协议条款/],
+          ['特殊审批', /特殊审批|新增类型审批|审批材料|审批意见/],
+          ['费用类型', /费用性质|费用类型|归类|重新分类|类型核验/],
+          ['主体身份', /主体|身份|收款人|签订方|客户|经销商|资格|抬头/],
+          ['商品对应', /商品|产品|条形码|69码|SKU|知识库|购赠|赠品/i],
+          ['现场照片', /现场|照片|返图|活动证明|活动照片|物料成品|上架/],
+          ['资料完整性', /资料|材料|缺失|缺少|未提交|不完整|不可核验|无法核验|未识别/],
+        ];
+        return rules.find(([, pattern]) => pattern.test(text))?.[0] || '资料完整性';
+      };
+      const normalizedErrorReasonCategories = (values, fallback) => {
+        const sourceValues = Array.isArray(values) ? values : [values];
+        const categories = [...new Set(sourceValues.map((value) => String(value || '').trim()).filter(Boolean))];
+        if (!categories.length) categories.push(errorReasonCategory(fallback));
+        return categories.sort((left, right) => {
+          const leftIndex = ERROR_REASON_ORDER.indexOf(left);
+          const rightIndex = ERROR_REASON_ORDER.indexOf(right);
+          return (leftIndex < 0 ? ERROR_REASON_ORDER.length : leftIndex)
+            - (rightIndex < 0 ? ERROR_REASON_ORDER.length : rightIndex)
+            || left.localeCompare(right, 'zh-CN');
+        });
+      };
       const headerFiles = (sheet, index) => {
         const values = lines(sheet.headers?.[index] || '');
         return (values.length > 1 ? values.slice(1) : values).join('、');
       };
       const issueRows = (sheet) => (sheet.rows || []).filter((row) => row.status === 'issue');
       let errorSequence = 0;
+      const collectedErrorReasonCategories = new Set();
       const textBlock = (value) => lines(value).map((line) => `<div class="eo-line">${escapeHtml(line)}</div>`).join('');
       const actionText = (row) => {
         const value = String(row.values?.[5] || '');
@@ -2277,18 +2361,34 @@
         const items = lines(match[1]).map((line) => line.replace(/^\d+\.\s*/, '')).filter(Boolean);
         return items.join('；') || '补充能够直接核验该错误的清晰材料后重新提交。';
       };
-      const errorCard = ({ title, auditType, source = '', baseline = '', problem, action, extra = '', search = '', confidence = 'high' }) => `
-        <article class="eo-error-card" data-audit-type="${escapeHtml(auditType)}" data-error-confidence="${normalizedConfidence(confidence)}" data-search="${escapeHtml([title, auditType, source, baseline, problem, action, search].join(' ').toLocaleLowerCase('zh-CN'))}">
-          <div class="eo-error-index">${String(++errorSequence).padStart(2, '0')}</div>
-          <div class="eo-error-main">
-            <header class="eo-error-head"><h3>${escapeHtml(title)}</h3><div class="eo-error-badges"><span class="eo-scope">核销类型 · ${escapeHtml(auditType)}</span><span class="eo-error-confidence">置信度 · ${confidenceLabel(normalizedConfidence(confidence))}</span></div></header>
-            ${source ? `<div class="eo-field source"><span>问题文件</span><div>${escapeHtml(source)}</div></div>` : ''}
-            ${baseline ? `<div class="eo-field source"><span>对照文件</span><div>${escapeHtml(baseline)}</div></div>` : ''}
-            <div class="eo-field"><span>错误原因</span><div>${problem}</div></div>
-            <div class="eo-field action"><span>处理方式</span><div>${escapeHtml(action)}</div></div>
-            ${extra}
-          </div>
-        </article>`;
+      const errorCard = ({ title, auditType, source = '', baseline = '', problem, action, extra = '', search = '', confidence = 'high', confidenceScore = null, reasonCategories = [] }) => {
+        const categories = normalizedErrorReasonCategories(reasonCategories, title);
+        const confidenceView = confidencePresentation(
+          confidence,
+          confidenceScore,
+          [title, source, baseline, problem, action, search].join(' '),
+        );
+        categories.forEach((category) => collectedErrorReasonCategories.add(category));
+        const categoryChips = categories
+          .map((category) => `<span class="eo-chip eo-error-reason">${escapeHtml(category)}</span>`)
+          .join('');
+        const problemHtml = String(problem || '');
+        const categorizedProblem = problemHtml.startsWith('<div class="eo-chips">')
+          ? problemHtml.replace('<div class="eo-chips">', `<div class="eo-chips">${categoryChips}`)
+          : `<div class="eo-chips eo-error-reason-list">${categoryChips}</div>${problemHtml}`;
+        return `
+          <article class="eo-error-card" data-audit-type="${escapeHtml(auditType)}" data-error-categories="${escapeHtml(categories.join('|'))}" data-error-confidence="${confidenceView.level}" data-error-confidence-score="${confidenceView.scoreText}" data-search="${escapeHtml([title, auditType, categories.join(' '), source, baseline, problem, action, search].join(' ').toLocaleLowerCase('zh-CN'))}">
+            <div class="eo-error-index">${String(++errorSequence).padStart(2, '0')}</div>
+            <div class="eo-error-main">
+              <header class="eo-error-head"><h3>${escapeHtml(title)}</h3><div class="eo-error-badges"><span class="eo-scope">核销类型 · ${escapeHtml(auditType)}</span><span class="eo-error-confidence">置信度 ${confidenceView.text}</span></div></header>
+              ${source ? `<div class="eo-field source"><span>问题文件</span><div>${escapeHtml(source)}</div></div>` : ''}
+              ${baseline ? `<div class="eo-field source"><span>对照文件</span><div>${escapeHtml(baseline)}</div></div>` : ''}
+              <div class="eo-field"><span>错误原因</span><div>${categorizedProblem}</div></div>
+              <div class="eo-field action"><span>处理方式</span><div>${escapeHtml(action)}</div></div>
+              ${extra}
+            </div>
+          </article>`;
+      };
       const detailsTable = (label, headers, rows) => {
         if (!rows.length) return '';
         const head = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
@@ -2320,7 +2420,14 @@
             reason = `销售Excel读取到${displayNumber(storeCount)}家门店；转账凭证目前只能确认金额，没有完整显示每笔收款人、对应门店和完整交易日期。因此无法确认Excel中的${displayNumber(storeCount)}家门店分别由谁收款、对应哪一笔转账以及具体转账日期。`;
           }
           const problem = textBlock(reason);
-          return errorCard({ title: row.heading, auditType: '人员激励', source, baseline, problem, action: actionText(row), search: (row.values || []).join(' '), confidence: row.confidence });
+          const reasonCategories = row.heading === '实际申请金额'
+            ? ['金额复算']
+            : row.heading === '收款人与日期'
+              ? ['收款人与日期']
+              : row.section === 'detail'
+                ? ['商品对应']
+                : [errorReasonCategory([row.heading, ...(row.values || [])].join(' '))];
+          return errorCard({ title: row.heading, auditType: '人员激励', source, baseline, problem, action: actionText(row), search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories });
         }).join('');
         return { count: rows.length, upstream: settlementCount, local: rows.length - settlementCount, html: cards };
       };
@@ -2340,6 +2447,10 @@
         if (label !== '合同门店') return label;
         return String(row.values?.[3] || '').includes('门店不一致') ? '门店地点低置信度' : '门店水印缺失或无法核对';
       };
+      const displayLocalReasonCategories = (row, labels) => normalizedErrorReasonCategories(
+        labels.map((label) => displayLocalLabel(row, label)),
+        [row.heading, ...(row.values || [])].join(' '),
+      );
       const localDisplayProblem = (row, labels) => {
         const facts = [];
         const photo = row.values?.[1] || '';
@@ -2499,7 +2610,7 @@
           const blockingProblem = contractProblem.filter((line) => !line.includes('水印'));
           const blockingAction = actionText(activity).split('；').filter((item) => item && !item.includes('水印')).join('；');
           if (blockingProblem.length || blockingAction) {
-            upstream.push({ title: '合同PDF核心字段未通过', scope: '合同材料', source: contractFile, problem: textBlock(blockingProblem.join('\n')), action: blockingAction, search: (activity.values || []).join(' '), confidence: activity.confidence });
+            upstream.push({ title: '合同PDF核心字段未通过', scope: '合同材料', source: contractFile, problem: textBlock(blockingProblem.join('\n')), action: blockingAction, search: (activity.values || []).join(' '), confidence: activity.confidence, confidenceScore: activity.confidence_score, reasonCategories: ['合同核心字段'] });
           }
         }
         if (knowledgeRows.length) {
@@ -2511,6 +2622,7 @@
             extra: detailsTable(`查看 ${knowledgeRows.length} 行合同商品错误清单`, ['合同位置', '合同商品', '知识库商品', '具体错误'], knowledgeRows),
             search: knowledgeRows.flat().join(' '),
             confidence: 'high',
+            reasonCategories: ['商品对应'],
           });
         }
         if (salesRows.length) {
@@ -2524,6 +2636,7 @@
             extra: detailsTable(`查看 ${salesRows.length} 行销售错误清单`, ['合同位置', '合同商品', '销售Excel', '具体错误'], salesRows),
             search: salesRows.flat().join(' '),
             confidence: 'high',
+            reasonCategories: ['销售明细'],
           });
         }
         const upstreamCards = upstream.map((item) => errorCard({ ...item, auditType: '堆头/陈列' })).join('');
@@ -2531,9 +2644,9 @@
         const localCards = localRows.map((row) => {
           const labels = displayLocalLabels(row);
           const facts = localDisplayProblem(row, labels);
-          const problem = `<div class="eo-chips">${labels.map((label) => `<span class="eo-chip">${escapeHtml(displayLocalLabel(row, label))}</span>`).join('')}</div>${facts.length ? `<div style="margin-top:8px">${textBlock(facts.join('\n'))}</div>` : ''}`;
+          const problem = facts.length ? textBlock(facts.join('\n')) : '';
           const source = afterPrefix(row.values?.[1], '文件：') || headerFiles(sheet, 1);
-          return errorCard({ title: row.heading, auditType: '堆头/陈列', source, baseline: contractFile, problem, action: localDisplayAction(row, labels), search: (row.values || []).join(' '), confidence: row.confidence });
+          return errorCard({ title: row.heading, auditType: '堆头/陈列', source, baseline: contractFile, problem, action: localDisplayAction(row, labels), search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: displayLocalReasonCategories(row, labels) });
         }).join('');
         const html = `${upstreamCards}${localCards}`;
         return { count: upstream.length + localRows.length, upstream: upstream.length, local: localRows.length, html };
@@ -2544,7 +2657,8 @@
         const cards = rows.map((row) => {
           const problem = textBlock([row.values?.[1], row.values?.[4]].filter(Boolean).join('\n'));
           const source = afterPrefix(row.values?.[0], '来源：');
-          return errorCard({ title: row.heading.replace(/^错误项：/, ''), auditType: '海报/展示道具', source, problem, action: actionText(row), search: (row.values || []).join(' '), confidence: row.confidence });
+          const title = row.heading.replace(/^错误项：/, '');
+          return errorCard({ title, auditType: '海报/展示道具', source, problem, action: actionText(row), search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [errorReasonCategory([title, ...(row.values || [])].join(' '))] });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
@@ -2556,22 +2670,22 @@
           const source = afterPrefix(row.values?.[0], '文件：');
           const problem = textBlock([row.values?.[1], row.values?.[2], row.values?.[3], row.values?.[4]].filter(Boolean).join('\n'));
           const action = afterPrefix(row.values?.[5], '处理方式：') || actionText(row);
-          return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence });
+          return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [errorReasonCategory([title, ...(row.values || [])].join(' '))] });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
 
       const projections = data.sheets.map((sheet) => {
         if (sheet.scenario === 'personnel_incentive') return { sheet, ...personnelView(sheet), label: '人员激励' };
-        if (sheet.scenario === 'promotional_display') return { sheet, ...displayView(sheet), label: '堆头陈列' };
-        if (sheet.scenario === 'poster_material') return { sheet, ...posterView(sheet), label: '展示道具' };
+        if (sheet.scenario === 'promotional_display') return { sheet, ...displayView(sheet), label: '堆头/陈列' };
+        if (sheet.scenario === 'poster_material') return { sheet, ...posterView(sheet), label: '海报/展示道具' };
         if (sheet.scenario === 'other_expense') return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
         if (sheet.scenario === 'maintenance_fee') return { sheet, ...groupedIssueView(sheet, '维护费用'), label: '维护费用' };
         if (sheet.scenario === 'giveaway_promotion') return { sheet, ...groupedIssueView(sheet, '额外搭赠'), label: '额外搭赠' };
         if (sheet.scenario === 'price_difference_support') return { sheet, ...groupedIssueView(sheet, '价格补差'), label: '价格补差' };
         if (sheet.scenario === 'pos_target_incentive') return { sheet, ...groupedIssueView(sheet, 'POS达标激励'), label: 'POS达标激励' };
         if (sheet.scenario === 'entry_fee') return { sheet, ...groupedIssueView(sheet, '进场费'), label: '进场费' };
-        if (sheet.scenario === 'self_procured_gift_material') return { sheet, ...groupedIssueView(sheet, '客户自采赠品物料'), label: '自采赠品物料' };
+        if (sheet.scenario === 'self_procured_gift_material') return { sheet, ...groupedIssueView(sheet, '客户自采赠品物料'), label: '客户自采赠品物料' };
         return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
       });
       const total = projections.reduce((sum, item) => sum + item.count, 0);
@@ -2581,8 +2695,14 @@
       const typeCount = projections.filter((item) => item.count > 0).length;
       const unifiedErrors = projections.map((item) => item.html).filter(Boolean).join('');
       const errorTypes = [...new Set(projections.map((item) => item.label))];
+      const errorReasonValues = [
+        ...ERROR_REASON_ORDER.filter((category) => collectedErrorReasonCategories.has(category)),
+        ...[...collectedErrorReasonCategories].filter((category) => !ERROR_REASON_ORDER.includes(category)).sort((left, right) => left.localeCompare(right, 'zh-CN')),
+      ];
       const errorTypeOptions = errorTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('');
-      const errorConfidenceOptions = ['high', 'medium', 'low'].map((confidence) => `<option value="${confidence}">${confidenceLabel(confidence)}置信度</option>`).join('');
+      const errorTypeAllOption = errorTypes.length === 1 ? '' : '<option value="">全部核销方式</option>';
+      const errorReasonOptions = errorReasonValues.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+      const errorConfidenceOptions = ['high', 'medium', 'low'].map((confidence) => `<option value="${confidence}">${confidencePresentation(confidence).filterText}</option>`).join('');
 
       const fallbackPassGroups = data.sheets.map((sheet) => {
         const projection = projections.find((item) => item.sheet === sheet);
@@ -2595,6 +2715,7 @@
           source_files: [],
           source_file_count: 0,
           confidence: row.confidence || 'high',
+          confidence_score: row.confidence_score,
           scope: row.section === 'detail' ? 'product' : 'material',
         }));
         return {
@@ -2623,11 +2744,12 @@
         .map((group) => group.audit_type || group.title || '其他核销'))];
       const passCategories = [...new Set(passItems.map((item) => item.category || '核销检查'))];
       const passConfidences = ['high', 'medium', 'low'].filter((confidence) =>
-        passItems.some((item) => normalizedConfidence(item.confidence) === confidence)
+        passItems.some((item) => confidencePresentation(item.confidence, item.confidence_score).level === confidence)
       );
       const passTypeOptions = passTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('');
+      const passTypeAllOption = passTypes.length === 1 ? '' : '<option value="">全部核销方式</option>';
       const passCategoryOptions = passCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
-      const passConfidenceOptions = passConfidences.map((confidence) => `<option value="${confidence}">${confidenceLabel(confidence)}置信度</option>`).join('');
+      const passConfidenceOptions = passConfidences.map((confidence) => `<option value="${confidence}">${confidencePresentation(confidence).filterText}</option>`).join('');
       const sourceFiles = (item) => {
         const files = Array.isArray(item.source_files) ? item.source_files.filter(Boolean) : [];
         const totalFiles = Math.max(files.length, Number(item.source_file_count || 0));
@@ -2648,11 +2770,14 @@
         const categoryHtml = [...categories.entries()].map(([category, categoryItems]) => {
           const cards = categoryItems.map((item) => {
             passSequence += 1;
-            const confidenceValue = normalizedConfidence(item.confidence);
-            const confidence = confidenceLabel(confidenceValue);
-            return `<article class="eo-pass-card" data-pass-check="${escapeHtml(item.check_id || `pass-${passSequence}`)}" data-pass-category="${escapeHtml(category)}" data-pass-confidence="${confidenceValue}">
+            const confidenceView = confidencePresentation(
+              item.confidence,
+              item.confidence_score,
+              [category, item.title, item.subject, item.basis, ...(item.source_files || [])].join(' '),
+            );
+            return `<article class="eo-pass-card" data-pass-check="${escapeHtml(item.check_id || `pass-${passSequence}`)}" data-pass-category="${escapeHtml(category)}" data-pass-confidence="${confidenceView.level}" data-pass-confidence-score="${confidenceView.scoreText}">
               <div class="eo-pass-index"><span>PASS</span><strong>${String(passSequence).padStart(4, '0')}</strong></div>
-              <div class="eo-pass-main"><header class="eo-pass-head"><div><small>${escapeHtml(category)}</small><h3>${escapeHtml(item.title || '检查项通过')}</h3></div><span class="eo-pass-confidence">置信度 · ${confidence}</span></header>
+              <div class="eo-pass-main"><header class="eo-pass-head"><div><small>${escapeHtml(category)}</small><h3>${escapeHtml(item.title || '检查项通过')}</h3></div><span class="eo-pass-confidence">置信度 ${confidenceView.text}</span></header>
                 <div class="eo-pass-field"><span>核验对象</span><strong>${escapeHtml(item.subject || group.audit_type || '本次材料')}</strong></div>
                 <div class="eo-pass-field"><span>判断依据</span><div>${textBlock(item.basis || '结构化核销结果已确认该检查项通过。')}</div></div>
                 ${sourceFiles(item)}
@@ -2681,17 +2806,17 @@
         <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销类型</span><small>本批次涉及的业务类型</small></div><strong>${typeCount}</strong></article><article class="eo-metric" style="--metric-accent:#d84b3e"><div class="eo-metric-copy"><span>错误总数</span><small>按错误清单归并后的数量</small></div><strong>${total}</strong></article><article class="eo-metric" style="--metric-accent:#b76d15"><div class="eo-metric-copy"><span>材料 / 结算错误</span><small>合同、销售、结算及道具材料</small></div><strong>${materialTotal}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>商品 / 门店错误</span><small>商品核销与门店现场问题</small></div><strong>${fieldTotal}</strong></article></div>
         <section class="eo-composition"><div class="eo-composition-title"><small>ERROR COMPOSITION</small><strong>错误构成</strong></div><div class="eo-composition-bar" aria-label="错误构成：材料与结算 ${materialTotal}，商品与门店 ${fieldTotal}"><i style="width:${materialPercent}%"></i><b style="width:${100 - materialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 结算 ${materialTotal}</span><span><i></i>商品 / 门店 ${fieldTotal}</span></div></section>
         <section class="eo-pass-filter-panel eo-error-filter-panel" aria-labelledby="eoErrorFilterTitle"><header class="eo-pass-filter-head"><div><small>FILTER REJECTED CHECKS</small><h2 id="eoErrorFilterTitle">筛选错误检查项</h2></div><div class="eo-pass-filter-result" aria-live="polite"><span>当前命中</span><strong id="eoErrorVisible">${total}</strong><em>/ ${total} 组</em><button type="button" data-error-reset disabled>重置筛选</button></div></header>
-          <div class="eo-pass-filter-grid eo-error-filter-grid"><label><span>核销方式</span><select id="eoErrorType" aria-controls="eoErrorList"><option value="">全部核销方式</option>${errorTypeOptions}</select></label><label><span>置信度</span><select id="eoErrorConfidence" aria-controls="eoErrorList"><option value="">全部置信度</option>${errorConfidenceOptions}</select></label><label class="eo-error-search"><span>关键词</span><input id="eoErrorKeyword" type="search" placeholder="搜索错误项、文件、原因或处理方式" autocomplete="off" aria-controls="eoErrorList"></label></div>
+          <div class="eo-pass-filter-grid eo-error-filter-grid"><label><span>核销方式</span><select id="eoErrorType" aria-controls="eoErrorList">${errorTypeAllOption}${errorTypeOptions}</select></label><label><span>错误原因分类</span><select id="eoErrorCategory" aria-controls="eoErrorList"><option value="">全部错误原因分类</option>${errorReasonOptions}</select></label><label><span>置信度</span><select id="eoErrorConfidence" aria-controls="eoErrorList"><option value="">全部置信度</option>${errorConfidenceOptions}</select></label><label class="eo-error-search"><span>关键词</span><input id="eoErrorKeyword" type="search" placeholder="搜索错误项、文件、原因或处理方式" autocomplete="off" aria-controls="eoErrorList"></label></div>
           <div class="eo-pass-facet-hint eo-facet-summary-only"><em id="eoErrorFacetSummary" aria-live="polite"></em></div>
         </section>
         <section class="eo-queue-panel"><header class="eo-queue-head"><div><small>REJECTED ERROR RESULTS</small><h2>核销错误结果</h2></div><p>全部错误直接向下排列<br>每项标明对应核销类型</p></header><div class="eo-scenario-grid eo-stack" id="eoErrorList">${unifiedErrors || '<div class="eo-empty">没有发现核销错误</div>'}</div></section>
-        <div class="eo-pass-filter-empty eo-error-filter-empty" id="eoErrorFilterEmpty" hidden><strong>没有符合条件的错误检查项</strong><span>可调整核销方式、置信度或关键词后重试。</span><button type="button" data-error-reset>清除全部筛选</button></div>
+        <div class="eo-pass-filter-empty eo-error-filter-empty" id="eoErrorFilterEmpty" hidden><strong>没有符合条件的错误检查项</strong><span>可调整核销方式、错误原因分类、置信度或关键词后重试。</span><button type="button" data-error-reset>清除全部筛选</button></div>
       </div></section><section class="eo-view" id="passed" hidden><div class="eo-home-cockpit eo-pass-cockpit">
         <header class="eo-cockpit-hero eo-pass-hero"><div class="eo-hero-copy"><span class="eo-kicker">VERIFIED CHECK LEDGER</span><h1>正确检查项日志</h1><p>按核销类型记录已有充分证据、被独立确认通过的子检查，保留核验对象、判断依据、来源文件与置信度，便于人工回看。</p></div><div class="eo-total-gauge"><span>通过检查项</span><strong>${passTotal}</strong><em>项记录</em></div></header>
         <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销类型</span><small>形成通过日志的业务类型</small></div><strong>${passTypeCount}</strong></article><article class="eo-metric" style="--metric-accent:#18845e"><div class="eo-metric-copy"><span>通过检查项</span><small>逐个独立子检查计数</small></div><strong>${passTotal}</strong></article><article class="eo-metric" style="--metric-accent:#288d86"><div class="eo-metric-copy"><span>材料 / 商品</span><small>合同、票据、销售与商品检查</small></div><strong>${passMaterialProduct}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>门店 / 金额</span><small>现场、地点、日期与金额规则</small></div><strong>${passStoreAmount}</strong></article></div>
         <section class="eo-composition eo-pass-composition"><div class="eo-composition-title"><small>PASS COMPOSITION</small><strong>通过项构成</strong></div><div class="eo-composition-bar" aria-label="通过项构成：材料与商品 ${passMaterialProduct}，门店与金额 ${passStoreAmount}"><i style="width:${passMaterialPercent}%"></i><b style="width:${100 - passMaterialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 商品 ${passMaterialProduct}</span><span><i></i>门店 / 金额 ${passStoreAmount}</span></div></section>
         <section class="eo-pass-filter-panel" aria-labelledby="eoPassFilterTitle"><header class="eo-pass-filter-head"><div><small>FILTER VERIFIED CHECKS</small><h2 id="eoPassFilterTitle">筛选正确检查项</h2></div><div class="eo-pass-filter-result" aria-live="polite"><span>当前命中</span><strong id="eoPassVisible">${passTotal}</strong><em>/ ${passTotal} 项</em><button type="button" data-pass-reset disabled>重置筛选</button></div></header>
-          <div class="eo-pass-filter-grid"><label><span>核销方式</span><select id="eoPassType" aria-controls="eoPassList"><option value="">全部核销方式</option>${passTypeOptions}</select></label><label><span>检查分类</span><select id="eoPassCategory" aria-controls="eoPassList"><option value="">全部检查分类</option>${passCategoryOptions}</select></label><label><span>置信度</span><select id="eoPassConfidence" aria-controls="eoPassList"><option value="">全部置信度</option>${passConfidenceOptions}</select></label><label class="eo-pass-search"><span>关键词</span><input id="eoPassKeyword" type="search" placeholder="搜索检查项、对象、依据或文件" autocomplete="off" aria-controls="eoPassList"></label></div>
+          <div class="eo-pass-filter-grid"><label><span>核销方式</span><select id="eoPassType" aria-controls="eoPassList">${passTypeAllOption}${passTypeOptions}</select></label><label><span>检查分类</span><select id="eoPassCategory" aria-controls="eoPassList"><option value="">全部检查分类</option>${passCategoryOptions}</select></label><label><span>置信度</span><select id="eoPassConfidence" aria-controls="eoPassList"><option value="">全部置信度</option>${passConfidenceOptions}</select></label><label class="eo-pass-search"><span>关键词</span><input id="eoPassKeyword" type="search" placeholder="搜索检查项、对象、依据或文件" autocomplete="off" aria-controls="eoPassList"></label></div>
           <div class="eo-pass-facet-hint eo-facet-summary-only"><em id="eoPassFacetSummary" aria-live="polite"></em></div>
         </section>
         <section class="eo-pass-ledger"><header class="eo-queue-head"><div><small>VERIFIED PASS RESULTS</small><h2>按核销类型归档</h2></div><p>${passGroups.length} 种核销类型<br>${passTotal} 项可回查判断</p></header><div class="eo-pass-groups" id="eoPassList">${passGroupHtml || '<div class="eo-pass-empty"><strong>暂无正确检查项日志</strong><span>只有被结构化结果明确判定通过的子检查才会出现在这里。</span></div>'}</div></section>
@@ -2700,9 +2825,10 @@
 
       document.getElementById('eoBackTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
       const normalizeFilterText = (value) => String(value || '').trim().toLocaleLowerCase('zh-CN');
-      const renderFacetOptions = ({ select, values, allLabel, label, counts, selected }) => {
+      const renderFacetOptions = ({ select, values, allLabel, label, counts, selected, omitAllWhenSingle = false }) => {
         const availableValues = values.filter((value) => counts.has(value));
         if (selected && !availableValues.includes(selected)) availableValues.unshift(selected);
+        const singleWithoutAll = omitAllWhenSingle && availableValues.length === 1;
         const allOption = document.createElement('option');
         allOption.value = '';
         allOption.textContent = allLabel;
@@ -2717,13 +2843,14 @@
               : `${label(value)}（0）`;
           return option;
         });
-        select.replaceChildren(allOption, ...options);
-        select.value = selected;
+        select.replaceChildren(...(singleWithoutAll ? options : [allOption, ...options]));
+        select.value = singleWithoutAll ? availableValues[0] : selected;
         select.disabled = availableValues.length === 0;
         return counts.size;
       };
 
       const errorTypeFilter = document.getElementById('eoErrorType');
+      const errorCategoryFilter = document.getElementById('eoErrorCategory');
       const errorConfidenceFilter = document.getElementById('eoErrorConfidence');
       const errorKeywordFilter = document.getElementById('eoErrorKeyword');
       const errorFilterPanel = document.querySelector('.eo-error-filter-panel');
@@ -2733,9 +2860,14 @@
       const errorFilterRecords = [...document.querySelectorAll('#eoErrorList .eo-error-card')].map((card) => ({
         card,
         type: card.dataset.auditType || '其他费用',
+        categories: (card.dataset.errorCategories || '资料完整性').split('|').filter(Boolean),
         confidence: card.dataset.errorConfidence || 'high',
         search: normalizeFilterText(card.textContent),
       }));
+      const orphanErrorTypes = [...new Set(errorFilterRecords
+        .map((record) => record.type)
+        .filter((type) => !errorTypes.includes(type)))];
+      if (orphanErrorTypes.length) throw new Error(`错误原因缺少对应核销类型：${orphanErrorTypes.join('、')}`);
       const errorGlobalTypeCounts = errorFilterRecords.reduce((counts, record) => {
         counts.set(record.type, (counts.get(record.type) || 0) + 1);
         return counts;
@@ -2743,40 +2875,65 @@
       const errorConfidences = ['high', 'medium', 'low'].filter((confidence) =>
         errorFilterRecords.some((record) => record.confidence === confidence)
       );
+      const errorFacetMeta = {
+        type: {
+          select: errorTypeFilter,
+          values: errorTypes,
+          allLabel: '全部核销方式',
+          label: (value) => value,
+        },
+        category: {
+          select: errorCategoryFilter,
+          values: errorReasonValues,
+          allLabel: '全部错误原因分类',
+          label: (value) => value,
+        },
+        confidence: {
+          select: errorConfidenceFilter,
+          values: errorConfidences,
+          allLabel: '全部置信度',
+          label: (value) => confidencePresentation(value).filterText,
+        },
+      };
       const readErrorFilterState = () => ({
         type: errorTypeFilter.value,
+        category: errorCategoryFilter.value,
         confidence: errorConfidenceFilter.value,
         keyword: normalizeFilterText(errorKeywordFilter.value),
       });
       const errorRecordMatches = (record, state, excludedFacet = '') => (
         (excludedFacet === 'type' || !state.type || record.type === state.type)
+        && (excludedFacet === 'category' || !state.category || record.categories.includes(state.category))
         && (excludedFacet === 'confidence' || !state.confidence || record.confidence === state.confidence)
         && (!state.keyword || record.search.includes(state.keyword))
       );
-      const errorConfidenceCounts = (state) => errorFilterRecords.reduce((counts, record) => {
-        if (!errorRecordMatches(record, state, 'confidence')) return counts;
-        counts.set(record.confidence, (counts.get(record.confidence) || 0) + 1);
+      const errorFacetCounts = (facet, state) => errorFilterRecords.reduce((counts, record) => {
+        if (!errorRecordMatches(record, state, facet)) return counts;
+        const values = facet === 'category' ? record.categories : [record[facet]];
+        values.forEach((value) => counts.set(value, (counts.get(value) || 0) + 1));
         return counts;
       }, new Map());
+      const renderErrorFacet = (facet, state) => {
+        const meta = errorFacetMeta[facet];
+        const counts = facet === 'type' ? errorGlobalTypeCounts : errorFacetCounts(facet, state);
+        return renderFacetOptions({
+          select: meta.select,
+          values: meta.values,
+          allLabel: meta.allLabel,
+          label: meta.label,
+          counts,
+          selected: state[facet],
+          omitAllWhenSingle: facet === 'type',
+        });
+      };
       const refreshErrorFacets = () => {
         const state = readErrorFilterState();
-        renderFacetOptions({
-          select: errorTypeFilter,
-          values: errorTypes,
-          allLabel: '全部核销方式',
-          label: (value) => value,
-          counts: errorGlobalTypeCounts,
-          selected: state.type,
-        });
-        const confidenceCount = renderFacetOptions({
-          select: errorConfidenceFilter,
-          values: errorConfidences,
-          allLabel: '全部置信度',
-          label: (value) => `${confidenceLabel(value)}置信度`,
-          counts: errorConfidenceCounts(state),
-          selected: state.confidence,
-        });
-        errorFacetSummary.textContent = `${errorGlobalTypeCounts.size} 种核销方式 · ${confidenceCount} 档可选置信度`;
+        const available = {
+          type: renderErrorFacet('type', state),
+          category: renderErrorFacet('category', state),
+          confidence: renderErrorFacet('confidence', state),
+        };
+        errorFacetSummary.textContent = `${available.type} 种核销方式 · ${available.category} 类可选错误原因 · ${available.confidence} 档可选置信度`;
         return readErrorFilterState();
       };
       const applyErrorFilters = () => {
@@ -2787,7 +2944,7 @@
           record.card.hidden = !matches;
           if (matches) visibleTotal += 1;
         });
-        const filtering = Boolean(state.type || state.confidence || state.keyword);
+        const filtering = Boolean((errorTypes.length > 1 && state.type) || state.category || state.confidence || state.keyword);
         errorVisible.textContent = String(visibleTotal);
         errorFilterPanel.classList.toggle('is-filtering', filtering);
         errorFilterEmpty.hidden = visibleTotal !== 0 || total === 0;
@@ -2796,12 +2953,16 @@
         });
       };
       const normalizeErrorDependentsForType = () => {
-        const state = readErrorFilterState();
-        const counts = errorConfidenceCounts(state);
-        if (state.confidence && !counts.has(state.confidence)) errorConfidenceFilter.value = '';
+        let state = readErrorFilterState();
+        const categoryCounts = errorFacetCounts('category', state);
+        if (state.category && !categoryCounts.has(state.category)) errorCategoryFilter.value = '';
+        state = readErrorFilterState();
+        const confidenceCounts = errorFacetCounts('confidence', state);
+        if (state.confidence && !confidenceCounts.has(state.confidence)) errorConfidenceFilter.value = '';
       };
       const resetErrorFilters = () => {
         errorTypeFilter.value = '';
+        errorCategoryFilter.value = '';
         errorConfidenceFilter.value = '';
         errorKeywordFilter.value = '';
         applyErrorFilters();
@@ -2810,7 +2971,7 @@
         normalizeErrorDependentsForType();
         applyErrorFilters();
       });
-      errorConfidenceFilter.addEventListener('change', applyErrorFilters);
+      [errorCategoryFilter, errorConfidenceFilter].forEach((control) => control.addEventListener('change', applyErrorFilters));
       errorKeywordFilter.addEventListener('input', applyErrorFilters);
       document.querySelectorAll('[data-error-reset]').forEach((button) => button.addEventListener('click', resetErrorFilters));
       applyErrorFilters();
@@ -2851,7 +3012,7 @@
           select: passConfidenceFilter,
           values: passConfidences,
           allLabel: '全部置信度',
-          label: (value) => `${confidenceLabel(value)}置信度`,
+          label: (value) => confidencePresentation(value).filterText,
         },
       };
       const readPassFilterState = () => ({
@@ -2882,6 +3043,7 @@
           label: meta.label,
           counts,
           selected: state[facet],
+          omitAllWhenSingle: facet === 'type',
         });
       };
       const refreshPassFacets = () => {
@@ -2930,7 +3092,7 @@
           if (groupVisibleLabel) groupVisibleLabel.textContent = String(groupVisible);
           visibleTotal += groupVisible;
         });
-        const filtering = Boolean(state.type || state.category || state.confidence || state.keyword);
+        const filtering = Boolean((passTypes.length > 1 && state.type) || state.category || state.confidence || state.keyword);
         passVisible.textContent = String(visibleTotal);
         passFilterPanel.classList.toggle('is-filtering', filtering);
         passFilterEmpty.hidden = visibleTotal !== 0 || passTotal === 0;
@@ -3219,6 +3381,31 @@
     .as-run-count strong { display: inline-block; margin-top: 3px; color: var(--run-tone, var(--eo-dark)); font: 800 23px/1 var(--eo-mono); }
     .as-run-count em { margin-left: 4px; color: #87979f; font-size: 8px; font-style: normal; }
     .as-run-action { display: grid; gap: 5px; }
+    .as-review-toggle {
+      display: flex;
+      min-height: 32px;
+      padding: 6px 8px;
+      color: #4f6670;
+      background: #f6f9fa;
+      border: 1px solid #ccd8dd;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-size: 9px;
+      font-weight: 780;
+      white-space: nowrap;
+    }
+    .as-review-toggle input {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      accent-color: #18845e;
+      cursor: pointer;
+    }
+    .as-review-toggle:has(input:checked) { color: #176f50; background: #edf8f3; border-color: #acd7c5; }
+    .as-review-toggle:has(input:disabled) { opacity: .58; cursor: wait; }
+    .as-review-toggle input:disabled { cursor: wait; }
     .as-status { display: inline-flex; width: fit-content; padding: 3px 7px; color: #18704f; background: #e9f7f1; border: 1px solid #bfe3d3; align-items: center; gap: 5px; font-size: 8px; font-weight: 800; }
     .as-status::before { width: 5px; height: 5px; background: currentColor; border-radius: 50%; content: ""; }
     .as-status.failed { color: #a63c34; background: #fff0ef; border-color: #efc0bc; }
@@ -3407,8 +3594,8 @@
       let primaryProbeBusy = false;
       let recordStageProbeTimer = 0;
 
-      const apiJson = async (path) => {
-        const response = await fetch(path, { cache: 'no-store' });
+      const apiJson = async (path, options = {}) => {
+        const response = await fetch(path, { cache: 'no-store', ...options });
         if (!response.ok) {
           let detail = '';
           try { detail = (await response.json()).error || ''; } catch (error) { detail = await response.text(); }
@@ -3483,15 +3670,22 @@
       };
       const runCard = (run, mode = 'ledger') => {
         const failed = run.status === 'failed';
-        const countLabel = failed ? '已归档断点' : '待人工核验';
-        const count = failed ? Number(run.scenario_count || 0) : Number(run.error_count || 0);
-        const action = mode === 'overview' ? '' : `<div class="as-run-action">
+        const reviewed = run.status === 'completed' && Boolean(run.manual_reviewed);
+        const countLabel = failed ? '已归档断点' : reviewed ? '人工核验' : '待人工核验';
+        const count = failed ? Number(run.scenario_count || 0) : reviewed ? '✓' : Number(run.error_count || 0);
+        const countUnit = failed ? '场景' : reviewed ? '' : '项';
+        const reviewControl = run.status === 'completed'
+          ? `<label class="as-review-toggle"><input type="checkbox" data-as-review="${escapeHtml(run.workspace_id)}" ${reviewed ? 'checked' : ''}><span>${reviewed ? '已人工核验' : '人工核验'}</span></label>`
+          : '';
+        const action = mode === 'overview' ? '' : `<div class="as-run-action">${reviewControl}
             <button class="as-button" type="button" data-as-open="${escapeHtml(run.workspace_id)}">展开核销记录 →</button></div>`;
+        const modelLabel = run.audit_model || run.producer_model || 'unknown';
+        const reasoningLabel = run.reasoning_effort ? ` / ${run.reasoning_effort}` : '';
         return `<article class="as-run-card ${mode === 'overview' ? 'informational' : 'ledger-record'}" style="--run-tone:${runTone(run)}" data-run-card="${escapeHtml(run.workspace_id)}">
-          <div class="as-run-main"><small>${escapeHtml(runDate(run))} / ${escapeHtml(String(run.producer_model || 'unknown').toUpperCase())}</small>
+          <div class="as-run-main"><small>${escapeHtml(runDate(run))} / ${escapeHtml(String(modelLabel).toUpperCase())}${escapeHtml(reasoningLabel.toUpperCase())}</small>
             <h3>${escapeHtml(run.workspace_id)}</h3><p>${statusBadge(run)} · ${Number(run.scenario_count || 0)} 个核销场景</p></div>
           <div class="as-run-tags">${scenarioTags(run)}</div>
-          <div class="as-run-count"><span>${countLabel}</span><strong>${count}</strong><em>${failed ? '场景' : '项'}</em></div>
+          <div class="as-run-count"><span>${countLabel}</span><strong>${count}</strong><em>${countUnit}</em></div>
           ${action}
         </article>`;
       };
@@ -3519,6 +3713,8 @@
         run.status,
         Number(run.scenario_count || 0),
         Number(run.error_count || 0),
+        Boolean(run.manual_reviewed),
+        run.manual_reviewed_at || '',
         (Array.isArray(run.scenarios) ? run.scenarios : []).join(','),
       ].join(':')).join('|');
       const stageRefreshSignature = (run, snapshot) => run
@@ -3588,7 +3784,7 @@
         return state.runs.filter((run) => {
           if (state.status !== 'all' && run.status !== state.status) return false;
           if (!needle) return true;
-          const haystack = [run.workspace_id, run.run_id, run.producer_model, ...(run.scenarios || []).map(scenarioName)].join(' ').toLocaleLowerCase('zh-CN');
+          const haystack = [run.workspace_id, run.run_id, run.producer_model, run.audit_model, run.reasoning_effort, ...(run.scenarios || []).map(scenarioName)].join(' ').toLocaleLowerCase('zh-CN');
           return haystack.includes(needle);
         });
       };
@@ -3597,7 +3793,11 @@
         const latestCompletedZipCount = Number(latestCompleted?.scenario_count || 0);
         const running = state.runs.filter((run) => run.status === 'running').length;
         const failed = state.runs.filter((run) => run.status === 'failed').length;
-        const errors = state.runs.reduce((sum, run) => sum + Number(run.error_count || 0), 0);
+        const errors = state.runs.reduce((sum, run) => (
+          run.status === 'completed' && !run.manual_reviewed
+            ? sum + Number(run.error_count || 0)
+            : sum
+        ), 0);
         document.getElementById('as-hero-count').textContent = state.runs.length;
         document.getElementById('as-rail-total').textContent = `${state.runs.length} 次运行`;
         document.getElementById('as-nav-overview').textContent = state.runs.length;
@@ -3643,10 +3843,36 @@
             loadPrimaryRuns(true).finally(schedulePrimaryProbe);
           }
         });
+        document.body.addEventListener('change', (event) => {
+          const review = event.target.closest('[data-as-review]');
+          if (review) setManualReview(review.dataset.asReview, review.checked, review);
+        });
         document.getElementById('as-search').addEventListener('input', (event) => { state.query = event.target.value; renderLedger(); });
         const status = document.getElementById('as-status-filter');
         status.value = ['all','completed','running','failed'].includes(state.status) ? state.status : 'all';
         status.addEventListener('change', (event) => { state.status = event.target.value; renderLedger(); });
+      };
+      const setManualReview = async (workspaceId, reviewed, control) => {
+        control.disabled = true;
+        try {
+          const result = await apiJson(`/api/runs/${encodeURIComponent(workspaceId)}/manual-review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reviewed }),
+          });
+          const run = state.runs.find((item) => item.workspace_id === workspaceId);
+          if (run) {
+            run.manual_reviewed = Boolean(result.manual_reviewed);
+            run.manual_reviewed_at = result.manual_reviewed_at || null;
+          }
+          state.primaryCatalogSignature = runCatalogSignature(state.runs);
+          renderPrimaryData();
+          toast(reviewed ? '已标记人工核验' : '已取消人工核验');
+        } catch (error) {
+          control.checked = !reviewed;
+          control.disabled = false;
+          toast(error.message);
+        }
       };
       const fetchPrimaryState = async (probeOnly = false) => {
         const value = await apiJson('/api/runs');

@@ -117,6 +117,17 @@ def main() -> None:
         assert overview_completed_metric.locator(":scope > strong").inner_text() == str(
             expected_completed_zip_count
         )
+        expected_pending = sum(
+            int(run.get("error_count") or 0)
+            for run in listing["runs"]
+            if run.get("status") == "completed" and not run.get("manual_reviewed")
+        )
+        pending_metric = page.locator("#as-metrics .as-metric").filter(
+            has_text="待人工核验"
+        )
+        assert pending_metric.locator(":scope > strong").inner_text() == str(
+            expected_pending
+        )
         assert page.locator("#as-recent-list .as-run-card").count() == min(
             listing["count"], 5
         )
@@ -127,6 +138,7 @@ def main() -> None:
         assert page.get_by_role("heading", name="核销运行链路").count() == 0
         assert page.get_by_role("heading", name="最近核销记录").is_visible()
         assert page.locator("#as-recent-list button").count() == 0
+        assert page.locator("#as-recent-list [data-as-review]").count() == 0
         assert page.locator("#as-archive-list [data-as-open]").count() == 0
         assert page.locator("#as-archive-list button").count() == listing["count"]
         page.screenshot(path=str(args.screenshot), full_page=True)
@@ -137,6 +149,9 @@ def main() -> None:
             page.wait_for_selector(f'#as-ledger-list [data-as-open="{completed_id}"]')
             assert page.locator("#as-ledger-list [data-as-technical]").count() == 0
             assert page.locator("#as-ledger-list button").count() == listing["count"]
+            assert page.locator("#as-ledger-list [data-as-review]").count() == sum(
+                run.get("status") == "completed" for run in listing["runs"]
+            )
             page.locator(f'#as-ledger-list [data-as-open="{completed_id}"]').click()
             page.wait_for_load_state("networkidle")
             page.wait_for_selector("body.error-only-page")
@@ -149,16 +164,54 @@ def main() -> None:
             assert error_cards.count() > 0
             error_total = error_cards.count()
             assert page.locator("#eoErrorList .eo-scope").count() == error_cards.count()
+            assert page.locator("#eoErrorList .eo-error-reason").count() >= error_cards.count()
+            assert page.locator("#eoErrorList .eo-error-head .eo-error-reason").count() == 0
+            assert page.locator("#eoErrorList .eo-field .eo-error-reason").count() >= error_cards.count()
+            assert error_cards.evaluate_all(
+                "nodes => nodes.every(node => Boolean(node.dataset.errorCategories))"
+            )
             assert page.locator("#eoErrorList .eo-error-confidence").count() == error_cards.count()
+            assert error_cards.evaluate_all(
+                "nodes => nodes.every(node => /^置信度 [高中低]：(?:0(?:\\.\\d+)?|1)$/.test(node.querySelector('.eo-error-confidence').textContent.trim()))"
+            )
+            assert page.locator("#eoErrorConfidence option").evaluate_all(
+                "nodes => nodes.every(node => !/[：:]\\s*0\\./.test(node.textContent))"
+            )
             assert error_cards.evaluate_all(
                 "nodes => nodes.every(node => !node.hidden && node.offsetParent !== null)"
             )
             fixed_error_types = page.locator("#eoErrorType option").evaluate_all(
                 "nodes => nodes.map(node => node.value)"
             )
-            assert len(fixed_error_types) > 1
+            assert error_cards.evaluate_all(
+                "(nodes, types) => nodes.every(node => types.includes(node.dataset.auditType))",
+                fixed_error_types,
+            )
+            assert len(fixed_error_types) >= 1
             if args.expected_audit_type_count is not None:
-                assert len(fixed_error_types) - 1 == args.expected_audit_type_count
+                expected_options = (
+                    args.expected_audit_type_count
+                    if args.expected_audit_type_count == 1
+                    else args.expected_audit_type_count + 1
+                )
+                assert len(fixed_error_types) == expected_options
+                if args.expected_audit_type_count == 1:
+                    assert fixed_error_types[0]
+                    assert "" not in fixed_error_types
+                    assert not page.locator("#eoErrorType").is_disabled()
+                else:
+                    assert fixed_error_types[0] == ""
+            assert page.locator("#eoErrorCategory option").count() > 1
+            page.locator("#eoErrorCategory").select_option(index=1)
+            category_total = int(page.locator("#eoErrorVisible").inner_text())
+            assert 0 < category_total <= error_total
+            assert page.locator("#eoErrorList .eo-error-card:visible").count() == category_total
+            assert page.locator("#eoErrorType option").evaluate_all(
+                "nodes => nodes.map(node => node.value)"
+            ) == fixed_error_types
+            page.locator(
+                ".eo-error-filter-panel .eo-pass-filter-result [data-error-reset]"
+            ).click()
             page.locator("#eoErrorKeyword").fill("__NO_MATCHING_ERROR_CHECK__")
             assert page.locator("#eoErrorVisible").inner_text() == "0"
             assert page.locator("#eoErrorFilterEmpty").is_visible()
@@ -182,14 +235,31 @@ def main() -> None:
             assert page.locator("#eoPassList .eo-pass-group").count() >= 1
             pass_total = int(page.locator('[data-eo-view="passed"] em').inner_text())
             assert page.locator("#eoPassList .eo-pass-card").count() == pass_total
+            assert page.locator("#eoPassList .eo-pass-card").evaluate_all(
+                "nodes => nodes.every(node => node.dataset.passConfidenceScore && /^置信度 [高中低]：(?:0(?:\\.\\d+)?|1)$/.test(node.querySelector('.eo-pass-confidence').textContent.trim()))"
+            )
+            assert page.locator("#eoPassConfidence option").evaluate_all(
+                "nodes => nodes.every(node => !/[：:]\\s*0\\./.test(node.textContent))"
+            )
             assert page.locator(".eo-pass-warning").count() == 0
             assert int(page.locator("#eoPassVisible").inner_text()) == pass_total
             fixed_pass_types = page.locator("#eoPassType option").evaluate_all(
                 "nodes => nodes.map(node => node.value)"
             )
-            assert len(fixed_pass_types) > 1
+            assert len(fixed_pass_types) >= 1
             if args.expected_audit_type_count is not None:
-                assert len(fixed_pass_types) - 1 == args.expected_audit_type_count
+                expected_options = (
+                    args.expected_audit_type_count
+                    if args.expected_audit_type_count == 1
+                    else args.expected_audit_type_count + 1
+                )
+                assert len(fixed_pass_types) == expected_options
+                if args.expected_audit_type_count == 1:
+                    assert fixed_pass_types[0]
+                    assert "" not in fixed_pass_types
+                    assert not page.locator("#eoPassType").is_disabled()
+                else:
+                    assert fixed_pass_types[0] == ""
             if page.locator("#eoPassCategory option").count() > 1:
                 page.locator("#eoPassCategory").select_option(index=1)
                 filtered_total = int(page.locator("#eoPassVisible").inner_text())

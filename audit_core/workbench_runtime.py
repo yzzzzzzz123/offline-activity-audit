@@ -12,6 +12,11 @@ from typing import Any, TextIO
 from urllib.parse import quote
 
 from .common import AuditError
+from .codex_runner import (
+    ALLOWED_REASONING_EFFORTS,
+    DEFAULT_MODEL,
+    DEFAULT_REASONING_EFFORT,
+)
 from .html_report import _embedded_payload
 from .orchestrator import (
     DEFAULT_INPUT_DIR,
@@ -78,11 +83,20 @@ def run_persistent_audit(
     worktrees_root: str | Path = DEFAULT_WORKTREES_ROOT,
     evidence_provider: EvidenceProvider | None = None,
     model: str | None = None,
+    reasoning_effort: str | None = None,
     scenario: str | None = None,
     workbench_url: str | None = None,
 ) -> dict[str, Any]:
     normalized_run_id = normalize_run_id(run_id)
     normalized_model = normalize_producer_model(producer_model)
+    selected_audit_model = str(
+        model or (DEFAULT_MODEL if normalized_model == "codex" else normalized_model)
+    ).strip()
+    selected_reasoning_effort = str(
+        reasoning_effort or DEFAULT_REASONING_EFFORT
+    ).strip().lower()
+    if selected_reasoning_effort not in ALLOWED_REASONING_EFFORTS:
+        raise AuditError(f"不支持的模型推理强度：{selected_reasoning_effort}")
     url = _normalized_workbench_url(
         workbench_url or os.environ.get("OFFLINE_AUDIT_WORKBENCH_URL")
     )
@@ -93,6 +107,8 @@ def run_persistent_audit(
         normalized_run_id,
         normalized_model,
         worktrees_root,
+        audit_model=selected_audit_model,
+        reasoning_effort=selected_reasoning_effort,
     )
     store = WorkbenchRunStore(
         workspace,
@@ -100,6 +116,8 @@ def run_persistent_audit(
         producer_model=normalized_model,
         root_html=ROOT_HTML,
         workbench_url=url,
+        audit_model=selected_audit_model,
+        reasoning_effort=selected_reasoning_effort,
     )
     stdout_tee = _Tee(sys.stdout, store.run_log_path)
     stderr_tee = _Tee(sys.stderr, store.run_log_path)
@@ -114,7 +132,8 @@ def run_persistent_audit(
                     input_dir=input_dir,
                     output_dir=staging_root,
                     evidence_provider=evidence_provider,
-                    model=model,
+                    model=selected_audit_model,
+                    reasoning_effort=selected_reasoning_effort,
                     scenario=scenario,
                     observer=store.observe,
                 )
@@ -136,6 +155,8 @@ def run_persistent_audit(
         "run_id": normalized_run_id,
         "workspace_id": store.workspace_id,
         "producer_model": normalized_model,
+        "audit_model": selected_audit_model,
+        "reasoning_effort": selected_reasoning_effort,
         "status": "completed",
         "worktree": str(store.workspace),
         "output": str(ROOT_HTML),
@@ -161,7 +182,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--producer-model",
         required=True,
-        help="执行本次核销的模型来源标识，例如 codex、qwen3.7 或 glm-4.5",
+        help="执行本次核销的生产来源标识，例如 codex、qwen3.8 或 glm-4.5",
+    )
+    parser.add_argument(
+        "--model",
+        help="本次实际使用的模型；未传时 codex 使用默认模型，其他来源沿用 producer-model",
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=("low", "medium", "high", "xhigh", "max"),
+        help="本次主要识别与判断的推理强度；默认 high",
     )
     parser.add_argument(
         "--scenario",
@@ -197,7 +227,12 @@ def main(argv: list[str] | None = None) -> int:
             producer_model=args.producer_model,
             input_dir=args.input_dir,
             worktrees_root=args.worktrees,
-            model=os.environ.get("OFFLINE_AUDIT_MODEL") or None,
+            model=args.model or os.environ.get("OFFLINE_AUDIT_MODEL") or None,
+            reasoning_effort=(
+                args.reasoning_effort
+                or os.environ.get("OFFLINE_AUDIT_REASONING_EFFORT")
+                or None
+            ),
             scenario=args.scenario,
             workbench_url=args.workbench_url,
         )

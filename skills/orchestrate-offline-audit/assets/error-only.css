@@ -415,6 +415,7 @@
       font-size: 10px;
       font-weight: 760;
     }
+    .eo-error-reason-list + * { margin-top: 8px; }
     .eo-error-details { margin-top: 11px; border-top: 1px solid var(--eo-line); }
     .eo-error-details > summary {
       width: fit-content;
@@ -555,7 +556,7 @@
     .eo-error-filter-panel .eo-pass-filter-result button:hover,
     .eo-error-filter-empty button:hover { color: #fff; background: var(--eo-danger); border-color: var(--eo-danger); }
     .eo-error-filter-panel .eo-pass-filter-result button:disabled { color: #ad9b98; background: #f7f3f2; border-color: #e6dcda; }
-    .eo-error-filter-grid { grid-template-columns: minmax(170px, .8fr) minmax(150px, .7fr) minmax(300px, 1.8fr); }
+    .eo-error-filter-grid { grid-template-columns: minmax(145px, .72fr) minmax(165px, .82fr) minmax(130px, .62fr) minmax(250px, 1.45fr); }
     .eo-error-filter-grid label > span { color: #745b57; }
     .eo-error-filter-grid select,
     .eo-error-filter-grid input { color: #4f2d29; background-color: #fffcfb; border-color: #dfd0cd; }
