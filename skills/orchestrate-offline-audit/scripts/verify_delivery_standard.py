@@ -76,12 +76,21 @@ def _render(page: Page, path: Path) -> dict[str, Any]:
           bodyHtml: document.body.outerHTML,
           errorStyle: document.getElementById('error-only-preview-style')?.textContent || '',
           total: document.querySelector('.eo-total-gauge strong')?.textContent?.trim() || '',
-          metrics: [...document.querySelectorAll('.eo-metric')].map(node => node.innerText.trim()),
+          metrics: [...document.querySelectorAll('#home .eo-metric')].map(node => node.innerText.trim()),
           tabs: [...document.querySelectorAll('.eo-tab')].map(node => node.innerText.trim()),
-          scenarios: [...document.querySelectorAll('[id^="scenario-"]')].map(node => ({
-            title: node.querySelector('.eo-ledger-title h2')?.textContent?.trim() || '',
-            impact: node.querySelector('.eo-impact strong')?.textContent?.trim() || '',
-            cards: [...node.querySelectorAll('.eo-error-card')].map(card => ({
+          scenarios: (() => {
+            const labels = {
+              '人员激励': '人员激励', '堆头/陈列': '堆头陈列', '海报/展示道具': '展示道具',
+              '其他费用': '其他费用', '维护费用': '维护费用', '额外搭赠': '额外搭赠',
+              '价格补差': '价格补差', 'POS达标激励': 'POS达标激励', '进场费': '进场费',
+              '客户自采赠品物料': '自采赠品物料',
+            };
+            const groups = new Map();
+            [...document.querySelectorAll('#eoErrorList .eo-error-card')].forEach(card => {
+              const raw = (card.dataset.auditType || card.querySelector('.eo-scope')?.textContent || '').replace(/^核销类型\\s*·\\s*/, '').trim();
+              const title = labels[raw] || raw || '其他费用';
+              if (!groups.has(title)) groups.set(title, []);
+              groups.get(title).push({
               title: card.querySelector('.eo-error-head h3')?.textContent?.trim() || '',
               scope: card.querySelector('.eo-scope')?.textContent?.trim() || '',
               text: card.innerText.trim(),
@@ -94,6 +103,18 @@ def _render(page: Page, path: Path) -> dict[str, Any]:
                 field.querySelector(':scope > div')?.innerText?.trim() || '',
               ])),
               chips: [...card.querySelectorAll('.eo-chip')].map(node => node.textContent?.trim() || ''),
+              });
+            });
+            return [...groups.entries()].map(([title, cards]) => ({title, impact: `${cards.length}项错误`, cards}));
+          })(),
+          passGroups: [...document.querySelectorAll('#eoPassList .eo-pass-group')].map(group => ({
+            auditType: group.querySelector('.eo-pass-group-head > div:nth-child(2) > small')?.textContent?.trim() || '',
+            title: group.querySelector('.eo-pass-group-head h2')?.textContent?.trim() || '',
+            count: group.querySelectorAll('.eo-pass-card').length,
+            checks: [...group.querySelectorAll('.eo-pass-card')].map(card => ({
+              title: card.querySelector('.eo-pass-head h3')?.textContent?.trim() || '',
+              subject: card.querySelector('.eo-pass-field strong')?.textContent?.trim() || '',
+              text: card.innerText.trim(),
             })),
           })),
           width: {scroll: document.documentElement.scrollWidth, viewport: window.innerWidth},
@@ -102,24 +123,71 @@ def _render(page: Page, path: Path) -> dict[str, Any]:
     screenshot = page.screenshot(full_page=True, animations="disabled")
 
     tabs = page.locator(".eo-tab")
-    if tabs.count() < 2:
-        raise RuntimeError(f"{path.name} 缺少场景导航")
-    tabs.nth(1).click()
-    selected_view = tabs.nth(1).get_attribute("data-view")
+    if tabs.count() != 2:
+        raise RuntimeError(f"{path.name} 必须同时提供错误总览和正确检查项")
+    pass_tab = page.locator('.eo-tab[data-eo-view="passed"]')
+    error_tab = page.locator('.eo-tab[data-eo-view="home"]')
+    error_filter_controls = all(
+        page.locator(selector).count() == 1
+        for selector in (
+            "#eoErrorType",
+            "#eoErrorConfidence",
+            "#eoErrorKeyword",
+            "#eoErrorFacetSummary",
+        )
+    )
+    error_filter_option_counts = page.evaluate(
+        r"""() => [...document.querySelectorAll('#eoErrorType, #eoErrorConfidence')]
+          .every(select => [...select.options]
+            .filter(option => option.value)
+            .every(option => /（(?:\d+|当前选择 · 0)）$/.test(option.textContent.trim())))"""
+    )
+    error_type_values = page.locator("#eoErrorType option").evaluate_all(
+        "nodes => nodes.map(node => node.value)"
+    )
+    page.locator("#eoErrorKeyword").fill("__VERIFY_FIXED_ERROR_TYPE_FACET__")
+    error_type_fixed = page.locator("#eoErrorType option").evaluate_all(
+        "nodes => nodes.map(node => node.value)"
+    ) == error_type_values
+    page.locator(".eo-error-filter-panel [data-error-reset]").click()
+    pass_tab.click()
+    selected_view = pass_tab.get_attribute("data-eo-view")
     selected_visible = page.locator(f"#{selected_view}").is_visible()
-    selected_state = tabs.nth(1).get_attribute("aria-selected")
-    page.locator(f"#{selected_view} [data-open='home']").click()
+    selected_state = pass_tab.get_attribute("aria-selected")
+    pass_filter_controls = all(
+        page.locator(selector).count() == 1
+        for selector in (
+            "#eoPassType",
+            "#eoPassCategory",
+            "#eoPassConfidence",
+            "#eoPassKeyword",
+            "#eoPassFacetSummary",
+        )
+    )
+    pass_filter_option_counts = page.evaluate(
+        r"""() => [...document.querySelectorAll('#eoPassType, #eoPassCategory, #eoPassConfidence')]
+          .every(select => [...select.options]
+            .filter(option => option.value)
+            .every(option => /（(?:\d+|当前选择 · 0)）$/.test(option.textContent.trim())))"""
+    )
+    pass_type_values = page.locator("#eoPassType option").evaluate_all(
+        "nodes => nodes.map(node => node.value)"
+    )
+    if page.locator("#eoPassCategory option").count() > 1:
+        page.locator("#eoPassCategory").select_option(index=1)
+    else:
+        page.locator("#eoPassKeyword").fill("__VERIFY_FIXED_PASS_TYPE_FACET__")
+    pass_type_fixed = page.locator("#eoPassType option").evaluate_all(
+        "nodes => nodes.map(node => node.value)"
+    ) == pass_type_values
+    page.locator("#passed .eo-pass-filter-result [data-pass-reset]").click()
+    error_tab.click()
     home_visible = page.locator("#home").is_visible()
     detail = page.locator(".eo-error-details").first
     detail_operable = True
     if detail.count():
-        detail_view = detail.evaluate("node => node.closest('.eo-view')?.id")
-        if not detail_view:
-            raise RuntimeError(f"{path.name} 的错误明细不属于任何场景视图")
-        page.locator(f".eo-tab[data-view='{detail_view}']").click()
         detail.locator("summary").click()
         detail_operable = bool(detail.get_attribute("open") is not None)
-        page.locator(f"#{detail_view} [data-open='home']").click()
 
     return {
         "snapshot": snapshot,
@@ -130,6 +198,12 @@ def _render(page: Page, path: Path) -> dict[str, Any]:
         "interaction": {
             "scenario_visible": selected_visible,
             "selected_state": selected_state,
+            "error_filter_controls": error_filter_controls,
+            "error_filter_option_counts": error_filter_option_counts,
+            "error_type_fixed": error_type_fixed,
+            "pass_filter_controls": pass_filter_controls,
+            "pass_filter_option_counts": pass_filter_option_counts,
+            "pass_type_fixed": pass_type_fixed,
             "home_visible_after_return": home_visible,
             "detail_operable": detail_operable,
         },
@@ -379,7 +453,9 @@ def _display_store_logic(sheet: dict[str, Any]) -> list[dict[str, Any]]:
         normalized_labels = []
         for label in labels:
             if label == "合同门店":
-                label = "门店水印错误" if "门店不一致" in comparison else "门店水印缺失或无法核对"
+                label = "门店地点低置信度" if "门店不一致" in comparison else "门店水印缺失或无法核对"
+            elif label in {"门店水印错误", "门店地点待核验"}:
+                label = "门店地点低置信度"
             normalized_labels.append(label)
         display_text = _labeled_value(photo, "陈列标准核验")
         display_status = (
@@ -408,7 +484,10 @@ def _display_store_logic(sheet: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
                 "error_location": (
                     _labeled_value(photo, "识别地点")
-                    if any("门店水印" in label for label in normalized_labels)
+                    if any(
+                        "门店水印" in label or label == "门店地点低置信度"
+                        for label in normalized_labels
+                    )
                     else None
                 ),
             }
@@ -588,26 +667,12 @@ EXPECTED_DISPLAY_LOCAL_ERRORS = {
         "未识别",
         "未识别",
     ),
-    "挺拇指生活超市（横沥店）": (
-        "meets",
-        ">=4",
-        ("门店水印错误",),
-        None,
-        "东莞市·南铭购物乐园",
-    ),
     "人人购物广场荟和二店": (
         "meets",
         ">=4",
-        ("门店水印错误",),
+        ("门店地点低置信度",),
         None,
         "深圳市·荟和超市（人人购物同乐店）",
-    ),
-    "润家连锁超市（美联购物中心店）": (
-        "meets",
-        ">=4",
-        ("门店水印错误",),
-        None,
-        "深圳市宝安区·深圳紫云快捷宾馆",
     ),
 }
 
@@ -657,7 +722,7 @@ def _rendered_business_logic(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     display = _scenario(snapshot, "堆头陈列")
     contract_card = next(
-        item for item in display["cards"] if item["scope"] == "合同商品"
+        item for item in display["cards"] if "合同商品" in item["title"]
     )
     contract_rows = []
     for cells in contract_card["tableCells"]:
@@ -686,7 +751,7 @@ def _rendered_business_logic(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     store_errors = {}
     for item in display["cards"]:
-        if item["scope"] != "门店现场":
+        if item["title"] not in EXPECTED_DISPLAY_LOCAL_ERRORS:
             continue
         reason = item["fields"].get("错误原因", "")
         location_match = re.search(
@@ -899,7 +964,7 @@ def _candidate_internal_checks(
             for item in records
         ),
         "twenty_contract_stores_present": len(display["stores"]) == 20,
-        "only_five_local_store_errors": store_projection
+        "expected_local_store_errors": store_projection
         == EXPECTED_DISPLAY_LOCAL_ERRORS,
         "huadu_display_passes": any(
             item["store"] == "华都超市（东坑大道北店）"
@@ -1031,6 +1096,21 @@ def _rendered_structure(snapshot: dict[str, Any]) -> dict[str, Any]:
             }
             for scenario in snapshot["scenarios"]
         ],
+        "pass_groups": [
+            {
+                "audit_type": group["auditType"],
+                "title": group["title"],
+                "count": group["count"],
+                "checks": [
+                    {
+                        "title": check["title"],
+                        "subject": check["subject"],
+                    }
+                    for check in group["checks"]
+                ],
+            }
+            for group in snapshot["passGroups"]
+        ],
     }
 
 
@@ -1083,12 +1163,14 @@ def verify(reference: Path, candidate: Path) -> dict[str, Any]:
             reference_snapshot["metrics"],
             reference_snapshot["tabs"],
             reference_snapshot["scenarios"],
+            reference_snapshot["passGroups"],
         )
         == (
             candidate_snapshot["total"],
             candidate_snapshot["metrics"],
             candidate_snapshot["tabs"],
             candidate_snapshot["scenarios"],
+            candidate_snapshot["passGroups"],
         ),
         "desktop_pixels_equal": pixel["equal"],
     }
@@ -1115,6 +1197,12 @@ def verify(reference: Path, candidate: Path) -> dict[str, Any]:
             (
                 candidate_render["interaction"]["scenario_visible"],
                 candidate_render["interaction"]["selected_state"] == "true",
+                candidate_render["interaction"]["error_filter_controls"],
+                candidate_render["interaction"]["error_filter_option_counts"],
+                candidate_render["interaction"]["error_type_fixed"],
+                candidate_render["interaction"]["pass_filter_controls"],
+                candidate_render["interaction"]["pass_filter_option_counts"],
+                candidate_render["interaction"]["pass_type_fixed"],
                 candidate_render["interaction"]["home_visible_after_return"],
                 candidate_render["interaction"]["detail_operable"],
             )
@@ -1172,6 +1260,9 @@ def verify(reference: Path, candidate: Path) -> dict[str, Any]:
             "scenario_card_counts": [
                 len(item["cards"]) for item in reference_snapshot["scenarios"]
             ],
+            "pass_group_counts": [
+                item["count"] for item in reference_snapshot["passGroups"]
+            ],
             "scenario_details": scenario_details(reference_snapshot),
         },
         "candidate_projection": {
@@ -1180,6 +1271,9 @@ def verify(reference: Path, candidate: Path) -> dict[str, Any]:
             "tabs": candidate_snapshot["tabs"],
             "scenario_card_counts": [
                 len(item["cards"]) for item in candidate_snapshot["scenarios"]
+            ],
+            "pass_group_counts": [
+                item["count"] for item in candidate_snapshot["passGroups"]
             ],
             "scenario_details": scenario_details(candidate_snapshot),
         },

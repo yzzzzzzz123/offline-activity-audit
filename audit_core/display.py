@@ -18,6 +18,12 @@ from .common import (
     unique_by,
 )
 from .excel_sources import image_file_inventory, pdf_inventory, read_display_sales
+from .location_resolution import (
+    LocationResolver,
+    city_hint_from_values,
+    default_location_resolver,
+    deterministic_location_resolution,
+)
 from .product_rag import (
     FIELD_SHORT_CODE_PATTERN,
     PRODUCT_EXISTENCE_NAME_THRESHOLD,
@@ -42,10 +48,6 @@ KNOWLEDGE_FIELD_LABELS = {
     "barcode_69": "69码",
 }
 NUMBERED_STORE_PATTERN = re.compile(r"(?P<number>\d{1,3}|[一二三四五六七八九十]{1,3})店")
-GENERIC_LOCATION_BIGRAMS = {
-    "超市", "商场", "购物", "广场", "生活", "连锁", "百货", "中心",
-    "广东", "东莞", "深圳", "门店", "精选",
-}
 ENTITY_SUFFIXES = ("有限责任公司", "股份有限公司", "有限公司", "公司")
 
 
@@ -99,36 +101,6 @@ def _numbered_store_conflict(contract_name: str, visible_location: str | None) -
         if (number := _store_number(match.group("number"))) is not None
     }
     return not expected.issubset(observed)
-
-
-def _location_bigrams(value: str) -> set[str]:
-    text = _canonical_location(value)
-    return {
-        text[index : index + 2]
-        for index in range(max(0, len(text) - 1))
-        if text[index : index + 2] not in GENERIC_LOCATION_BIGRAMS
-    }
-
-
-def _corroborated_location_bridge(
-    contract_name: str,
-    visible_location: str | None,
-    photo_files: list[str],
-) -> bool:
-    """Use a filename only as a bridge between two independently present names."""
-    if not visible_location:
-        return False
-    contract_grams = _location_bigrams(contract_name)
-    visible_grams = _location_bigrams(visible_location)
-    if not contract_grams or not visible_grams:
-        return False
-    for name in photo_files:
-        filename_grams = _location_bigrams(Path(name).stem)
-        contract_coverage = len(contract_grams & filename_grams) / len(contract_grams)
-        visible_overlap = len(visible_grams & filename_grams)
-        if contract_coverage >= 0.6 and visible_overlap >= 2:
-            return True
-    return False
 
 
 def _canonical_location(value: str) -> str:
@@ -526,31 +498,59 @@ def _contract_core_reconciliation(
 
 def _determine_store_match(
     contract_name: str,
+    contract_address: str | None,
     visible_location: str | None,
-    photo_files: list[str],
-) -> tuple[str, str]:
+    resolver: LocationResolver,
+) -> tuple[str, str, dict[str, Any]]:
     if not visible_location:
-        return "filename_only", "照片水印未识别到独立地点，文件名不能单独证明门店"
-    if _numbered_store_conflict(contract_name, visible_location):
-        return "mismatch", "照片水印地点与合同编号门店不一致，未显示相同门店编号"
+        basis = "照片水印未识别到独立地点，文件名不能单独证明门店"
+        return (
+            "filename_only",
+            basis,
+            deterministic_location_resolution(
+                status="not_applicable",
+                contract_name=contract_name,
+                visible_location=visible_location,
+                basis=basis,
+            ),
+        )
 
     contract_text = _canonical_location(contract_name)
     visible_text = _canonical_location(visible_location)
-    if contract_text in visible_text or visible_text in contract_text:
-        return "exact", "照片水印地点包含合同门店名称"
+    if (
+        contract_text
+        and (contract_text == visible_text or contract_text in visible_text)
+        and not _numbered_store_conflict(contract_name, visible_location)
+    ):
+        basis = "照片水印地点完整包含合同门店名称，无需调用地图MCP"
+        return (
+            "exact",
+            basis,
+            deterministic_location_resolution(
+                status="not_needed",
+                contract_name=contract_name,
+                visible_location=visible_location,
+                basis=basis,
+            ),
+        )
 
-    contract_grams = _location_bigrams(contract_name)
-    visible_grams = _location_bigrams(visible_location)
-    direct_similarity = (
-        len(contract_grams & visible_grams) / min(len(contract_grams), len(visible_grams))
-        if contract_grams and visible_grams
-        else 0.0
+    location_resolution = resolver.resolve(
+        contract_name=contract_name,
+        contract_address=contract_address,
+        visible_location=visible_location,
+        city_hint=city_hint_from_values(
+            visible_location,
+            contract_address,
+            contract_name,
+        ),
     )
-    if direct_similarity >= 0.4:
-        return "compatible", "照片水印地点与合同门店的有效名称片段一致"
-    if _corroborated_location_bridge(contract_name, visible_location, photo_files):
-        return "compatible", "照片水印地点与合同门店名称由同一原始文件名双向印证"
-    return "mismatch", "照片水印地点已识别但与合同门店不一致；这是水印地点错误，不是清晰度问题"
+    resolution_status = str(location_resolution.get("status") or "unavailable")
+    basis = str(location_resolution.get("basis") or "地点解析没有返回可审计依据")
+    if resolution_status in {"same_place", "parent_child", "nearby"}:
+        return "compatible", basis, location_resolution
+    if resolution_status == "unrelated":
+        return "location_unverified", basis, location_resolution
+    return "location_unverified", basis, location_resolution
 
 
 def _canonical_product(value: Any) -> str:
@@ -2045,7 +2045,12 @@ def _default_review(line_no: int, store_name: str) -> dict[str, Any]:
     }
 
 
-def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
+def audit_display_case(
+    case: dict[str, Any],
+    evidence: dict[str, Any],
+    *,
+    location_resolver: LocationResolver | None = None,
+) -> dict[str, Any]:
     sales_path = Path(case["sales_excel"]).resolve()
     contract_path = Path(case["contract_pdf"]).resolve()
     photo_paths = [Path(value).resolve() for value in case["photo_files"]]
@@ -2160,6 +2165,7 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
 
     contract_attachment_sales_pass = contract_attachment_sales["status"] == "pass"
     sales_internal_pass = sales.get("internal_status") == "pass"
+    resolved_location_resolver = location_resolver or default_location_resolver()
 
     for line_no, store in store_map.items():
         review = review_map.get(line_no) or _default_review(int(line_no), str(store["store_name"]))
@@ -2178,10 +2184,11 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
         missing = [name for name in photo_files if _photo_path(images_by_name, name) is None]
         file_pass = bool(photo_files) and not missing
         period_match, period_pass = _period_label(review.get("visible_date"), start, end)
-        store_match, deterministic_location_basis = _determine_store_match(
+        store_match, deterministic_location_basis, location_resolution = _determine_store_match(
             str(store["store_name"]),
+            str(store.get("address") or "").strip() or None,
             review.get("visible_location"),
-            photo_files,
+            resolved_location_resolver,
         )
         store_match_basis = (
             str(review.get("location_basis") or "") + "；" + deterministic_location_basis
@@ -2320,13 +2327,27 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
         if not period_pass:
             advice.append("补充活动期内且完整日期可见的原始现场照片。")
         if not store_pass:
-            if store_match == "mismatch":
+            location_status = str(location_resolution.get("status") or "unavailable")
+            location_confidence = str(location_resolution.get("confidence") or "low")
+            if location_status == "unrelated":
+                distance = location_resolution.get("distance_meters")
+                distance_text = (
+                    f"，两个唯一地点直线距离约{distance:g}米"
+                    if isinstance(distance, (int, float))
+                    else ""
+                )
                 advice.append(
-                    f"重新提交水印地点正确的现场照片；当前水印地点为“{review.get('visible_location') or '未识别'}”，"
-                    f"应与合同门店“{store['store_name']}”一致。这不是照片清晰度问题。"
+                    f"地图地点核验置信度{('低' if location_confidence == 'low' else location_confidence)}"
+                    f"{distance_text}；补充能证明两处同址或临近的权威地址材料，"
+                    "否则重新提交水印地点正确的现场照片。"
+                )
+            elif store_match == "location_unverified":
+                advice.append(
+                    "配置百度地图 MCP 后重新核验，或补充能唯一证明两处同址、商场与店铺关系或实际距离的权威地址材料；"
+                    "当前地点置信度低，转人工核验。"
                 )
             else:
-                advice.append("补充水印中可见合同门店名称/地址的照片或权威门店映射。")
+                advice.append("补充水印中可见合同门店名称/地址的照片。")
         if not display_pass:
             advice.append("补充能看清完整堆头面积或纵向陈列数量的全景照片。")
         if duplicate_check in {"exact", "possible"}:
@@ -2352,6 +2373,7 @@ def audit_display_case(case: dict[str, Any], evidence: dict[str, Any]) -> dict[s
                 "period_match": period_match,
                 "store_match": store_match,
                 "store_match_basis": store_match_basis,
+                "location_resolution": location_resolution,
                 "display_match": display_match,
                 "display_standard_basis": display_standard_basis,
                 "display_description": observation.get("description"),

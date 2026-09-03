@@ -300,16 +300,23 @@ revisions without overwrite or gap refill. Existing legacy HTML files reserve th
 and remain read-only compatibility inputs for the workbench catalog.
 
 The fixed page has a one-to-many, two-level information architecture. `/` is the level-one audit
-management system with overview, complete run ledger, and technical archives; runtime monitoring is
-embedded in the overview and must not appear as a separate navigation view.
+management system with overview, complete run ledger, and technical archives. The overview contains
+aggregate metrics and recent run records only; it must not render a runtime chain, stage nodes, or an
+observable event stream.
 Every catalog entry expands through `/?run=<workspace-id>` into its own level-two record. A completed
-record must use the approved original error-desk interface and show only that run's submitted scenarios;
+record must use the approved original error-desk interface and show all of that run's grouped customer
+errors in one continuously stacked list. It must not classify errors into scenario queues or require a
+second click to enter a scenario; every error card carries one small Chinese audit-type label;
 a running or failed record gets a status/diagnostic level-two page and must not impersonate a completed
 business result. Level-two pages return to the level-one ledger and may switch directly to another run.
 Counts inside the completed error desk represent grouped customer actions, not internal failed fields.
-Passing records, passing contract facts, the contract baseline, audit-process narration, and
-informational watermark policy remain in deterministic analysis but are hidden from the default
-customer result. Explicit technical archives may expose schema-validated evidence, deterministic
+Passing records and passing contract facts remain hidden from the default error overview, but each
+completed record also has a sibling `正确检查项` ledger. It may expose only independently passed
+subchecks projected from the same deterministic result, grouped by audit type and labeled with a
+Chinese category, check title, subject, concise basis, source basenames, and confidence. A passed
+subcheck never changes the record conclusion or suppresses a blocking error. Contract baselines,
+audit-process narration, and informational watermark policy remain outside both customer result
+views. Explicit technical archives may expose schema-validated evidence, deterministic
 result objects, verification receipts, observable events, and DOM-data checkpoints; they must never
 expose model-private reasoning or treat an AI narrative as decision authority.
 
@@ -354,14 +361,33 @@ must be resubmitted. Never emit `A ↔ B 无法确认`, `Excel门店与收款人
 source-free shorthand. Never require the reader to consult audit JSON or expose candidate sets, hashes, product
 IDs, convergence, RAG terminology, or model reasoning.
 
-For a field-store mismatch, if the photo watermark location is legible but differs from the contract
-store, label it `门店水印错误`, display both values and the affected photo basenames, and request a
-photo with corrected watermark location. Do not call it unreadable or ask only for a clearer photo;
-the filename cannot override a conflicting watermark. Reserve missing/unreadable wording for a photo
-that truly lacks reliable visible location evidence.
+When a field-store name fully corresponds to the visible watermark location, pass the location
+directly without a map call or a location-confidence issue. For every legible name difference, preserve
+the contract store, visible watermark location, and affected photo basenames, then run the configured
+fixed Baidu Maps MCP resolver through `map_search_places`; persist returned coordinates as `BD09LL`.
+Read `BAIDU_MAPS_API_KEY` from the current process first and, on Windows, from the current user's
+environment configuration second so routine runs need no separate interactive terminal. The OS user
+configuration is the only allowed persistent secret location; never copy the AK into a repository file,
+command-line argument, worktree, result, log, or displayed authenticated URL.
+A selected same POI, a verified mall/store parent-child relationship, or two selected
+POIs no more than 100 metres apart is `compatible` with high location confidence. Search results do
+not need to be independently unique: preserve any credibly unique side, and require every unresolved
+side's selected candidate to meet the internal 0.60 name-relevance threshold; when both sides are
+unresolved, both selected candidates must meet it. Accept the best such pair when it forms one of those
+passing spatial relationships. A distant pair, the 100-to-300-metre gray zone, no credible
+candidate pair, an unavailable MCP, or missing comparable coordinates is `location_unverified` with
+low location confidence: hold automatic settlement and show
+`门店地点低置信度`, never an automatic wrong-watermark finding. Preserve a distant pair's measured
+distance and request either authoritative same/nearby evidence or corrected-location content. Keep
+legacy `mismatch` readable but do not emit it for new determinations. If MCP is unavailable or
+inconclusive, an entry in the schema-validated verified location registry may supply the relationship;
+its publisher, checked date, address facts, and basis must remain in the result and six-column ledger.
+A conflict between MCP and the registry is low-confidence and always goes to manual review. Filenames
+never prove or override a location, and a truly missing/unreadable watermark remains a separate
+evidence gap.
 
 The canonical customer interface is the root `offline-activity-audit.html`, currently Audit System
-`2.2.0`. Its level-one system, approved original level-two error desk, copy, layout,
+`2.6.0`. Its level-one system, approved original level-two audit desk, copy, layout,
 customer/technical separation, run-history behavior, relative API contract, responsive behavior, and
 controls remain unchanged during an ordinary audit. It reads only the trusted service's `/api/config`,
 `/api/runs`, run `snapshot`, `log`, `events`, approved `analysis`, and `checkpoints` resources. The
@@ -380,25 +406,44 @@ behavior change. That same change must update the system version, read-only API 
 tests, PC browser verification at 1440×960, this output contract, the orchestration Skill, and
 README; never weaken verification to accept a changed page.
 
-Audit System `2.2.0` freezes the persistent audit-ledger standard: a level-one management center with
-system overview, full audit ledger, and technical archive. Runtime monitoring is part of the overview
-and has no separate navigation entry. It uses the selected run's real snapshot to show a six-stage chain
-(bootstrap, intake, analysis, evidence, decision, verification) as a planet-and-orbit inspection path,
-plus the four newest observable events. The canonical six-task main-flow checklist comes from
+Audit System `2.6.0` freezes the persistent audit-ledger standard: a level-one management center with
+system overview, full audit ledger, and technical archive. The overview contains only aggregate metrics
+and recent run records. It does not show a runtime chain, stage nodes, or observable events, and its
+silent probe reads only `/api/runs`; visible overview content updates when the run-catalog signature
+changes. The system-overview `核销完成` metric shows the top-level input ZIP count from the newest
+completed run, not the cumulative number of completed run records. The level-one aggregate metric and
+completed-run count label both present `error_count` as `待人工核验`; the underlying count and level-two
+disposition content remain unchanged. The canonical
+six-task main-flow checklist comes from
 `audit_core.workbench_store.main_flow_task_list`, is persisted in every new manifest, and is exposed by
-the read-only workbench context and `/api/config`; the frontend must not maintain a differently ordered
-stage list. Multi-scenario execution is stage-batched: every analysis event precedes every evidence
-validation event, every evidence event precedes every deterministic decision event, and verification
-comes last, so the run-level stage index never regresses. Running pages may probe silently, but visible content updates only when the selected
-workspace, terminal status, or stage progress index changes. Events within the same stage never rerender
-the overview, and a running level-two record never reloads on a fixed timer. A full-page reload always
-opens system overview; the ledger state saved before opening a
-level-two record is consumed only once when returning. Module actions never cross-nest: overview summaries
-and runtime monitoring have no record buttons, ledger rows only open the record, and technical-archive
-cards only open logs and checkpoints. The system also has one approved original
-error-desk level-two page per completed run and a truthful diagnostic level-two page for incomplete
-runs. The original record view retains its dark scenario rail, cold-gray grid canvas, error-only hero,
-four grouped-error metrics, and scenario queues. Formal frontend delivery is PC-only: verify at 1440×960
+the read-only workbench context and `/api/config` for technical contracts and running-record refresh;
+the frontend must not maintain a differently ordered stage list. Multi-scenario execution is stage-
+batched: every analysis event precedes every evidence validation event, every evidence event precedes
+every deterministic decision event, and verification comes last, so the run-level stage index never
+regresses. A running level-two record may probe silently, but visible content updates only when the
+selected workspace, terminal status, or stage progress index changes. Events within the same stage
+never reload that record, and a running level-two record never reloads on a fixed timer. A full-page
+reload always opens system overview; the ledger state saved before opening a level-two record is
+consumed only once when returning. Module actions never cross-nest: overview summaries have no record
+buttons, ledger rows only open the record, and technical-archive cards only open logs and checkpoints.
+The system also has one approved original audit-desk level-two page per completed run and a truthful
+diagnostic level-two page for incomplete runs. The record view retains its dark rail and cold-gray grid
+canvas. The rail has exactly two sibling result views: the default red-accented error overview retains
+its four grouped-error metrics and stacked error cards; the green-accented correct-check ledger groups
+all independently passed subchecks by audit type and then by Chinese business category. Each pass entry
+shows the checked subject, concise deterministic basis, available source basenames, and confidence.
+Whole-record caveats and filter-behavior explanations remain internal rules and are not rendered as
+auxiliary customer-interface copy. The pass ledger offers
+client-side combined filters for audit type, Chinese check category, confidence, and free-text terms;
+the three enumerated filters are linked facets, omit options with no result under the other current
+conditions, and show a live result count beside every remaining option. The ledger reports the overall
+live match count and resets without mutating the snapshot. All grouped errors
+remain directly below the error summary modules and each carries one `核销类型 · <业务类型>` badge.
+There are no scenario queues, scenario-entry buttons, or per-type subpages in either sibling view.
+The read-only API contract is `1.5`: a completed snapshot's `view.pass_check_log` uses schema `1.0`
+with `total`, type/scope counts, and ordered `groups[].items[]`; the server reconstructs this projection
+from immutable `analysis/results/<scenario>.json` for older archives without rewriting their worktrees.
+Formal frontend delivery is PC-only: verify at 1440×960
 and keep desktop widths of 1280px or greater usable. Narrow-screen CSS is best-effort fallback, not a
 mobile configuration or acceptance promise.
 Customer output must translate engineering enums and keys into business-readable Chinese; technical

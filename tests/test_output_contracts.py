@@ -406,6 +406,25 @@ def _display_result() -> dict:
                 "period_match": "match",
                 "store_match": "exact",
                 "store_match_basis": "现场可见门店名称与合同门店一致",
+                "location_resolution": {
+                    "status": "not_needed",
+                    "confidence": "not_applicable",
+                    "provider": "deterministic_name",
+                    "transport": "local",
+                    "mcp_attempted": False,
+                    "mcp_status": "not_needed",
+                    "contract_query": "示例门店",
+                    "watermark_query": "示例门店",
+                    "city_hint": None,
+                    "coordinate_system": None,
+                    "contract_poi": None,
+                    "watermark_poi": None,
+                    "distance_meters": None,
+                    "nearby_pass_meters": 100.0,
+                    "unrelated_min_meters": 300.0,
+                    "evidence": [],
+                    "basis": "现场可见门店名称与合同门店一致，无需调用地图MCP",
+                },
                 "display_match": "pass",
                 "display_standard_basis": "four_vertical",
                 "display_description": "画面中可清楚数出4列纵向陈列。",
@@ -851,10 +870,10 @@ class HtmlReportTests(unittest.TestCase):
                 ["人员激励核销", "堆头核销"],
             )
             self.assertEqual(verification["external_dependency_count"], 0)
-            self.assertEqual(verification["button_count"], 6)
+            self.assertEqual(verification["button_count"], 22)
             self.assertTrue(verification["workbook_content_equal"])
             self.assertTrue(verification["static_template_equal"])
-            self.assertEqual(verification["template_version"], "3.7.0")
+            self.assertEqual(verification["template_version"], "3.9.0")
             self.assertRegex(verification["style_sha256"], r"^[0-9a-f]{64}$")
             self.assertRegex(verification["shell_sha256"], r"^[0-9a-f]{64}$")
 
@@ -883,22 +902,44 @@ class HtmlReportTests(unittest.TestCase):
                 'id="error-only-preview-script"',
                 'class="eo-home-cockpit"',
                 'class="eo-tab"',
-                'class="eo-scenario-card"',
-                'class="eo-enter"',
                 'class="eo-error-card"',
                 'class="eo-error-details"',
                 'class="eo-table"',
+                'id="eoErrorList"',
+                'id="eoErrorType"',
+                'id="eoErrorConfidence"',
+                'id="eoErrorKeyword"',
+                'id="eoErrorVisible"',
+                'id="eoErrorFacetSummary"',
+                'id="eoErrorFilterEmpty"',
+                'id="eoPassList"',
+                'id="eoPassType"',
+                'id="eoPassCategory"',
+                'id="eoPassConfidence"',
+                'id="eoPassKeyword"',
+                'id="eoPassFacetSummary"',
+                'id="eoPassFilterEmpty"',
                 'id="eoBackTop"',
+                'data-eo-view="passed"',
                 "核销错误处置总览",
-                "核销场景",
+                "核销错误结果",
+                "正确检查项日志",
+                "筛选错误检查项",
+                "筛选正确检查项",
+                "种核销方式",
+                "核销类型",
+                "核销类型 ·",
                 "错误总数",
                 "材料 / 结算错误",
                 "商品 / 门店错误",
-                "返回错误总览",
-                "通过项、合同基准和核销过程均已隐藏",
+                "全部错误直接向下排列",
                 "@media (prefers-reduced-motion: reduce)",
             ):
                 self.assertIn(required, html)
+            self.assertNotIn("单项通过不等于整单核销通过", html)
+            self.assertNotIn('class="eo-pass-warning"', html)
+            self.assertNotIn("核销方式始终展示全部；置信度随核销方式和关键词联动", html)
+            self.assertNotIn("核销方式始终展示全部；检查分类和置信度只保留当前存在项", html)
 
             self.assertIn(
                 '<div class="brand-mark" aria-label="参半 CANBAN"><strong>参半</strong><small>CANBAN</small></div>',
@@ -908,8 +949,7 @@ class HtmlReportTests(unittest.TestCase):
             self.assertIn("const personnelView = (sheet) =>", html)
             self.assertIn("const displayView = (sheet) =>", html)
             self.assertIn("const posterView = (sheet) =>", html)
-            self.assertIn("const groupedIssueView = (sheet, scope) =>", html)
-            self.assertIn("const openView = (id) =>", html)
+            self.assertIn("const groupedIssueView = (sheet, auditType) =>", html)
             self.assertIn("合同销售附件第1行", html)
             self.assertIn("['合同位置', '合同商品', '知识库商品', '具体错误']", html)
             self.assertIn(".eo-table td::before", html)
@@ -924,6 +964,12 @@ class HtmlReportTests(unittest.TestCase):
                 'class="home-issue-anchor"',
                 'class="home-head"',
                 "scenario-overview-card",
+                'class="eo-scenario-card"',
+                'class="eo-enter"',
+                'data-open="scenario-',
+                "进入错误清单",
+                "错误场景队列",
+                "const openView = (id) =>",
                 "__CANBAN_STYLE_SHA256__",
                 "__CANBAN_SHELL_SHA256__",
                 "__AUDIT_DATA__",
@@ -1341,6 +1387,12 @@ class DisplayContractTests(unittest.TestCase):
                     photo_text,
                 )
                 self.assertIn("可见文字：示例商品原名、6970356167341", photo_text)
+                self.assertIn(
+                    "地点核验：名称直接一致（名称直接核对；名称一致，无需调用地图MCP）",
+                    photo_text,
+                )
+                self.assertIn("地点核验依据：", photo_text)
+                self.assertIn("地点核验数据：名称直接对应，无需坐标检索", photo_text)
                 self.assertIn(
                     "现场商品：示例商品原名（CP-KQ-YG-0001 / 6970356167341，"
                     "置信度：高）",

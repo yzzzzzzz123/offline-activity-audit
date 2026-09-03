@@ -3,6 +3,73 @@
   "$id": "https://example.local/offline-activity-audit/audit-result.schema.json",
   "title": "Deterministic offline activity audit result",
   "type": "object",
+  "$defs": {
+    "location_poi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "address", "poi_id", "longitude", "latitude"],
+      "properties": {
+        "name": {"type": "string"},
+        "address": {"type": "string"},
+        "poi_id": {"type": ["string", "null"], "minLength": 1},
+        "longitude": {"type": ["number", "null"], "minimum": -180, "maximum": 180},
+        "latitude": {"type": ["number", "null"], "minimum": -90, "maximum": 90},
+        "source_title": {"type": ["string", "null"], "minLength": 1},
+        "source_url": {"type": ["string", "null"], "format": "uri"}
+      }
+    },
+    "location_resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status", "confidence", "provider", "transport", "mcp_attempted", "mcp_status",
+        "contract_query", "watermark_query", "city_hint", "coordinate_system",
+        "contract_poi", "watermark_poi", "distance_meters",
+        "nearby_pass_meters", "unrelated_min_meters", "evidence", "basis"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not_applicable", "not_needed", "same_place", "parent_child",
+            "nearby", "unrelated", "ambiguous", "unavailable"
+          ]
+        },
+        "confidence": {
+          "enum": ["high", "low", "not_applicable"]
+        },
+        "provider": {"type": "string", "minLength": 1},
+        "transport": {"type": "string", "minLength": 1},
+        "mcp_attempted": {"type": "boolean"},
+        "mcp_status": {
+          "enum": [
+            "not_needed", "not_configured", "same_place", "parent_child",
+            "nearby", "unrelated", "ambiguous", "unavailable"
+          ]
+        },
+        "contract_query": {"type": "string"},
+        "watermark_query": {"type": "string"},
+        "city_hint": {"type": ["string", "null"], "minLength": 1},
+        "coordinate_system": {
+          "type": ["string", "null"],
+          "enum": ["BD09LL", "WGS84", null]
+        },
+        "contract_poi": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/location_poi"}]
+        },
+        "watermark_poi": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/location_poi"}]
+        },
+        "distance_meters": {"type": ["number", "null"], "minimum": 0},
+        "nearby_pass_meters": {"type": "number", "exclusiveMinimum": 0},
+        "unrelated_min_meters": {"type": "number", "exclusiveMinimum": 0},
+        "evidence": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "basis": {"type": "string", "minLength": 1}
+      }
+    }
+  },
   "required": [
     "schema_version", "generated_at", "scenario", "case_id", "case_name",
     "summary", "exceptions"
@@ -536,7 +603,8 @@
               "type": "object",
               "required": [
                 "store_line_no", "contract_store_name", "photo_files", "visible_date",
-                "visible_location", "period_match", "store_match", "display_match",
+                "visible_location", "period_match", "store_match", "store_match_basis",
+                "location_resolution", "display_match",
                 "display_standard_basis", "display_description",
                 "display_vertical_facing_count", "display_vertical_facing_basis",
                 "display_stack_1sqm_basis", "duplicate_check",
@@ -551,6 +619,14 @@
                 "status", "supplement_advice"
               ],
               "properties": {
+                "store_match": {
+                  "enum": [
+                    "exact", "compatible", "mismatch", "filename_only",
+                    "location_unverified"
+                  ]
+                },
+                "store_match_basis": {"type": "string", "minLength": 1},
+                "location_resolution": {"$ref": "#/$defs/location_resolution"},
                 "display_match": {"enum": ["pass", "fail", "uncertain"]},
                 "display_standard_basis": {
                   "enum": ["stack_1sqm", "four_vertical", "both", "none", "unclear"]

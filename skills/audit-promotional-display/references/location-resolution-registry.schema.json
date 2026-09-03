@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://offline-audit.local/schemas/location-resolution-registry.schema.json",
+  "title": "Promotional display authoritative location-resolution registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contract_name",
+          "visible_location",
+          "city",
+          "relationship",
+          "contract_address",
+          "watermark_address",
+          "basis",
+          "sources"
+        ],
+        "properties": {
+          "contract_name": {"type": "string", "minLength": 1},
+          "visible_location": {"type": "string", "minLength": 1},
+          "city": {"type": "string", "minLength": 1},
+          "relationship": {
+            "enum": ["same_place", "parent_child", "nearby", "unrelated"]
+          },
+          "contract_address": {"type": "string", "minLength": 1},
+          "watermark_address": {"type": "string", "minLength": 1},
+          "distance_meters": {"type": ["number", "null"], "minimum": 0},
+          "basis": {"type": "string", "minLength": 1},
+          "sources": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["title", "publisher", "url", "checked_on"],
+              "properties": {
+                "title": {"type": "string", "minLength": 1},
+                "publisher": {"type": "string", "minLength": 1},
+                "url": {"type": "string", "format": "uri", "pattern": "^https://"},
+                "checked_on": {"type": "string", "format": "date"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

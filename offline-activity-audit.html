@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="canban-template-version" content="3.1.0">
-  <meta name="offline-audit-system-version" content="2.2.0">
+  <meta name="canban-template-version" content="3.2.0">
+  <meta name="offline-audit-system-version" content="2.6.0">
   <script>
     if (window.location.protocol === 'file:') {
-      window.location.replace('http://192.0.0.108:8080/');
+      window.location.replace('http://192.0.0.148:8080/');
     }
   </script>
   <meta name="canban-style-sha256" content="3596361688dea59d47e3d3613ac025836e35c97beb8eb670a64381c70666c3cf">
@@ -1644,6 +1644,10 @@
     .eo-tab[aria-selected="true"] .eo-nav-glyph { color: var(--eo-danger); }
     .eo-tab[aria-selected="true"] .eo-nav-copy small { color: #687a82; }
     .eo-tab[aria-selected="true"] em { color: #fff; background: var(--eo-danger); border-color: var(--eo-danger); }
+    .eo-tab-pass em { color: #7fe0b8; background: rgba(24, 132, 94, .17); border-color: rgba(92, 205, 161, .2); }
+    .eo-tab-pass[aria-selected="true"] { border-left-color: var(--eo-green); }
+    .eo-tab-pass[aria-selected="true"] .eo-nav-glyph { color: var(--eo-green); }
+    .eo-tab-pass[aria-selected="true"] em { color: #fff; background: var(--eo-green); border-color: var(--eo-green); }
     .eo-rail-foot { margin: auto 16px 16px; padding: 15px; background: rgba(255, 255, 255, .055); border: 1px solid rgba(255, 255, 255, .1); }
     .eo-rail-foot span, .eo-rail-foot em { display: block; color: #7896a3; font-size: 8px; font-style: normal; letter-spacing: .08em; }
     .eo-rail-foot strong { display: block; margin: 5px 0 2px; color: #fff; font-size: 17px; }
@@ -1869,12 +1873,23 @@
     .eo-error-main { min-width: 0; padding: 15px 17px 16px; }
     .eo-error-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
     .eo-error-head h3, .eo-error-head h4 { margin: 0; font-size: 15px; line-height: 1.4; }
+    .eo-error-badges { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
     .eo-scope {
       flex: 0 0 auto;
       padding: 3px 7px;
       color: #a7362d;
       background: #fff0ed;
       border: 1px solid #f0cbc5;
+      border-radius: 2px;
+      font-size: 9px;
+      font-weight: 800;
+    }
+    .eo-error-confidence {
+      flex: 0 0 auto;
+      padding: 3px 7px;
+      color: #74522f;
+      background: #fff8ed;
+      border: 1px solid #ead9bd;
       border-radius: 2px;
       font-size: 9px;
       font-weight: 800;
@@ -1919,6 +1934,210 @@
     .eo-table td:last-child { color: #8d342d; font-weight: 680; }
     .eo-empty { padding: 24px; color: var(--eo-green); background: #eef8f3; border: 1px solid #cce5d7; }
     .eo-no-match { padding: 20px; color: var(--eo-soft); text-align: center; background: #fff; border: 1px solid var(--eo-line); }
+    .eo-pass-hero::before { background: var(--eo-green); }
+    .eo-pass-hero::after { color: #e1eee9; content: "VERIFIED"; }
+    .eo-pass-hero .eo-kicker { color: #136c4d; }
+    .eo-pass-hero .eo-kicker::before { background: var(--eo-green); }
+    .eo-pass-hero .eo-total-gauge { border-left-color: var(--eo-green); }
+    .eo-pass-hero .eo-total-gauge em { color: #7fe0b8; }
+    .eo-pass-composition .eo-composition-bar i { background: var(--eo-green); }
+    .eo-pass-composition .eo-composition-bar b { background: var(--eo-teal); }
+    .eo-pass-composition .eo-composition-legend i { background: var(--eo-green); }
+    .eo-pass-composition .eo-composition-legend span:last-child i { background: var(--eo-teal); }
+    .eo-pass-filter-panel {
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #cbd9d4;
+      border-top: 4px solid var(--eo-green);
+      box-shadow: 0 8px 24px rgba(22, 70, 53, .055);
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .eo-pass-filter-panel.is-filtering { border-color: #9fcbbb; box-shadow: 0 9px 28px rgba(24, 132, 94, .1); }
+    .eo-pass-filter-head {
+      display: flex;
+      min-height: 67px;
+      padding: 12px 16px;
+      background: #f3f8f6;
+      border-bottom: 1px solid #d7e3de;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .eo-pass-filter-head small { display: block; color: #18845e; font: 800 8px/1 var(--eo-mono); letter-spacing: .13em; }
+    .eo-pass-filter-head h2 { margin: 6px 0 0; color: #183f31; font-size: 16px; line-height: 1.15; }
+    .eo-pass-filter-result { display: flex; min-height: 34px; align-items: center; gap: 7px; }
+    .eo-pass-filter-result > span { color: #60756d; font-size: 9px; font-weight: 760; }
+    .eo-pass-filter-result strong { color: var(--eo-green); font: 900 23px/1 var(--eo-mono); }
+    .eo-pass-filter-result em { color: #71847d; font: 750 9px/1 var(--eo-mono); font-style: normal; }
+    .eo-pass-filter-result button, .eo-pass-filter-empty button {
+      min-height: 30px;
+      margin-left: 7px;
+      padding: 5px 10px;
+      color: #176b4d;
+      background: #fff;
+      border: 1px solid #afd3c5;
+      cursor: pointer;
+      font-size: 9px;
+      font-weight: 800;
+      transition: color .16s ease, background-color .16s ease, border-color .16s ease;
+    }
+    .eo-pass-filter-result button:hover, .eo-pass-filter-empty button:hover { color: #fff; background: var(--eo-green); border-color: var(--eo-green); }
+    .eo-pass-filter-result button:disabled { color: #98aaa3; background: #f2f5f4; border-color: #d9e1de; cursor: default; }
+    .eo-pass-filter-grid {
+      display: grid;
+      padding: 14px 16px 16px;
+      grid-template-columns: minmax(150px, .8fr) minmax(150px, .9fr) minmax(130px, .65fr) minmax(230px, 1.5fr);
+      gap: 10px;
+    }
+    .eo-pass-filter-grid label { display: grid; min-width: 0; gap: 6px; }
+    .eo-pass-filter-grid label > span { color: #526960; font-size: 9px; font-weight: 800; letter-spacing: .04em; }
+    .eo-pass-filter-grid select, .eo-pass-filter-grid input {
+      width: 100%;
+      min-width: 0;
+      height: 38px;
+      padding: 0 11px;
+      color: #203d32;
+      background-color: #fbfdfc;
+      border: 1px solid #cbd8d3;
+      border-radius: 0;
+      outline: 0;
+      font: 700 10px/1.2 var(--eo-sans);
+      transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+    .eo-pass-filter-grid select { padding-right: 30px; cursor: pointer; }
+    .eo-pass-filter-grid input::placeholder { color: #899a94; font-weight: 620; }
+    .eo-pass-filter-grid select:hover, .eo-pass-filter-grid input:hover { background: #fff; border-color: #9fc5b7; }
+    .eo-pass-filter-grid select:focus-visible, .eo-pass-filter-grid input:focus-visible { background: #fff; border-color: var(--eo-green); box-shadow: 0 0 0 3px rgba(24, 132, 94, .13); }
+    .eo-pass-filter-grid select:disabled { color: #90a29b; background: #f2f5f4; border-color: #dce4e1; cursor: not-allowed; }
+    .eo-pass-facet-hint {
+      display: flex;
+      min-height: 35px;
+      padding: 7px 16px 9px;
+      color: #61766e;
+      background: #f8fbfa;
+      border-top: 1px dashed #d7e3de;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      font-size: 8px;
+    }
+    .eo-pass-facet-hint b { margin-right: 7px; color: #176f50; letter-spacing: .06em; }
+    .eo-pass-facet-hint em { flex: 0 0 auto; color: #3e6355; font: 800 8px/1.3 var(--eo-mono); font-style: normal; }
+    .eo-facet-summary-only { justify-content: flex-end; }
+    .eo-pass-filter-empty {
+      display: flex;
+      min-height: 150px;
+      padding: 28px;
+      color: #285443;
+      background: repeating-linear-gradient(-45deg, #f5faf8, #f5faf8 10px, #f0f7f4 10px, #f0f7f4 20px);
+      border: 1px dashed #9fcbbb;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 6px;
+    }
+    .eo-pass-filter-empty[hidden] { display: none !important; }
+    .eo-pass-filter-empty strong { font-size: 14px; }
+    .eo-pass-filter-empty span { color: #657c73; font-size: 10px; }
+    .eo-pass-filter-empty button { margin: 8px 0 0; }
+    .eo-error-filter-panel {
+      border-color: #e2d2ce;
+      border-top-color: var(--eo-danger);
+      box-shadow: 0 8px 24px rgba(133, 49, 40, .055);
+    }
+    .eo-error-filter-panel.is-filtering { border-color: #d8aaa4; box-shadow: 0 9px 28px rgba(190, 59, 49, .09); }
+    .eo-error-filter-panel .eo-pass-filter-head { background: #fcf6f5; border-bottom-color: #ead9d5; }
+    .eo-error-filter-panel .eo-pass-filter-head small { color: #b13e34; }
+    .eo-error-filter-panel .eo-pass-filter-head h2 { color: #5c2924; }
+    .eo-error-filter-panel .eo-pass-filter-result > span { color: #80635f; }
+    .eo-error-filter-panel .eo-pass-filter-result strong { color: var(--eo-danger); }
+    .eo-error-filter-panel .eo-pass-filter-result em { color: #8b716d; }
+    .eo-error-filter-panel .eo-pass-filter-result button,
+    .eo-error-filter-empty button { color: #9d382f; border-color: #dfb7b1; }
+    .eo-error-filter-panel .eo-pass-filter-result button:hover,
+    .eo-error-filter-empty button:hover { color: #fff; background: var(--eo-danger); border-color: var(--eo-danger); }
+    .eo-error-filter-panel .eo-pass-filter-result button:disabled { color: #ad9b98; background: #f7f3f2; border-color: #e6dcda; }
+    .eo-error-filter-grid { grid-template-columns: minmax(170px, .8fr) minmax(150px, .7fr) minmax(300px, 1.8fr); }
+    .eo-error-filter-grid label > span { color: #745b57; }
+    .eo-error-filter-grid select,
+    .eo-error-filter-grid input { color: #4f2d29; background-color: #fffcfb; border-color: #dfd0cd; }
+    .eo-error-filter-grid select:hover,
+    .eo-error-filter-grid input:hover { background: #fff; border-color: #d7aaa4; }
+    .eo-error-filter-grid select:focus-visible,
+    .eo-error-filter-grid input:focus-visible { background: #fff; border-color: var(--eo-danger); box-shadow: 0 0 0 3px rgba(190, 59, 49, .11); }
+    .eo-error-filter-grid select:disabled { color: #ab9b98; background: #f7f3f2; border-color: #e7dddb; }
+    .eo-error-filter-panel .eo-pass-facet-hint { color: #806963; background: #fdf9f8; border-top-color: #ead9d5; }
+    .eo-error-filter-panel .eo-pass-facet-hint b { color: #a23930; }
+    .eo-error-filter-panel .eo-pass-facet-hint em { color: #77524d; }
+    .eo-error-filter-empty {
+      color: #71362f;
+      background: repeating-linear-gradient(-45deg, #fdf8f7, #fdf8f7 10px, #faf2f0 10px, #faf2f0 20px);
+      border-color: #d7aaa4;
+    }
+    .eo-error-filter-empty span { color: #846b67; }
+    .eo-pass-ledger { overflow: hidden; background: var(--eo-surface-soft); border: 1px solid var(--eo-line-dark); }
+    .eo-pass-ledger > .eo-queue-head small { color: #14704f; }
+    .eo-pass-groups { display: grid; padding: 10px; gap: 12px; }
+    .eo-pass-group { min-width: 0; overflow: hidden; background: #f7faf9; border: 1px solid #cfdcd7; }
+    .eo-pass-group-head {
+      display: grid;
+      min-height: 94px;
+      padding: 15px 17px;
+      color: #f6fbf9;
+      background: var(--eo-dark);
+      border-left: 5px solid var(--eo-green);
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 15px;
+    }
+    .eo-pass-group-code { color: #72d7af; font: 900 21px/1 var(--eo-mono); text-align: center; }
+    .eo-pass-group-code small { display: block; margin-top: 7px; color: #7896a3; font: 800 7px/1 var(--eo-mono); letter-spacing: .12em; }
+    .eo-pass-group-head > div:nth-child(2) > small { display: block; color: #72d7af; font: 800 8px/1 var(--eo-mono); letter-spacing: .12em; }
+    .eo-pass-group-head h2 { margin: 6px 0 0; font-size: 20px; line-height: 1.2; }
+    .eo-pass-breakdown { display: flex; margin-top: 9px; flex-wrap: wrap; gap: 5px; }
+    .eo-pass-breakdown span { padding: 3px 6px; color: #a8c7ba; background: rgba(255, 255, 255, .055); border: 1px solid rgba(255, 255, 255, .1); font-size: 8px; }
+    .eo-pass-group-count { min-width: 88px; padding-left: 16px; border-left: 1px solid rgba(255, 255, 255, .13); text-align: right; }
+    .eo-pass-group-count span { display: block; color: #8ca7b5; font-size: 8px; }
+    .eo-pass-group-count strong { display: inline-block; margin-top: 5px; color: #77ddb4; font: 900 31px/1 var(--eo-mono); }
+    .eo-pass-group-count em { margin-left: 4px; color: #9bb5aa; font-size: 8px; font-style: normal; }
+    .eo-pass-category { padding: 12px; }
+    .eo-pass-category + .eo-pass-category { padding-top: 3px; }
+    .eo-pass-category > header { display: flex; min-height: 32px; padding: 5px 1px 8px; border-bottom: 1px solid #cad8d2; align-items: center; justify-content: space-between; gap: 12px; }
+    .eo-pass-category > header span { color: #1e4939; font-size: 11px; font-weight: 820; }
+    .eo-pass-category > header em { color: #5d7a6f; font: 800 9px/1 var(--eo-mono); font-style: normal; }
+    .eo-pass-stack { display: grid; padding-top: 8px; gap: 7px; }
+    .eo-pass-card {
+      display: grid;
+      min-width: 0;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #d7e1dd;
+      border-left: 4px solid var(--eo-green);
+      box-shadow: 0 5px 16px rgba(24, 72, 55, .045);
+      grid-template-columns: 64px minmax(0, 1fr);
+    }
+    .eo-pass-index { display: flex; padding: 13px 5px; color: #176f50; background: #edf8f3; border-right: 1px solid #d3e9df; flex-direction: column; align-items: center; gap: 7px; }
+    .eo-pass-index span { font: 900 7px/1 var(--eo-mono); letter-spacing: .1em; }
+    .eo-pass-index strong { font: 850 11px/1 var(--eo-mono); }
+    .eo-pass-main { min-width: 0; padding: 12px 15px 13px; }
+    .eo-pass-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .eo-pass-head small { display: block; color: #18845e; font: 800 8px/1 var(--eo-mono); letter-spacing: .09em; }
+    .eo-pass-head h3 { margin: 5px 0 0; font-size: 14px; line-height: 1.35; }
+    .eo-pass-confidence { flex: 0 0 auto; padding: 3px 7px; color: #176f50; background: #edf8f3; border: 1px solid #cce5da; font-size: 8px; font-weight: 800; }
+    .eo-pass-field { display: grid; margin-top: 9px; padding-top: 8px; border-top: 1px solid #e1e8e5; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
+    .eo-pass-field > span { color: #6c7f77; font-size: 9px; font-weight: 760; }
+    .eo-pass-field > strong, .eo-pass-field > div { min-width: 0; font-size: 11px; overflow-wrap: anywhere; }
+    .eo-pass-field > strong { color: #233d33; }
+    .eo-pass-field .eo-line + .eo-line { margin-top: 4px; }
+    .eo-pass-source { border-top-style: dashed; }
+    .eo-pass-files { display: flex; flex-wrap: wrap; gap: 5px; }
+    .eo-pass-files span, .eo-pass-files em { padding: 3px 6px; color: #315c4c; background: #f2f7f5; border: 1px solid #d9e6e1; font-size: 8px; font-style: normal; font-weight: 700; }
+    .eo-pass-files em { color: #6b7f77; background: #fff; }
+    .eo-pass-empty { display: flex; padding: 22px; color: #356151; background: #f0f7f4; flex-direction: column; gap: 4px; }
+    .eo-pass-empty strong { font-size: 12px; }
+    .eo-pass-empty span { color: #6d8179; font-size: 10px; }
+    .eo-error-card[hidden], .eo-pass-card[hidden], .eo-pass-category[hidden], .eo-pass-group[hidden], .eo-pass-breakdown span[hidden] { display: none !important; }
     .eo-back-top {
       position: fixed;
       right: 18px;
@@ -1952,6 +2171,8 @@
       .eo-topbar-inner { min-height: 68px; }
       .eo-composition { grid-template-columns: 135px minmax(120px, 1fr); }
       .eo-composition-legend { grid-column: 1 / -1; justify-content: flex-end; }
+      .eo-pass-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .eo-error-search { grid-column: 1 / -1; }
     }
     @media (max-width: 620px) {
       .eo-shell, .eo-topbar-inner { width: min(100% - 20px, 1440px); }
@@ -1983,7 +2204,24 @@
       .eo-error-card { grid-template-columns: 37px minmax(0, 1fr); }
       .eo-error-main { padding: 12px; }
       .eo-error-head { align-items: flex-start; flex-direction: column; gap: 6px; }
+      .eo-error-badges { justify-content: flex-start; }
       .eo-field { grid-template-columns: 1fr; gap: 4px; }
+      .eo-pass-filter-head { align-items: flex-start; flex-direction: column; gap: 10px; }
+      .eo-pass-filter-result { width: 100%; }
+      .eo-pass-filter-result button { margin-left: auto; }
+      .eo-pass-filter-grid { grid-template-columns: 1fr; }
+      .eo-error-search { grid-column: auto; }
+      .eo-pass-facet-hint { align-items: flex-start; flex-direction: column; gap: 4px; }
+      .eo-pass-facet-hint em { flex: initial; }
+      .eo-pass-group-head { grid-template-columns: 38px minmax(0, 1fr); padding: 14px 12px; }
+      .eo-pass-group-count { padding: 9px 0 0; border-top: 1px solid rgba(255, 255, 255, .13); border-left: 0; grid-column: 1 / -1; text-align: left; }
+      .eo-pass-group-count span { display: inline-block; margin-right: 8px; }
+      .eo-pass-group-count strong { font-size: 23px; }
+      .eo-pass-category { padding: 9px; }
+      .eo-pass-card { grid-template-columns: 44px minmax(0, 1fr); }
+      .eo-pass-main { padding: 11px; }
+      .eo-pass-head { flex-direction: column; gap: 6px; }
+      .eo-pass-field { grid-template-columns: 1fr; gap: 3px; }
       .eo-table, .eo-table tbody { display: block; }
       .eo-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
       .eo-table tr { display: block; padding: 7px; border: 1px solid var(--eo-line); }
@@ -2023,11 +2261,14 @@
       const displayNumber = (value) => Number.isFinite(value)
         ? String(Number(value.toFixed(6)))
         : '未识别';
+      const confidenceLabel = (value) => ({ high: '高', medium: '中', low: '低' }[value] || '高');
+      const normalizedConfidence = (value) => ['high', 'medium', 'low'].includes(value) ? value : 'high';
       const headerFiles = (sheet, index) => {
         const values = lines(sheet.headers?.[index] || '');
         return (values.length > 1 ? values.slice(1) : values).join('、');
       };
       const issueRows = (sheet) => (sheet.rows || []).filter((row) => row.status === 'issue');
+      let errorSequence = 0;
       const textBlock = (value) => lines(value).map((line) => `<div class="eo-line">${escapeHtml(line)}</div>`).join('');
       const actionText = (row) => {
         const value = String(row.values?.[5] || '');
@@ -2036,11 +2277,11 @@
         const items = lines(match[1]).map((line) => line.replace(/^\d+\.\s*/, '')).filter(Boolean);
         return items.join('；') || '补充能够直接核验该错误的清晰材料后重新提交。';
       };
-      const errorCard = ({ index, title, scope, source = '', baseline = '', problem, action, extra = '', search = '' }) => `
-        <article class="eo-error-card" data-search="${escapeHtml([title, scope, source, baseline, problem, action, search].join(' ').toLocaleLowerCase('zh-CN'))}">
-          <div class="eo-error-index">${String(index).padStart(2, '0')}</div>
+      const errorCard = ({ title, auditType, source = '', baseline = '', problem, action, extra = '', search = '', confidence = 'high' }) => `
+        <article class="eo-error-card" data-audit-type="${escapeHtml(auditType)}" data-error-confidence="${normalizedConfidence(confidence)}" data-search="${escapeHtml([title, auditType, source, baseline, problem, action, search].join(' ').toLocaleLowerCase('zh-CN'))}">
+          <div class="eo-error-index">${String(++errorSequence).padStart(2, '0')}</div>
           <div class="eo-error-main">
-            <header class="eo-error-head"><h3>${escapeHtml(title)}</h3><span class="eo-scope">${escapeHtml(scope)}</span></header>
+            <header class="eo-error-head"><h3>${escapeHtml(title)}</h3><div class="eo-error-badges"><span class="eo-scope">核销类型 · ${escapeHtml(auditType)}</span><span class="eo-error-confidence">置信度 · ${confidenceLabel(normalizedConfidence(confidence))}</span></div></header>
             ${source ? `<div class="eo-field source"><span>问题文件</span><div>${escapeHtml(source)}</div></div>` : ''}
             ${baseline ? `<div class="eo-field source"><span>对照文件</span><div>${escapeHtml(baseline)}</div></div>` : ''}
             <div class="eo-field"><span>错误原因</span><div>${problem}</div></div>
@@ -2061,8 +2302,7 @@
         const excelFile = headerFiles(sheet, 1);
         const settlementFile = headerFiles(sheet, 2);
         const transferFiles = headerFiles(sheet, 3);
-        const cards = rows.map((row, index) => {
-          const scope = row.section === 'settlement' ? '结算与付款' : '商品核销';
+        const cards = rows.map((row) => {
           let source = settlementFile;
           let baseline = excelFile;
           let reason = row.values?.[4] || row.values?.[3] || row.values?.[5];
@@ -2080,9 +2320,9 @@
             reason = `销售Excel读取到${displayNumber(storeCount)}家门店；转账凭证目前只能确认金额，没有完整显示每笔收款人、对应门店和完整交易日期。因此无法确认Excel中的${displayNumber(storeCount)}家门店分别由谁收款、对应哪一笔转账以及具体转账日期。`;
           }
           const problem = textBlock(reason);
-          return errorCard({ index: index + 1, title: row.heading, scope, source, baseline, problem, action: actionText(row), search: (row.values || []).join(' ') });
+          return errorCard({ title: row.heading, auditType: '人员激励', source, baseline, problem, action: actionText(row), search: (row.values || []).join(' '), confidence: row.confidence });
         }).join('');
-        return { count: rows.length, upstream: settlementCount, local: rows.length - settlementCount, html: cards || '<div class="eo-empty">没有发现核销错误</div>' };
+        return { count: rows.length, upstream: settlementCount, local: rows.length - settlementCount, html: cards };
       };
 
       const displayGlobalLabels = new Set([
@@ -2095,26 +2335,33 @@
       };
       const displayLocalLabels = (row) => displayIssueLabels(row).filter((label) => !displayGlobalLabels.has(label));
       const displayLocalLabel = (row, label) => {
-        if (!['合同门店', '门店水印错误', '门店水印缺失或无法核对'].includes(label)) return label;
+        if (!['合同门店', '门店水印错误', '门店地点待核验', '门店地点低置信度', '门店水印缺失或无法核对'].includes(label)) return label;
+        if (['门店水印错误', '门店地点待核验', '门店地点低置信度'].includes(label)) return '门店地点低置信度';
         if (label !== '合同门店') return label;
-        return String(row.values?.[3] || '').includes('门店不一致') ? '门店水印错误' : '门店水印缺失或无法核对';
+        return String(row.values?.[3] || '').includes('门店不一致') ? '门店地点低置信度' : '门店水印缺失或无法核对';
       };
       const localDisplayProblem = (row, labels) => {
         const facts = [];
         const photo = row.values?.[1] || '';
         const compare = row.values?.[3] || '';
         if (labels.includes('活动日期')) facts.push(lineWith(photo, '识别日期：'));
-        const hasStoreMismatch = labels.includes('门店水印错误')
+        const hasStoreLowConfidence = labels.includes('门店地点低置信度')
+          || labels.includes('门店水印错误')
           || (labels.includes('合同门店') && compare.includes('门店不一致'));
         const hasStoreEvidenceGap = labels.includes('门店水印缺失或无法核对')
           || (labels.includes('合同门店') && !compare.includes('门店不一致'));
-        if (hasStoreMismatch || hasStoreEvidenceGap) {
+        if (hasStoreLowConfidence || hasStoreEvidenceGap) {
           const contractStore = lineWith(row.values?.[0], '门店：').replace(/^门店：/, '') || row.heading;
           const visibleLocation = lineWith(photo, '识别地点：').replace(/^识别地点：/, '') || '未识别';
-          if (hasStoreMismatch) {
+          const locationCheck = lineWith(photo, '地点核验：');
+          const locationConfidence = lineWith(photo, '地点置信度：');
+          const locationBasis = lineWith(photo, '地点核验依据：').replace(/^地点核验依据：/, '');
+          if (hasStoreLowConfidence) {
             facts.push(`合同门店：${contractStore}`);
             facts.push(`照片水印地点：${visibleLocation}`);
-            facts.push(`水印地点已清楚识别，但“${visibleLocation}”与合同门店“${contractStore}”不一致；这是门店水印错误，不是照片没看清。文件名不能覆盖水印地点冲突。`);
+            facts.push(locationCheck);
+            facts.push(locationConfidence || '地点置信度：低');
+            facts.push(locationBasis || '合同门店与照片水印文字不同，当前地图证据未形成高置信度同址或临近结论，转人工核验。');
           } else {
             facts.push(`合同门店：${contractStore}`);
             facts.push(`照片水印地点：${visibleLocation}`);
@@ -2139,15 +2386,16 @@
         if (labels.includes('现场商品知识库')) actions.push('补拍同一商品包装：既要看清可对应知识库的名称片段、短码、规格或款式文字，也要保留足够完整的包装外观用于参考图视觉比对；文字与外观能唯一对应同一知识库商品即可，不强制拍到完整名称或69码');
         if (labels.includes('陈列标准')) actions.push('补一张完整堆头全景，能看清1平方米或数清4列');
         if (labels.includes('活动日期')) actions.push('补交能看清完整拍摄日期的现场照片');
-        const hasStoreMismatch = labels.includes('门店水印错误')
+        const hasStoreLowConfidence = labels.includes('门店地点低置信度')
+          || labels.includes('门店水印错误')
           || (labels.includes('合同门店') && String(row.values?.[3] || '').includes('门店不一致'));
         const hasStoreEvidenceGap = labels.includes('门店水印缺失或无法核对')
           || (labels.includes('合同门店') && !String(row.values?.[3] || '').includes('门店不一致'));
-        if (hasStoreMismatch || hasStoreEvidenceGap) {
+        if (hasStoreLowConfidence || hasStoreEvidenceGap) {
           const contractStore = lineWith(row.values?.[0], '门店：').replace(/^门店：/, '') || row.heading;
           const visibleLocation = lineWith(row.values?.[1], '识别地点：').replace(/^识别地点：/, '') || '未识别';
-          actions.push(hasStoreMismatch
-            ? `重新提交水印地点正确的现场照片：当前水印为“${visibleLocation}”，应显示可与合同门店“${contractStore}”唯一对应的门店名称或地址；不是补拍清晰度`
+          actions.push(hasStoreLowConfidence
+            ? '补充能唯一证明两处同址、商场与店铺关系或实际距离的权威地址材料；若地图确认相距较远且无法证明关联，再提交水印地点正确的现场照片'
             : `补交水印中能看清并可与合同门店“${contractStore}”唯一对应的门店名称或地址`);
         }
         return actions.join('；') || '补交能够直接证明本店现场执行情况的清晰照片。';
@@ -2251,7 +2499,7 @@
           const blockingProblem = contractProblem.filter((line) => !line.includes('水印'));
           const blockingAction = actionText(activity).split('；').filter((item) => item && !item.includes('水印')).join('；');
           if (blockingProblem.length || blockingAction) {
-            upstream.push({ title: '合同PDF核心字段未通过', scope: '合同材料', source: contractFile, problem: textBlock(blockingProblem.join('\n')), action: blockingAction, search: (activity.values || []).join(' ') });
+            upstream.push({ title: '合同PDF核心字段未通过', scope: '合同材料', source: contractFile, problem: textBlock(blockingProblem.join('\n')), action: blockingAction, search: (activity.values || []).join(' '), confidence: activity.confidence });
           }
         }
         if (knowledgeRows.length) {
@@ -2262,6 +2510,7 @@
             action: '在知识库对应商品的 product_code_aliases 中登记合同业务产品编码，或更正合同中有误的产品编码；商品名称仍只作模糊辅助。',
             extra: detailsTable(`查看 ${knowledgeRows.length} 行合同商品错误清单`, ['合同位置', '合同商品', '知识库商品', '具体错误'], knowledgeRows),
             search: knowledgeRows.flat().join(' '),
+            confidence: 'high',
           });
         }
         if (salesRows.length) {
@@ -2274,134 +2523,458 @@
             action: '只更正未识别或不一致的严格字段，并让销售Excel逐行对应合同附件；商品名称无需逐字一致。',
             extra: detailsTable(`查看 ${salesRows.length} 行销售错误清单`, ['合同位置', '合同商品', '销售Excel', '具体错误'], salesRows),
             search: salesRows.flat().join(' '),
+            confidence: 'high',
           });
         }
-        const upstreamCards = upstream.map((item, index) => errorCard({ index: index + 1, ...item })).join('');
+        const upstreamCards = upstream.map((item) => errorCard({ ...item, auditType: '堆头/陈列' })).join('');
         const localRows = (sheet.rows || []).filter((row) => row.section === 'detail' && row.status === 'issue' && displayLocalLabels(row).length);
-        const localCards = localRows.map((row, index) => {
+        const localCards = localRows.map((row) => {
           const labels = displayLocalLabels(row);
           const facts = localDisplayProblem(row, labels);
           const problem = `<div class="eo-chips">${labels.map((label) => `<span class="eo-chip">${escapeHtml(displayLocalLabel(row, label))}</span>`).join('')}</div>${facts.length ? `<div style="margin-top:8px">${textBlock(facts.join('\n'))}</div>` : ''}`;
           const source = afterPrefix(row.values?.[1], '文件：') || headerFiles(sheet, 1);
-          return errorCard({ index: index + 1, title: row.heading, scope: '门店现场', source, baseline: contractFile, problem, action: localDisplayAction(row, labels), search: (row.values || []).join(' ') });
+          return errorCard({ title: row.heading, auditType: '堆头/陈列', source, baseline: contractFile, problem, action: localDisplayAction(row, labels), search: (row.values || []).join(' '), confidence: row.confidence });
         }).join('');
-        const html = `${upstreamCards}<div class="eo-section-title"><h3>门店自身错误</h3><span>上游错误不在门店中重复</span></div>${localCards || '<div class="eo-empty">没有发现门店自身错误</div>'}`;
+        const html = `${upstreamCards}${localCards}`;
         return { count: upstream.length + localRows.length, upstream: upstream.length, local: localRows.length, html };
       };
 
       const posterView = (sheet) => {
         const rows = issueRows(sheet);
-        const cards = rows.map((row, index) => {
+        const cards = rows.map((row) => {
           const problem = textBlock([row.values?.[1], row.values?.[4]].filter(Boolean).join('\n'));
           const source = afterPrefix(row.values?.[0], '来源：');
-          return errorCard({ index: index + 1, title: row.heading.replace(/^错误项：/, ''), scope: '展示道具', source, problem, action: actionText(row), search: (row.values || []).join(' ') });
+          return errorCard({ title: row.heading.replace(/^错误项：/, ''), auditType: '海报/展示道具', source, problem, action: actionText(row), search: (row.values || []).join(' '), confidence: row.confidence });
         }).join('');
-        return { count: rows.length, upstream: rows.length, local: 0, html: cards || '<div class="eo-empty">没有发现核销错误</div>' };
+        return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
 
-      const otherExpenseView = (sheet) => {
+      const groupedIssueView = (sheet, auditType) => {
         const rows = issueRows(sheet);
-        const cards = rows.map((row, index) => {
+        const cards = rows.map((row) => {
           const title = String(row.heading || '').replace(/^问题：/, '');
           const source = afterPrefix(row.values?.[0], '文件：');
           const problem = textBlock([row.values?.[1], row.values?.[2], row.values?.[3], row.values?.[4]].filter(Boolean).join('\n'));
           const action = afterPrefix(row.values?.[5], '处理方式：') || actionText(row);
-          return errorCard({ index: index + 1, title, scope: String(sheet.name || '核销场景').replace(/核销$/, ''), source, problem, action, search: (row.values || []).join(' ') });
+          return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence });
         }).join('');
-        return { count: rows.length, upstream: rows.length, local: 0, html: cards || '<div class="eo-empty">没有发现核销错误</div>' };
+        return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
 
-      const genericScenarioMeta = {
-        other_expense: { code: 'OE', label: '其他费用', accent: '#7b5aa6', eyebrow: 'OTHER EXPENSE', navNote: '归类 / 审批错误' },
-        maintenance_fee: { code: 'MF', label: '维护费用', accent: '#3f7892', eyebrow: 'MAINTENANCE FEE', navNote: '维护材料错误' },
-        giveaway_promotion: { code: 'GP', label: '额外搭赠', accent: '#bf7b28', eyebrow: 'GIVEAWAY PROMOTION', navNote: '搭赠核销错误' },
-        price_difference_support: { code: 'PS', label: '价差补贴', accent: '#4977a8', eyebrow: 'PRICE SUPPORT', navNote: '补差材料错误' },
-        pos_target_incentive: { code: 'PT', label: 'POS达标激励', accent: '#268577', eyebrow: 'POS TARGET', navNote: '达标激励错误' },
-        entry_fee: { code: 'EF', label: '进场费用', accent: '#9a6633', eyebrow: 'ENTRY FEE', navNote: '进场材料错误' },
-        self_procured_gift_material: { code: 'SG', label: '自采礼赠物料', accent: '#8a5d93', eyebrow: 'GIFT MATERIAL', navNote: '礼赠物料错误' },
-      };
       const projections = data.sheets.map((sheet) => {
         if (sheet.scenario === 'personnel_incentive') return { sheet, ...personnelView(sheet), label: '人员激励' };
         if (sheet.scenario === 'promotional_display') return { sheet, ...displayView(sheet), label: '堆头陈列' };
         if (sheet.scenario === 'poster_material') return { sheet, ...posterView(sheet), label: '展示道具' };
-        const generic = genericScenarioMeta[sheet.scenario] || {};
-        return { sheet, ...otherExpenseView(sheet), label: generic.label || String(sheet.name || '核销场景').replace(/核销$/, '') };
+        if (sheet.scenario === 'other_expense') return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
+        if (sheet.scenario === 'maintenance_fee') return { sheet, ...groupedIssueView(sheet, '维护费用'), label: '维护费用' };
+        if (sheet.scenario === 'giveaway_promotion') return { sheet, ...groupedIssueView(sheet, '额外搭赠'), label: '额外搭赠' };
+        if (sheet.scenario === 'price_difference_support') return { sheet, ...groupedIssueView(sheet, '价格补差'), label: '价格补差' };
+        if (sheet.scenario === 'pos_target_incentive') return { sheet, ...groupedIssueView(sheet, 'POS达标激励'), label: 'POS达标激励' };
+        if (sheet.scenario === 'entry_fee') return { sheet, ...groupedIssueView(sheet, '进场费'), label: '进场费' };
+        if (sheet.scenario === 'self_procured_gift_material') return { sheet, ...groupedIssueView(sheet, '客户自采赠品物料'), label: '自采赠品物料' };
+        return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
       });
       const total = projections.reduce((sum, item) => sum + item.count, 0);
       const materialTotal = projections.reduce((sum, item) => sum + (item.upstream || 0), 0);
       const fieldTotal = projections.reduce((sum, item) => sum + (item.local || 0), 0);
       const materialPercent = total ? Math.round(materialTotal / total * 100) : 0;
-      const metaFor = (item, index) => {
-        if (item.sheet.scenario === 'personnel_incentive') return {
-          code: 'PI', queue: String(index + 1).padStart(2, '0'), accent: '#cf654f', eyebrow: 'PERSONNEL INCENTIVE', navNote: '商品 / 结算错误',
-          note: '商品核销与结算付款中发现需要修正的项目。', parts: [['商品核销', item.local || 0], ['结算与付款', item.upstream || 0]],
-        };
-        if (item.sheet.scenario === 'promotional_display') return {
-          code: 'PD', queue: String(index + 1).padStart(2, '0'), accent: '#d79a20', eyebrow: 'PROMOTIONAL DISPLAY', navNote: '合同 / 门店错误',
-          note: '合同、销售明细与门店现场错误已分层归并。', parts: [['合同与销售', item.upstream || 0], ['门店现场', item.local || 0]],
-        };
-        if (item.sheet.scenario === 'poster_material') return {
-          code: 'PR', queue: String(index + 1).padStart(2, '0'), accent: '#238b84', eyebrow: 'DISPLAY PROPS', navNote: '展示材料错误',
-          note: '仅列展示道具材料中需要重新提交的错误。', parts: [['展示道具', item.upstream || item.count]],
-        };
-        const generic = genericScenarioMeta[item.sheet.scenario] || {};
-        return {
-          code: generic.code || 'AU', queue: String(index + 1).padStart(2, '0'), accent: generic.accent || '#7b5aa6', eyebrow: generic.eyebrow || 'AUDIT SCENARIO', navNote: generic.navNote || '核销材料错误',
-          note: `仅列${item.label}中需要处理或重新提交的错误。`, parts: [[item.label, item.upstream || item.count]],
-        };
-      };
-      const navItems = [{ view: 'home', selected: true, code: 'OV', label: '错误总览', note: '本批次全部错误', count: total }]
-        .concat(projections.map((item, index) => {
-          const meta = metaFor(item, index);
-          return { view: `scenario-${index}`, selected: false, code: meta.code, label: item.label, note: meta.navNote, count: item.count };
+      const typeCount = projections.filter((item) => item.count > 0).length;
+      const unifiedErrors = projections.map((item) => item.html).filter(Boolean).join('');
+      const errorTypes = [...new Set(projections.map((item) => item.label))];
+      const errorTypeOptions = errorTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('');
+      const errorConfidenceOptions = ['high', 'medium', 'low'].map((confidence) => `<option value="${confidence}">${confidenceLabel(confidence)}置信度</option>`).join('');
+
+      const fallbackPassGroups = data.sheets.map((sheet) => {
+        const projection = projections.find((item) => item.sheet === sheet);
+        const items = (sheet.rows || []).filter((row) => row.status === 'pass').map((row, index) => ({
+          check_id: `legacy-${sheet.scenario}-${index + 1}`,
+          category: '核销明细',
+          title: '明细检查项通过',
+          subject: row.heading || `第${row.excel_row || index + 1}行`,
+          basis: [...(row.values || [])].reverse().find(Boolean) || '检查结果已通过。',
+          source_files: [],
+          source_file_count: 0,
+          confidence: row.confidence || 'high',
+          scope: row.section === 'detail' ? 'product' : 'material',
         }));
-      const nav = navItems.map((item) => `<button class="eo-tab" type="button" data-view="${item.view}" aria-selected="${item.selected}">
-        <span class="eo-nav-glyph">${item.code}</span><span class="eo-nav-copy"><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.note)}</small></span><em>${item.count}</em>
-      </button>`).join('');
-      const scenarioCards = projections.map((item, index) => {
-        const meta = metaFor(item, index);
-        const parts = meta.parts.map(([label, value]) => `<span>${escapeHtml(label)} ${value}</span>`).join('');
-        const searchText = `${item.label} ${meta.note} ${meta.parts.flat().join(' ')} ${item.html}`.replace(/<[^>]+>/g, ' ').toLocaleLowerCase('zh-CN');
-        return `<article class="eo-scenario-card" style="--scenario-accent:${meta.accent}" data-search="${escapeHtml(searchText)}">
-          <div class="eo-scenario-code">${meta.queue}<small>QUEUE</small></div>
-          <div class="eo-scenario-copy"><small>${meta.eyebrow}</small><h2>${escapeHtml(item.label)}</h2><p>${escapeHtml(meta.note)}</p><div class="eo-breakdown">${parts}</div></div>
-          <div class="eo-scenario-count"><span>待处理</span><strong>${item.count}</strong><em>项</em></div>
-          <button class="eo-enter" type="button" data-open="scenario-${index}">进入错误清单&nbsp; →</button></article>`;
+        return {
+          scenario: sheet.scenario,
+          audit_type: projection?.label || sheet.name || '其他核销',
+          title: sheet.name || projection?.label || '其他核销',
+          item_count: items.length,
+          category_counts: items.length ? { 核销明细: items.length } : {},
+          items,
+        };
+      });
+      const suppliedPassLog = data.pass_check_log && typeof data.pass_check_log === 'object' ? data.pass_check_log : null;
+      const passGroups = Array.isArray(suppliedPassLog?.groups) ? suppliedPassLog.groups : fallbackPassGroups;
+      const passItems = passGroups.flatMap((group) => Array.isArray(group.items) ? group.items : []);
+      const passTotal = passItems.length;
+      const passTypeCount = passGroups.filter((group) => Number(group.item_count ?? group.items?.length ?? 0) > 0).length;
+      const passScopes = passItems.reduce((counts, item) => {
+        const scope = ['material', 'product', 'store', 'amount'].includes(item.scope) ? item.scope : 'material';
+        counts[scope] += 1;
+        return counts;
+      }, { material: 0, product: 0, store: 0, amount: 0 });
+      const passMaterialProduct = passScopes.material + passScopes.product;
+      const passStoreAmount = passScopes.store + passScopes.amount;
+      const passMaterialPercent = passTotal ? Math.round(passMaterialProduct / passTotal * 100) : 0;
+      const passTypes = [...new Set(passGroups
+        .map((group) => group.audit_type || group.title || '其他核销'))];
+      const passCategories = [...new Set(passItems.map((item) => item.category || '核销检查'))];
+      const passConfidences = ['high', 'medium', 'low'].filter((confidence) =>
+        passItems.some((item) => normalizedConfidence(item.confidence) === confidence)
+      );
+      const passTypeOptions = passTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('');
+      const passCategoryOptions = passCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+      const passConfidenceOptions = passConfidences.map((confidence) => `<option value="${confidence}">${confidenceLabel(confidence)}置信度</option>`).join('');
+      const sourceFiles = (item) => {
+        const files = Array.isArray(item.source_files) ? item.source_files.filter(Boolean) : [];
+        const totalFiles = Math.max(files.length, Number(item.source_file_count || 0));
+        if (!files.length) return '';
+        const chips = files.map((file) => `<span>${escapeHtml(file)}</span>`).join('');
+        const remaining = totalFiles > files.length ? `<em>另有 ${totalFiles - files.length} 个来源文件</em>` : '';
+        return `<div class="eo-pass-field eo-pass-source"><span>来源文件</span><div class="eo-pass-files">${chips}${remaining}</div></div>`;
+      };
+      let passSequence = 0;
+      const passGroupHtml = passGroups.map((group, groupIndex) => {
+        const items = Array.isArray(group.items) ? group.items : [];
+        const categories = new Map();
+        items.forEach((item) => {
+          const category = item.category || '核销检查';
+          if (!categories.has(category)) categories.set(category, []);
+          categories.get(category).push(item);
+        });
+        const categoryHtml = [...categories.entries()].map(([category, categoryItems]) => {
+          const cards = categoryItems.map((item) => {
+            passSequence += 1;
+            const confidenceValue = normalizedConfidence(item.confidence);
+            const confidence = confidenceLabel(confidenceValue);
+            return `<article class="eo-pass-card" data-pass-check="${escapeHtml(item.check_id || `pass-${passSequence}`)}" data-pass-category="${escapeHtml(category)}" data-pass-confidence="${confidenceValue}">
+              <div class="eo-pass-index"><span>PASS</span><strong>${String(passSequence).padStart(4, '0')}</strong></div>
+              <div class="eo-pass-main"><header class="eo-pass-head"><div><small>${escapeHtml(category)}</small><h3>${escapeHtml(item.title || '检查项通过')}</h3></div><span class="eo-pass-confidence">置信度 · ${confidence}</span></header>
+                <div class="eo-pass-field"><span>核验对象</span><strong>${escapeHtml(item.subject || group.audit_type || '本次材料')}</strong></div>
+                <div class="eo-pass-field"><span>判断依据</span><div>${textBlock(item.basis || '结构化核销结果已确认该检查项通过。')}</div></div>
+                ${sourceFiles(item)}
+              </div>
+            </article>`;
+          }).join('');
+          return `<section class="eo-pass-category" data-pass-category-block="${escapeHtml(category)}"><header><span>${escapeHtml(category)}</span><em data-pass-category-visible>${categoryItems.length} 项</em></header><div class="eo-pass-stack">${cards}</div></section>`;
+        }).join('');
+        const auditType = group.audit_type || group.title || '其他核销';
+        const categorySummary = [...categories.entries()].map(([label, categoryItems]) => `<span data-pass-breakdown-category="${escapeHtml(label)}">${escapeHtml(label)} <b data-pass-breakdown-visible>${categoryItems.length}</b></span>`).join('');
+        return `<section class="eo-pass-group" data-pass-scenario="${escapeHtml(group.scenario || `group-${groupIndex}`)}" data-pass-type="${escapeHtml(auditType)}">
+          <header class="eo-pass-group-head"><div class="eo-pass-group-code">${String(groupIndex + 1).padStart(2, '0')}<small>TYPE</small></div><div><small>核销类型 · ${escapeHtml(auditType)}</small><h2>${escapeHtml(group.title || group.audit_type || '正确检查项')}</h2><div class="eo-pass-breakdown">${categorySummary || '<span>暂无通过项</span>'}</div></div><div class="eo-pass-group-count"><span>当前显示</span><strong data-pass-group-visible>${items.length}</strong><em>项</em></div></header>
+          ${categoryHtml || '<div class="eo-pass-empty"><strong>本类型暂无可独立确认的通过项</strong><span>这不代表未执行核验；没有充分证据的检查不会被写成通过。</span></div>'}
+        </section>`;
       }).join('');
-      const views = projections.map((item, index) => `<section class="eo-view" id="scenario-${index}" hidden>
-        <div class="eo-ledger"><div class="eo-page-command"><button type="button" data-open="home">← 返回错误总览</button><span>ERROR QUEUE / ${escapeHtml(metaFor(item, index).code)}</span></div><header class="eo-ledger-head"><div class="eo-ledger-title"><small>核销错误清单</small><h2>${escapeHtml(item.label)}</h2><p>本页只列需要处理的错误；通过项、合同基准和核销过程均已隐藏。</p></div><div class="eo-impact"><span>待处理</span><strong>${item.count} 项</strong></div></header><div class="eo-stack">${item.html}</div><div class="eo-no-match" hidden>没有匹配的错误</div></div>
-      </section>`).join('');
 
       document.body.className = 'error-only-page';
       document.body.innerHTML = `<header class="eo-topbar"><div class="eo-topbar-inner">
-        <div class="eo-brand"><div class="eo-brand-mark">参半<small>CANBAN</small></div><div class="eo-brand-copy"><strong>离线活动核销</strong><span>异常处置工作台 / ERROR DESK</span></div></div>
-      </div></header><main class="eo-shell"><div class="eo-app-grid"><aside class="eo-rail" aria-label="核销场景导航">
-        <div class="eo-rail-head"><div><div class="eo-rail-code">CB / OFFLINE AUDIT</div><h2>核销主工作台</h2></div><p>错误处置视图</p></div>
-        <nav class="eo-rail-nav" aria-label="错误场景">${nav}</nav>
-        <div class="eo-rail-foot"><span>本批次异常范围</span><strong>${projections.length} 个核销场景</strong><em>${total} 组错误待处理</em></div>
-      </aside><div class="eo-workspace">
-        <section class="eo-view" id="home"><div class="eo-home-cockpit">
-          <header class="eo-cockpit-hero"><div class="eo-hero-copy"><span class="eo-kicker">AUDIT ERROR COMMAND</span><h1>核销错误处置总览</h1><p>当前主界面只汇总需要处理的错误。通过项、核销过程以及门店中重复出现的上游错误均不展示。</p></div><div class="eo-total-gauge"><span>待处理总数</span><strong>${total}</strong><em>组错误</em></div></header>
-          <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销场景</span><small>存在错误的业务场景</small></div><strong>${projections.length}</strong></article><article class="eo-metric" style="--metric-accent:#d84b3e"><div class="eo-metric-copy"><span>错误总数</span><small>按错误清单归并后的数量</small></div><strong>${total}</strong></article><article class="eo-metric" style="--metric-accent:#b76d15"><div class="eo-metric-copy"><span>材料 / 结算错误</span><small>合同、销售、结算及道具材料</small></div><strong>${materialTotal}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>商品 / 门店错误</span><small>商品核销与门店现场问题</small></div><strong>${fieldTotal}</strong></article></div>
-          <section class="eo-composition"><div class="eo-composition-title"><small>ERROR COMPOSITION</small><strong>错误构成</strong></div><div class="eo-composition-bar" aria-label="错误构成：材料与结算 ${materialTotal}，商品与门店 ${fieldTotal}"><i style="width:${materialPercent}%"></i><b style="width:${100 - materialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 结算 ${materialTotal}</span><span><i></i>商品 / 门店 ${fieldTotal}</span></div></section>
-          <section class="eo-queue-panel"><header class="eo-queue-head"><div><small>REJECTED SCENARIO QUEUE</small><h2>错误场景队列</h2></div><p>选择场景进入对应错误清单<br>不展示核销过程与通过记录</p></header><div class="eo-scenario-grid">${scenarioCards}</div></section>
-          <div class="eo-no-match" hidden>没有匹配的错误场景</div>
-        </div></section>${views}
-      </div></div></main><button class="eo-back-top" id="eoBackTop" type="button">返回顶部</button>`;
+        <div class="eo-brand"><div class="eo-brand-mark">参半<small>CANBAN</small></div><div class="eo-brand-copy"><strong>离线活动核销</strong><span>核销判断工作台 / AUDIT DESK</span></div></div>
+      </div></header><main class="eo-shell"><div class="eo-app-grid"><aside class="eo-rail" aria-label="核销结果导航">
+        <div class="eo-rail-head"><div><div class="eo-rail-code">CB / OFFLINE AUDIT</div><h2>核销主工作台</h2></div><p>错误与正确检查日志</p></div>
+        <nav class="eo-rail-nav" aria-label="核销结果视图"><button class="eo-tab" type="button" data-eo-view="home" aria-selected="true" aria-current="page" aria-controls="home"><span class="eo-nav-glyph">OV</span><span class="eo-nav-copy"><strong>错误总览</strong><small>本批次全部错误</small></span><em>${total}</em></button><button class="eo-tab eo-tab-pass" type="button" data-eo-view="passed" aria-selected="false" aria-controls="passed"><span class="eo-nav-glyph">OK</span><span class="eo-nav-copy"><strong>正确检查项</strong><small>按核销类型记录</small></span><em>${passTotal}</em></button></nav>
+        <div class="eo-rail-foot"><span>本次核销记录</span><strong>${Math.max(typeCount, passGroups.length)} 种核销类型</strong><em>${total} 组错误 · ${passTotal} 项通过</em></div>
+      </aside><div class="eo-workspace"><section class="eo-view" id="home"><div class="eo-home-cockpit">
+        <header class="eo-cockpit-hero"><div class="eo-hero-copy"><span class="eo-kicker">AUDIT ERROR COMMAND</span><h1>核销错误处置总览</h1><p>当前视图直接列出全部需要处理的错误。已确认通过的子检查可切换到“正确检查项”查看，门店中重复出现的上游错误仍不重复展示。</p></div><div class="eo-total-gauge"><span>待处理总数</span><strong>${total}</strong><em>组错误</em></div></header>
+        <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销类型</span><small>本批次涉及的业务类型</small></div><strong>${typeCount}</strong></article><article class="eo-metric" style="--metric-accent:#d84b3e"><div class="eo-metric-copy"><span>错误总数</span><small>按错误清单归并后的数量</small></div><strong>${total}</strong></article><article class="eo-metric" style="--metric-accent:#b76d15"><div class="eo-metric-copy"><span>材料 / 结算错误</span><small>合同、销售、结算及道具材料</small></div><strong>${materialTotal}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>商品 / 门店错误</span><small>商品核销与门店现场问题</small></div><strong>${fieldTotal}</strong></article></div>
+        <section class="eo-composition"><div class="eo-composition-title"><small>ERROR COMPOSITION</small><strong>错误构成</strong></div><div class="eo-composition-bar" aria-label="错误构成：材料与结算 ${materialTotal}，商品与门店 ${fieldTotal}"><i style="width:${materialPercent}%"></i><b style="width:${100 - materialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 结算 ${materialTotal}</span><span><i></i>商品 / 门店 ${fieldTotal}</span></div></section>
+        <section class="eo-pass-filter-panel eo-error-filter-panel" aria-labelledby="eoErrorFilterTitle"><header class="eo-pass-filter-head"><div><small>FILTER REJECTED CHECKS</small><h2 id="eoErrorFilterTitle">筛选错误检查项</h2></div><div class="eo-pass-filter-result" aria-live="polite"><span>当前命中</span><strong id="eoErrorVisible">${total}</strong><em>/ ${total} 组</em><button type="button" data-error-reset disabled>重置筛选</button></div></header>
+          <div class="eo-pass-filter-grid eo-error-filter-grid"><label><span>核销方式</span><select id="eoErrorType" aria-controls="eoErrorList"><option value="">全部核销方式</option>${errorTypeOptions}</select></label><label><span>置信度</span><select id="eoErrorConfidence" aria-controls="eoErrorList"><option value="">全部置信度</option>${errorConfidenceOptions}</select></label><label class="eo-error-search"><span>关键词</span><input id="eoErrorKeyword" type="search" placeholder="搜索错误项、文件、原因或处理方式" autocomplete="off" aria-controls="eoErrorList"></label></div>
+          <div class="eo-pass-facet-hint eo-facet-summary-only"><em id="eoErrorFacetSummary" aria-live="polite"></em></div>
+        </section>
+        <section class="eo-queue-panel"><header class="eo-queue-head"><div><small>REJECTED ERROR RESULTS</small><h2>核销错误结果</h2></div><p>全部错误直接向下排列<br>每项标明对应核销类型</p></header><div class="eo-scenario-grid eo-stack" id="eoErrorList">${unifiedErrors || '<div class="eo-empty">没有发现核销错误</div>'}</div></section>
+        <div class="eo-pass-filter-empty eo-error-filter-empty" id="eoErrorFilterEmpty" hidden><strong>没有符合条件的错误检查项</strong><span>可调整核销方式、置信度或关键词后重试。</span><button type="button" data-error-reset>清除全部筛选</button></div>
+      </div></section><section class="eo-view" id="passed" hidden><div class="eo-home-cockpit eo-pass-cockpit">
+        <header class="eo-cockpit-hero eo-pass-hero"><div class="eo-hero-copy"><span class="eo-kicker">VERIFIED CHECK LEDGER</span><h1>正确检查项日志</h1><p>按核销类型记录已有充分证据、被独立确认通过的子检查，保留核验对象、判断依据、来源文件与置信度，便于人工回看。</p></div><div class="eo-total-gauge"><span>通过检查项</span><strong>${passTotal}</strong><em>项记录</em></div></header>
+        <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销类型</span><small>形成通过日志的业务类型</small></div><strong>${passTypeCount}</strong></article><article class="eo-metric" style="--metric-accent:#18845e"><div class="eo-metric-copy"><span>通过检查项</span><small>逐个独立子检查计数</small></div><strong>${passTotal}</strong></article><article class="eo-metric" style="--metric-accent:#288d86"><div class="eo-metric-copy"><span>材料 / 商品</span><small>合同、票据、销售与商品检查</small></div><strong>${passMaterialProduct}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>门店 / 金额</span><small>现场、地点、日期与金额规则</small></div><strong>${passStoreAmount}</strong></article></div>
+        <section class="eo-composition eo-pass-composition"><div class="eo-composition-title"><small>PASS COMPOSITION</small><strong>通过项构成</strong></div><div class="eo-composition-bar" aria-label="通过项构成：材料与商品 ${passMaterialProduct}，门店与金额 ${passStoreAmount}"><i style="width:${passMaterialPercent}%"></i><b style="width:${100 - passMaterialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 商品 ${passMaterialProduct}</span><span><i></i>门店 / 金额 ${passStoreAmount}</span></div></section>
+        <section class="eo-pass-filter-panel" aria-labelledby="eoPassFilterTitle"><header class="eo-pass-filter-head"><div><small>FILTER VERIFIED CHECKS</small><h2 id="eoPassFilterTitle">筛选正确检查项</h2></div><div class="eo-pass-filter-result" aria-live="polite"><span>当前命中</span><strong id="eoPassVisible">${passTotal}</strong><em>/ ${passTotal} 项</em><button type="button" data-pass-reset disabled>重置筛选</button></div></header>
+          <div class="eo-pass-filter-grid"><label><span>核销方式</span><select id="eoPassType" aria-controls="eoPassList"><option value="">全部核销方式</option>${passTypeOptions}</select></label><label><span>检查分类</span><select id="eoPassCategory" aria-controls="eoPassList"><option value="">全部检查分类</option>${passCategoryOptions}</select></label><label><span>置信度</span><select id="eoPassConfidence" aria-controls="eoPassList"><option value="">全部置信度</option>${passConfidenceOptions}</select></label><label class="eo-pass-search"><span>关键词</span><input id="eoPassKeyword" type="search" placeholder="搜索检查项、对象、依据或文件" autocomplete="off" aria-controls="eoPassList"></label></div>
+          <div class="eo-pass-facet-hint eo-facet-summary-only"><em id="eoPassFacetSummary" aria-live="polite"></em></div>
+        </section>
+        <section class="eo-pass-ledger"><header class="eo-queue-head"><div><small>VERIFIED PASS RESULTS</small><h2>按核销类型归档</h2></div><p>${passGroups.length} 种核销类型<br>${passTotal} 项可回查判断</p></header><div class="eo-pass-groups" id="eoPassList">${passGroupHtml || '<div class="eo-pass-empty"><strong>暂无正确检查项日志</strong><span>只有被结构化结果明确判定通过的子检查才会出现在这里。</span></div>'}</div></section>
+        <div class="eo-pass-filter-empty" id="eoPassFilterEmpty" hidden><strong>没有符合条件的正确检查项</strong><span>可调整核销方式、检查分类、置信度或关键词后重试。</span><button type="button" data-pass-reset>清除全部筛选</button></div>
+      </div></section></div></div></main><button class="eo-back-top" id="eoBackTop" type="button">返回顶部</button>`;
 
-      const tabs = [...document.querySelectorAll('.eo-tab')];
-      const viewsById = [...document.querySelectorAll('.eo-view')];
-      const openView = (id) => {
-        tabs.forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.view === id)));
-        viewsById.forEach((view) => { view.hidden = view.id !== id; });
-        document.body.dataset.activeView = id;
-        document.querySelectorAll('[data-search]').forEach((item) => { item.hidden = false; });
-        document.querySelectorAll('.eo-no-match').forEach((item) => { item.hidden = true; });
+      document.getElementById('eoBackTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+      const normalizeFilterText = (value) => String(value || '').trim().toLocaleLowerCase('zh-CN');
+      const renderFacetOptions = ({ select, values, allLabel, label, counts, selected }) => {
+        const availableValues = values.filter((value) => counts.has(value));
+        if (selected && !availableValues.includes(selected)) availableValues.unshift(selected);
+        const allOption = document.createElement('option');
+        allOption.value = '';
+        allOption.textContent = allLabel;
+        const options = availableValues.map((value) => {
+          const option = document.createElement('option');
+          const count = counts.get(value) || 0;
+          option.value = value;
+          option.textContent = count
+            ? `${label(value)}（${count}）`
+            : selected === value
+              ? `${label(value)}（当前选择 · 0）`
+              : `${label(value)}（0）`;
+          return option;
+        });
+        select.replaceChildren(allOption, ...options);
+        select.value = selected;
+        select.disabled = availableValues.length === 0;
+        return counts.size;
+      };
+
+      const errorTypeFilter = document.getElementById('eoErrorType');
+      const errorConfidenceFilter = document.getElementById('eoErrorConfidence');
+      const errorKeywordFilter = document.getElementById('eoErrorKeyword');
+      const errorFilterPanel = document.querySelector('.eo-error-filter-panel');
+      const errorVisible = document.getElementById('eoErrorVisible');
+      const errorFilterEmpty = document.getElementById('eoErrorFilterEmpty');
+      const errorFacetSummary = document.getElementById('eoErrorFacetSummary');
+      const errorFilterRecords = [...document.querySelectorAll('#eoErrorList .eo-error-card')].map((card) => ({
+        card,
+        type: card.dataset.auditType || '其他费用',
+        confidence: card.dataset.errorConfidence || 'high',
+        search: normalizeFilterText(card.textContent),
+      }));
+      const errorGlobalTypeCounts = errorFilterRecords.reduce((counts, record) => {
+        counts.set(record.type, (counts.get(record.type) || 0) + 1);
+        return counts;
+      }, new Map(errorTypes.map((type) => [type, 0])));
+      const errorConfidences = ['high', 'medium', 'low'].filter((confidence) =>
+        errorFilterRecords.some((record) => record.confidence === confidence)
+      );
+      const readErrorFilterState = () => ({
+        type: errorTypeFilter.value,
+        confidence: errorConfidenceFilter.value,
+        keyword: normalizeFilterText(errorKeywordFilter.value),
+      });
+      const errorRecordMatches = (record, state, excludedFacet = '') => (
+        (excludedFacet === 'type' || !state.type || record.type === state.type)
+        && (excludedFacet === 'confidence' || !state.confidence || record.confidence === state.confidence)
+        && (!state.keyword || record.search.includes(state.keyword))
+      );
+      const errorConfidenceCounts = (state) => errorFilterRecords.reduce((counts, record) => {
+        if (!errorRecordMatches(record, state, 'confidence')) return counts;
+        counts.set(record.confidence, (counts.get(record.confidence) || 0) + 1);
+        return counts;
+      }, new Map());
+      const refreshErrorFacets = () => {
+        const state = readErrorFilterState();
+        renderFacetOptions({
+          select: errorTypeFilter,
+          values: errorTypes,
+          allLabel: '全部核销方式',
+          label: (value) => value,
+          counts: errorGlobalTypeCounts,
+          selected: state.type,
+        });
+        const confidenceCount = renderFacetOptions({
+          select: errorConfidenceFilter,
+          values: errorConfidences,
+          allLabel: '全部置信度',
+          label: (value) => `${confidenceLabel(value)}置信度`,
+          counts: errorConfidenceCounts(state),
+          selected: state.confidence,
+        });
+        errorFacetSummary.textContent = `${errorGlobalTypeCounts.size} 种核销方式 · ${confidenceCount} 档可选置信度`;
+        return readErrorFilterState();
+      };
+      const applyErrorFilters = () => {
+        const state = refreshErrorFacets();
+        let visibleTotal = 0;
+        errorFilterRecords.forEach((record) => {
+          const matches = errorRecordMatches(record, state);
+          record.card.hidden = !matches;
+          if (matches) visibleTotal += 1;
+        });
+        const filtering = Boolean(state.type || state.confidence || state.keyword);
+        errorVisible.textContent = String(visibleTotal);
+        errorFilterPanel.classList.toggle('is-filtering', filtering);
+        errorFilterEmpty.hidden = visibleTotal !== 0 || total === 0;
+        document.querySelectorAll('[data-error-reset]').forEach((button) => {
+          if (!button.closest('.eo-error-filter-empty')) button.disabled = !filtering;
+        });
+      };
+      const normalizeErrorDependentsForType = () => {
+        const state = readErrorFilterState();
+        const counts = errorConfidenceCounts(state);
+        if (state.confidence && !counts.has(state.confidence)) errorConfidenceFilter.value = '';
+      };
+      const resetErrorFilters = () => {
+        errorTypeFilter.value = '';
+        errorConfidenceFilter.value = '';
+        errorKeywordFilter.value = '';
+        applyErrorFilters();
+      };
+      errorTypeFilter.addEventListener('change', () => {
+        normalizeErrorDependentsForType();
+        applyErrorFilters();
+      });
+      errorConfidenceFilter.addEventListener('change', applyErrorFilters);
+      errorKeywordFilter.addEventListener('input', applyErrorFilters);
+      document.querySelectorAll('[data-error-reset]').forEach((button) => button.addEventListener('click', resetErrorFilters));
+      applyErrorFilters();
+
+      const passTypeFilter = document.getElementById('eoPassType');
+      const passCategoryFilter = document.getElementById('eoPassCategory');
+      const passConfidenceFilter = document.getElementById('eoPassConfidence');
+      const passKeywordFilter = document.getElementById('eoPassKeyword');
+      const passFilterPanel = document.querySelector('#passed .eo-pass-filter-panel');
+      const passVisible = document.getElementById('eoPassVisible');
+      const passFilterEmpty = document.getElementById('eoPassFilterEmpty');
+      const passFacetSummary = document.getElementById('eoPassFacetSummary');
+      const passFilterRecords = [...document.querySelectorAll('#eoPassList .eo-pass-card')].map((card) => ({
+        card,
+        type: card.closest('.eo-pass-group')?.dataset.passType || '其他核销',
+        category: card.dataset.passCategory || '核销检查',
+        confidence: card.dataset.passConfidence || 'high',
+        search: normalizeFilterText(card.textContent),
+      }));
+      const passGlobalTypeCounts = passFilterRecords.reduce((counts, record) => {
+        counts.set(record.type, (counts.get(record.type) || 0) + 1);
+        return counts;
+      }, new Map(passTypes.map((type) => [type, 0])));
+      const passFacetMeta = {
+        type: {
+          select: passTypeFilter,
+          values: passTypes,
+          allLabel: '全部核销方式',
+          label: (value) => value,
+        },
+        category: {
+          select: passCategoryFilter,
+          values: passCategories,
+          allLabel: '全部检查分类',
+          label: (value) => value,
+        },
+        confidence: {
+          select: passConfidenceFilter,
+          values: passConfidences,
+          allLabel: '全部置信度',
+          label: (value) => `${confidenceLabel(value)}置信度`,
+        },
+      };
+      const readPassFilterState = () => ({
+        type: passTypeFilter.value,
+        category: passCategoryFilter.value,
+        confidence: passConfidenceFilter.value,
+        keyword: normalizeFilterText(passKeywordFilter.value),
+      });
+      const passRecordMatches = (record, state, excludedFacet = '') => (
+        (excludedFacet === 'type' || !state.type || record.type === state.type)
+        && (excludedFacet === 'category' || !state.category || record.category === state.category)
+        && (excludedFacet === 'confidence' || !state.confidence || record.confidence === state.confidence)
+        && (!state.keyword || record.search.includes(state.keyword))
+      );
+      const passFacetCounts = (facet, state) => passFilterRecords.reduce((counts, record) => {
+        if (!passRecordMatches(record, state, facet)) return counts;
+        const value = record[facet];
+        counts.set(value, (counts.get(value) || 0) + 1);
+        return counts;
+      }, new Map());
+      const renderPassFacet = (facet, state) => {
+        const meta = passFacetMeta[facet];
+        const counts = facet === 'type' ? passGlobalTypeCounts : passFacetCounts(facet, state);
+        return renderFacetOptions({
+          select: meta.select,
+          values: meta.values,
+          allLabel: meta.allLabel,
+          label: meta.label,
+          counts,
+          selected: state[facet],
+        });
+      };
+      const refreshPassFacets = () => {
+        const state = readPassFilterState();
+        const available = {
+          type: renderPassFacet('type', state),
+          category: renderPassFacet('category', state),
+          confidence: renderPassFacet('confidence', state),
+        };
+        passFacetSummary.textContent = `${available.type} 种核销方式 · ${available.category} 类可选检查 · ${available.confidence} 档可选置信度`;
+        return readPassFilterState();
+      };
+      const applyPassFilters = () => {
+        const state = refreshPassFacets();
+        let visibleTotal = 0;
+        document.querySelectorAll('#eoPassList .eo-pass-group').forEach((group) => {
+          const typeMatches = !state.type || group.dataset.passType === state.type;
+          let groupVisible = 0;
+          const categoryCounts = new Map();
+          group.querySelectorAll('.eo-pass-category').forEach((categoryBlock) => {
+            let categoryVisible = 0;
+            categoryBlock.querySelectorAll('.eo-pass-card').forEach((card) => {
+              const categoryMatches = !state.category || card.dataset.passCategory === state.category;
+              const confidenceMatches = !state.confidence || card.dataset.passConfidence === state.confidence;
+              const keywordMatches = !state.keyword || normalizeFilterText(card.textContent).includes(state.keyword);
+              const matches = typeMatches && categoryMatches && confidenceMatches && keywordMatches;
+              card.hidden = !matches;
+              if (matches) categoryVisible += 1;
+            });
+            categoryBlock.hidden = categoryVisible === 0;
+            const categoryName = categoryBlock.dataset.passCategoryBlock || '核销检查';
+            categoryCounts.set(categoryName, categoryVisible);
+            const categoryVisibleLabel = categoryBlock.querySelector('[data-pass-category-visible]');
+            if (categoryVisibleLabel) categoryVisibleLabel.textContent = `${categoryVisible} 项`;
+            groupVisible += categoryVisible;
+          });
+          group.querySelectorAll('[data-pass-breakdown-category]').forEach((badge) => {
+            const categoryName = badge.dataset.passBreakdownCategory || '';
+            const categoryCount = categoryCounts.get(categoryName) || 0;
+            badge.hidden = categoryCount === 0;
+            const badgeCount = badge.querySelector('[data-pass-breakdown-visible]');
+            if (badgeCount) badgeCount.textContent = String(categoryCount);
+          });
+          group.hidden = groupVisible === 0;
+          const groupVisibleLabel = group.querySelector('[data-pass-group-visible]');
+          if (groupVisibleLabel) groupVisibleLabel.textContent = String(groupVisible);
+          visibleTotal += groupVisible;
+        });
+        const filtering = Boolean(state.type || state.category || state.confidence || state.keyword);
+        passVisible.textContent = String(visibleTotal);
+        passFilterPanel.classList.toggle('is-filtering', filtering);
+        passFilterEmpty.hidden = visibleTotal !== 0 || passTotal === 0;
+        document.querySelectorAll('[data-pass-reset]').forEach((button) => {
+          if (!button.closest('.eo-pass-filter-empty')) button.disabled = !filtering;
+        });
+      };
+      const resetPassFilters = () => {
+        passTypeFilter.value = '';
+        passCategoryFilter.value = '';
+        passConfidenceFilter.value = '';
+        passKeywordFilter.value = '';
+        applyPassFilters();
+      };
+      const normalizePassDependentsForType = () => {
+        let state = readPassFilterState();
+        const categoryCounts = passFacetCounts('category', state);
+        if (state.category && !categoryCounts.has(state.category)) passCategoryFilter.value = '';
+        state = readPassFilterState();
+        const confidenceCounts = passFacetCounts('confidence', state);
+        if (state.confidence && !confidenceCounts.has(state.confidence)) passConfidenceFilter.value = '';
+      };
+      passTypeFilter.addEventListener('change', () => {
+        normalizePassDependentsForType();
+        applyPassFilters();
+      });
+      [passCategoryFilter, passConfidenceFilter].forEach((control) => control.addEventListener('change', applyPassFilters));
+      passKeywordFilter.addEventListener('input', applyPassFilters);
+      document.querySelectorAll('[data-pass-reset]').forEach((button) => button.addEventListener('click', resetPassFilters));
+      applyPassFilters();
+      const resultTabs = [...document.querySelectorAll('[data-eo-view]')];
+      const openResultView = (viewId) => {
+        resultTabs.forEach((tab) => {
+          const selected = tab.dataset.eoView === viewId;
+          tab.setAttribute('aria-selected', String(selected));
+          if (selected) tab.setAttribute('aria-current', 'page');
+          else tab.removeAttribute('aria-current');
+        });
+        document.querySelectorAll('.eo-workspace > .eo-view').forEach((view) => {
+          view.hidden = view.id !== viewId;
+        });
         window.scrollTo({ top: 0, behavior: 'auto' });
       };
-      tabs.forEach((tab) => tab.addEventListener('click', () => openView(tab.dataset.view)));
-      document.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', () => openView(button.dataset.open)));
-      document.getElementById('eoBackTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+      resultTabs.forEach((tab) => tab.addEventListener('click', () => openResultView(tab.dataset.eoView)));
     })();
   </script>
   <style id="audit-system-extension-style">
@@ -2652,83 +3225,6 @@
     .as-status.running { color: #a66713; background: #fff7e8; border-color: #efd69e; }
     .as-empty { padding: 42px 20px; color: #7e9099; border: 1px dashed #c6d2d8; text-align: center; }
     .as-empty strong { display: block; margin-bottom: 4px; color: #3f5661; font-size: 14px; }
-    .as-runtime-monitor { overflow: hidden; background: #f8fafb; border: 1px solid var(--eo-line); }
-    .as-runtime-summary { display: flex; min-height: 68px; padding: 13px 16px; background: linear-gradient(90deg,#f8fafb,#fff 55%); border-bottom: 1px solid var(--eo-line); align-items: center; justify-content: space-between; gap: 18px; }
-    .as-runtime-identity { display: flex; min-width: 0; align-items: center; gap: 11px; }
-    .as-runtime-live { display: inline-flex; flex: 0 0 auto; padding: 5px 8px; color: #35505c; background: #eef3f5; border: 1px solid #d5e0e4; align-items: center; gap: 6px; font: 800 8px/1 var(--eo-mono); letter-spacing: .08em; }
-    .as-runtime-live::before { width: 6px; height: 6px; background: #728893; border-radius: 50%; content: ""; }
-    .as-runtime-live.running { color: #116d9a; background: #edf8fd; border-color: #addcf0; }
-    .as-runtime-live.running::before { background: var(--eo-blue); box-shadow: 0 0 0 4px rgba(21,158,219,.12); animation: as-runtime-pulse 1.8s ease-out infinite; }
-    .as-runtime-live.completed { color: #166a4b; background: #edf8f3; border-color: #b9ddcd; }
-    .as-runtime-live.completed::before { background: #18845e; }
-    .as-runtime-live.failed { color: #9b342d; background: #fff0ef; border-color: #edbeb9; }
-    .as-runtime-live.failed::before { background: #d84b3e; }
-    .as-runtime-copy { min-width: 0; }
-    .as-runtime-copy strong { display: block; overflow: hidden; color: var(--eo-dark); font: 800 12px/1.3 var(--eo-mono); text-overflow: ellipsis; white-space: nowrap; }
-    .as-runtime-copy span { display: block; margin-top: 4px; overflow: hidden; color: var(--eo-soft); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-    .as-runtime-progress-copy { flex: 0 0 auto; text-align: right; }
-    .as-runtime-progress-copy strong { display: block; color: var(--eo-dark); font: 800 18px/1 var(--eo-mono); }
-    .as-runtime-progress-copy span { display: block; margin-top: 4px; color: var(--eo-soft); font-size: 8px; }
-    .as-runtime-track { position: relative; height: 150px; overflow: hidden; background:
-      radial-gradient(circle at 17% 16%,rgba(21,158,219,.08),transparent 22%),
-      radial-gradient(circle at 79% 30%,rgba(24,132,94,.06),transparent 20%),
-      linear-gradient(180deg,#fff,#f7fafb); }
-    .as-runtime-track::before { position: absolute; inset: 0; background-image: radial-gradient(circle,rgba(51,82,95,.18) 0 1px,transparent 1.2px); background-position: 9px 6px; background-size: 57px 43px; content: ""; opacity: .28; pointer-events: none; }
-    .as-runtime-route { position: absolute; top: 18px; left: 0; width: 100%; height: 74px; overflow: visible; }
-    .as-runtime-route-base { fill: none; stroke: #c4d2d8; stroke-width: 2; stroke-dasharray: 1 8; stroke-linecap: round; }
-    .as-runtime-route-progress { fill: none; stroke: url(#as-runtime-route-gradient); stroke-width: 2.5; stroke-linecap: round; filter: drop-shadow(0 1px 3px rgba(21,158,219,.28)); transition: stroke-dasharray .45s ease; }
-    .as-runtime-stages { position: absolute; inset: 0; }
-    .as-runtime-node { --planet-ring: rgba(91,117,128,.62); --planet-satellite: #8da2ab; position: absolute; z-index: 1; top: var(--stage-top); left: var(--stage-x); display: grid; width: 124px; color: #81929a; justify-items: center; text-align: center; transform: translateX(-50%); }
-    .as-runtime-orb { position: relative; z-index: 1; isolation: isolate; display: grid; width: 44px; height: 44px; overflow: visible; color: #4e646e; background:
-      radial-gradient(circle at 30% 23%,rgba(255,255,255,.98) 0 7%,rgba(255,255,255,.48) 8% 18%,transparent 19%),
-      radial-gradient(circle at 34% 29%,#f6fafb 0 13%,#cad6db 38%,#91a4ad 68%,#617680 100%);
-      border: 1px solid rgba(80,104,115,.3); border-radius: 50%; place-items: center; box-shadow: inset -8px -8px 12px rgba(29,51,61,.24),inset 5px 5px 8px rgba(255,255,255,.5),0 7px 15px rgba(25,48,58,.15); text-shadow: 0 1px 1px rgba(255,255,255,.46); font: 850 8px/1 var(--eo-mono); letter-spacing: .04em; }
-    .as-runtime-orb::before { position: absolute; z-index: -1; top: 50%; left: 50%; width: 64px; height: 24px; border: 1px solid var(--planet-ring); border-right-color: rgba(255,255,255,.16); border-radius: 50%; box-shadow: 0 0 7px rgba(70,104,118,.08); content: ""; transform: translate(-50%,-50%) rotate(-14deg); }
-    .as-runtime-orb::after { position: absolute; z-index: 2; top: calc(50% - 3px); left: calc(50% - 3px); width: 6px; height: 6px; background: var(--planet-satellite); border: 1px solid rgba(255,255,255,.78); border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,.42),0 2px 6px var(--planet-ring); content: ""; transform: rotate(18deg) translateX(31px); }
-    .as-runtime-monitor[data-runtime-status="running"] .as-runtime-orb::before { animation: as-planet-orbit 8.2s linear infinite; }
-    .as-runtime-monitor[data-runtime-status="running"] .as-runtime-orb::after { animation: as-planet-satellite 5.4s linear infinite; }
-    .as-runtime-monitor[data-runtime-status="running"] .as-runtime-node:nth-child(even) .as-runtime-orb::before { animation-direction: reverse; animation-duration: 9.6s; }
-    .as-runtime-monitor[data-runtime-status="running"] .as-runtime-node:nth-child(3n) .as-runtime-orb::after { animation-direction: reverse; animation-duration: 6.7s; }
-    .as-runtime-node strong { display: block; margin-top: 8px; color: #536973; font-size: 10px; line-height: 1.2; }
-    .as-runtime-node small { display: none; }
-    .as-runtime-stage-state { margin-top: 4px; color: #73868f; font: 800 7px/1 var(--eo-mono); font-style: normal; letter-spacing: .08em; }
-    .as-runtime-node.done { --planet-ring: rgba(24,132,94,.66); --planet-satellite: #58b68f; }
-    .as-runtime-node.done .as-runtime-orb { color: #fff; background:
-      radial-gradient(circle at 30% 23%,rgba(213,255,236,.92) 0 7%,rgba(152,226,194,.42) 8% 18%,transparent 19%),
-      radial-gradient(circle at 34% 29%,#70c8a7 0 13%,#18845e 44%,#0f6249 72%,#093c31 100%);
-      border-color: rgba(11,85,62,.65); box-shadow: inset -8px -8px 12px rgba(3,44,34,.42),inset 5px 5px 8px rgba(191,255,228,.25),0 7px 16px rgba(15,98,73,.22); text-shadow: 0 1px 2px rgba(1,39,29,.54); }
-    .as-runtime-node.done strong, .as-runtime-node.done .as-runtime-stage-state { color: #25624f; }
-    .as-runtime-node.running { --planet-ring: rgba(21,158,219,.78); --planet-satellite: #65d4ff; }
-    .as-runtime-node.running .as-runtime-orb { color: #fff; background:
-      radial-gradient(circle at 30% 23%,rgba(232,251,255,.98) 0 7%,rgba(147,222,251,.5) 8% 18%,transparent 19%),
-      radial-gradient(circle at 34% 29%,#75d2f3 0 13%,#159edb 44%,#0876ad 72%,#064f7b 100%);
-      border-color: rgba(5,112,163,.66); box-shadow: inset -8px -8px 12px rgba(3,67,103,.42),inset 5px 5px 8px rgba(205,246,255,.3),0 0 0 6px rgba(21,158,219,.1),0 8px 18px rgba(21,158,219,.32); text-shadow: 0 1px 2px rgba(2,61,91,.56); }
-    .as-runtime-monitor[data-runtime-status="running"] .as-runtime-node.running .as-runtime-orb::before { animation-duration: 3.8s; }
-    .as-runtime-monitor[data-runtime-status="running"] .as-runtime-node.running .as-runtime-orb::after { animation-duration: 2.4s; }
-    .as-runtime-node.running strong, .as-runtime-node.running .as-runtime-stage-state { color: #116d9a; }
-    .as-runtime-node.failed { --planet-ring: rgba(216,75,62,.72); --planet-satellite: #f08d83; }
-    .as-runtime-node.failed .as-runtime-orb { color: #fff; background:
-      radial-gradient(circle at 30% 23%,rgba(255,237,235,.94) 0 7%,rgba(255,174,164,.44) 8% 18%,transparent 19%),
-      radial-gradient(circle at 34% 29%,#ee8a80 0 13%,#d84b3e 44%,#a82f28 72%,#6d1f1c 100%);
-      border-color: rgba(154,40,34,.68); box-shadow: inset -8px -8px 12px rgba(87,16,14,.4),inset 5px 5px 8px rgba(255,222,217,.25),0 0 0 6px rgba(216,75,62,.08),0 8px 18px rgba(176,47,39,.25); text-shadow: 0 1px 2px rgba(86,14,11,.56); }
-    .as-runtime-node.failed strong, .as-runtime-node.failed .as-runtime-stage-state { color: #9b342d; }
-    .as-runtime-history { background: #fff; border-top: 1px solid var(--eo-line); }
-    .as-runtime-history-head { display: flex; min-height: 35px; padding: 0 13px; border-bottom: 1px solid var(--eo-line); align-items: center; justify-content: space-between; gap: 12px; }
-    .as-runtime-history-head strong { font-size: 9px; }
-    .as-runtime-history-head span { color: var(--eo-soft); font: 700 8px/1 var(--eo-mono); }
-    .as-runtime-event { display: grid; min-height: 35px; padding: 7px 13px; border-bottom: 1px solid #edf1f3; align-items: center; grid-template-columns: 62px 9px 92px minmax(0,1fr); gap: 8px; }
-    .as-runtime-event:last-child { border-bottom: 0; }
-    .as-runtime-event time { color: #82939b; font: 700 8px/1 var(--eo-mono); font-variant-numeric: tabular-nums; }
-    .as-runtime-event-dot { width: 6px; height: 6px; background: #8ea0a8; border-radius: 50%; }
-    .as-runtime-event.done .as-runtime-event-dot { background: #18845e; }
-    .as-runtime-event.active .as-runtime-event-dot { background: var(--eo-blue); box-shadow: 0 0 0 3px rgba(21,158,219,.11); }
-    .as-runtime-event.failed .as-runtime-event-dot { background: #d84b3e; }
-    .as-runtime-event strong { overflow: hidden; color: #405761; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-    .as-runtime-event p { margin: 0; overflow: hidden; color: #657982; font-size: 9px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-    .as-runtime-failure { margin: 0; padding: 10px 13px; color: #8d342e; background: #fff6f5; border-top: 1px solid #efd0cd; font-size: 9px; line-height: 1.5; }
-    @keyframes as-runtime-pulse { 0% { opacity: .85; transform: scale(.88); } 70%,100% { opacity: 0; transform: scale(1.35); } }
-    @keyframes as-planet-orbit { from { transform: translate(-50%,-50%) rotate(-14deg); } to { transform: translate(-50%,-50%) rotate(346deg); } }
-    @keyframes as-planet-satellite { from { transform: rotate(18deg) translateX(31px) rotate(-18deg); } to { transform: rotate(378deg) translateX(31px) rotate(-378deg); } }
     .as-archive-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
     .as-archive-card { display: grid; min-height: 150px; padding: 16px; background: #fff; border: 1px solid var(--eo-line); align-content: space-between; gap: 13px; }
     .as-archive-card small { color: var(--eo-blue); font: 800 8px/1 var(--eo-mono); letter-spacing: .1em; }
@@ -2813,8 +3309,6 @@
       .as-run-tags { grid-column: 1 / -1; }
       .as-run-count { grid-column: 2; grid-row: 1; }
       .as-run-action { grid-column: 1 / -1; grid-template-columns: repeat(2,max-content); justify-content: start; }
-      .as-runtime-node { width: 104px; }
-      .as-runtime-node strong { font-size: 9px; }
     }
     @media (max-width: 620px) {
       .as-shell, .as-topbar-inner { width: min(100% - 20px, 1440px); }
@@ -2839,21 +3333,6 @@
       .as-run-count { padding: 9px 0 0; border-top: 1px solid var(--eo-line); border-left: 0; }
       .as-run-action { grid-template-columns: 1fr 1fr; }
       .as-archive-grid { grid-template-columns: 1fr; }
-      .as-runtime-summary { align-items: flex-start; flex-direction: column; gap: 10px; }
-      .as-runtime-progress-copy { text-align: left; }
-      .as-runtime-track { height: auto; padding: 8px 12px; }
-      .as-runtime-route { display: none; }
-      .as-runtime-stages { position: relative; display: grid; inset: auto; }
-      .as-runtime-node { position: relative; top: auto; left: auto !important; width: auto; min-height: 54px; padding: 6px 0; align-items: center; grid-template-columns: 38px minmax(0,1fr) auto; gap: 10px; justify-items: stretch; text-align: left; transform: none; }
-      .as-runtime-node:not(:last-child)::after { position: absolute; z-index: 0; top: 42px; bottom: -12px; left: 18px; width: 1px; background: #cfdade; content: ""; }
-      .as-runtime-orb { width: 36px; height: 36px; }
-      .as-runtime-stage-copy { min-width: 0; }
-      .as-runtime-node strong { margin: 0; font-size: 10px; }
-      .as-runtime-node small { font-size: 8px; }
-      .as-runtime-stage-state { margin: 0; white-space: nowrap; }
-      .as-runtime-event { grid-template-columns: 52px 8px minmax(0,1fr); gap: 7px; }
-      .as-runtime-event strong { grid-column: 3; }
-      .as-runtime-event p { grid-column: 3; white-space: normal; }
       .as-record-toolbar { width: 100%; margin: 0; }
       .as-record-select { flex: 1; width: auto; min-width: 0; }
       .as-record-context { align-items: flex-start; flex-direction: column; }
@@ -2868,10 +3347,6 @@
       .as-resource-button { flex: 0 0 205px; margin: 0 5px 0 0; }
       .as-code { min-height: 420px; }
       .eo-topbar-inner { align-items: flex-start; flex-direction: column; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .as-runtime-live.running::before, .as-runtime-orb::before, .as-runtime-orb::after { animation: none !important; }
-      .as-runtime-route-progress { transition: none; }
     }
   </style>
   <script id="audit-system-extension-script">
@@ -2904,28 +3379,16 @@
       if (!Array.isArray(context.main_flow_tasks) || context.main_flow_tasks.length !== 6) {
         throw new Error('主流程任务清单必须包含六个 stage');
       }
-      const monitorStages = context.main_flow_tasks.map((task, index) => ({
-        key: task.stage,
-        number: String(task.order || index + 1).padStart(2, '0'),
-        label: task.label,
-        note: task.note,
-      }));
-      const monitorStagePositions = [8.333, 25, 41.667, 58.333, 75, 91.667];
-      const monitorStageTops = [22, 38, 20, 34, 21, 26];
-      const monitorStageIndexes = Object.fromEntries(monitorStages.map((stage, index) => [stage.key, index]));
-      const monitorStageLabels = {
-        ...Object.fromEntries(monitorStages.map((stage) => [stage.key, stage.label])),
-        ready: '结果封存',
-        complete: '核销完成',
-      };
-      const monitorEventStages = {
-        'run.created': monitorStageIndexes.bootstrap,
-        'intake.completed': monitorStageIndexes.intake,
-        'scenario.started': monitorStageIndexes.analysis,
-        'evidence.validated': monitorStageIndexes.evidence,
-        'result.validated': monitorStageIndexes.decision,
-        'report.verified': monitorStageIndexes.verification,
-        'run.completed': monitorStageIndexes.verification,
+      const runStageIndexes = Object.fromEntries(context.main_flow_tasks.map((task, index) => [task.stage, index]));
+      const runStageCount = context.main_flow_tasks.length;
+      const runEventStages = {
+        'run.created': runStageIndexes.bootstrap,
+        'intake.completed': runStageIndexes.intake,
+        'scenario.started': runStageIndexes.analysis,
+        'evidence.validated': runStageIndexes.evidence,
+        'result.validated': runStageIndexes.decision,
+        'report.verified': runStageIndexes.verification,
+        'run.completed': runStageIndexes.verification,
       };
       const state = {
         runs: [],
@@ -2936,12 +3399,7 @@
         technicalSnapshot: null,
         technicalTab: 'summary',
         technicalLogLoaded: false,
-        monitorWorkspace: '',
-        monitorSnapshot: null,
-        monitorError: '',
-        monitorRequest: 0,
         primaryCatalogSignature: '',
-        primaryRefreshSignature: '',
       };
       const PRIMARY_RUNNING_PROBE_MS = 2500;
       const PRIMARY_IDLE_PROBE_MS = 15000;
@@ -3025,7 +3483,7 @@
       };
       const runCard = (run, mode = 'ledger') => {
         const failed = run.status === 'failed';
-        const countLabel = failed ? '已归档断点' : '异常明细';
+        const countLabel = failed ? '已归档断点' : '待人工核验';
         const count = failed ? Number(run.scenario_count || 0) : Number(run.error_count || 0);
         const action = mode === 'overview' ? '' : `<div class="as-run-action">
             <button class="as-button" type="button" data-as-open="${escapeHtml(run.workspace_id)}">展开核销记录 →</button></div>`;
@@ -3045,20 +3503,15 @@
       </article>`;
       const emptyMarkup = (title, note) => `<div class="as-empty"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(note)}</span></div>`;
 
-      const selectedMonitorRunFrom = (runs) => runs.find((run) => run.status === 'running')
-        || runs.find((run) => run.status === 'failed')
-        || runs[0]
-        || null;
-      const selectedMonitorRun = () => selectedMonitorRunFrom(state.runs);
-      const monitorStageIndex = (event) => {
-        if (Number.isInteger(monitorEventStages[event?.type])) return monitorEventStages[event.type];
-        const byStage = { ...monitorStageIndexes, ready: monitorStageIndexes.verification, complete: monitorStageIndexes.verification };
+      const runStageIndex = (event) => {
+        if (Number.isInteger(runEventStages[event?.type])) return runEventStages[event.type];
+        const byStage = { ...runStageIndexes, ready: runStageIndexes.verification, complete: runStageIndexes.verification };
         return Number.isInteger(byStage[event?.stage]) ? byStage[event.stage] : -1;
       };
-      const monitorProgressIndex = (run, snapshot) => {
+      const runProgressIndex = (run, snapshot) => {
         const events = Array.isArray(snapshot?.recent_events) ? snapshot.recent_events : [];
-        let highest = events.reduce((value, event) => Math.max(value, monitorStageIndex(event)), -1);
-        if (run?.status === 'completed') highest = monitorStages.length - 1;
+        let highest = events.reduce((value, event) => Math.max(value, runStageIndex(event)), -1);
+        if (run?.status === 'completed') highest = runStageCount - 1;
         return Math.max(0, highest);
       };
       const runCatalogSignature = (runs) => runs.map((run) => [
@@ -3069,77 +3522,8 @@
         (Array.isArray(run.scenarios) ? run.scenarios : []).join(','),
       ].join(':')).join('|');
       const stageRefreshSignature = (run, snapshot) => run
-        ? `${run.workspace_id}:${run.status}:${monitorProgressIndex(run, snapshot)}`
+        ? `${run.workspace_id}:${run.status}:${runProgressIndex(run, snapshot)}`
         : 'no-run';
-      const monitorClock = (value) => {
-        const date = new Date(value || '');
-        if (Number.isNaN(date.getTime())) return '--:--:--';
-        return date.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      };
-      const monitorUpdatedAt = (value) => {
-        const date = new Date(value || '');
-        if (Number.isNaN(date.getTime())) return '更新时间未知';
-        return date.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      };
-      const renderRuntimeMonitor = () => {
-        const root = document.getElementById('as-monitor-list');
-        const count = document.getElementById('as-monitor-count');
-        if (!root || !count) return;
-        const run = selectedMonitorRun();
-        if (!run) {
-          count.textContent = '当前没有核销运行';
-          root.innerHTML = emptyMarkup('还没有运行链路','正式核销开始后，这里会显示真实阶段与事件');
-          return;
-        }
-        const snapshot = state.monitorWorkspace === run.workspace_id ? state.monitorSnapshot : null;
-        const events = Array.isArray(snapshot?.recent_events) ? snapshot.recent_events : [];
-        const highest = monitorProgressIndex(run, snapshot);
-        const completedCount = run.status === 'completed' ? monitorStages.length : Math.max(0, highest);
-        const routeProgress = run.status === 'completed'
-          ? 100
-          : Math.round(((highest + 1) / monitorStages.length) * 100);
-        const activeTone = run.status === 'completed' ? 'completed' : run.status === 'failed' ? 'failed' : 'running';
-        const stageMarkup = monitorStages.map((stage, index) => {
-          let stageState = 'pending';
-          if (run.status === 'completed' || index < highest) stageState = 'done';
-          else if (index === highest) stageState = run.status === 'failed' ? 'failed' : 'running';
-          const stateLabel = { done: '已完成', running: '执行中', failed: '失败', pending: '等待' }[stageState];
-          return `<div class="as-runtime-node ${stageState}" style="--stage-x:${monitorStagePositions[index]}%;--stage-top:${monitorStageTops[index]}px" data-runtime-stage="${stage.key}" data-runtime-state="${stageState}" aria-label="${stage.label}：${stateLabel}">
-            <span class="as-runtime-orb">${stage.number}</span><span class="as-runtime-stage-copy"><strong>${stage.label}</strong><small>${stage.note}</small></span><em class="as-runtime-stage-state">${stateLabel}</em></div>`;
-        }).join('');
-        const newestEvents = [...events].reverse().slice(0, 4);
-        const eventMarkup = newestEvents.length
-          ? newestEvents.map((event, index) => {
-              const failedEvent = event.level === 'error' || String(event.type || '').includes('failed');
-              const eventTone = failedEvent ? 'failed' : index === 0 && activeTone === 'running' ? 'active' : 'done';
-              const eventStage = monitorStageLabels[event.stage]
-                || monitorStages[Math.max(0, monitorStageIndex(event))]?.label
-                || '运行事件';
-              return `<div class="as-runtime-event ${eventTone}" data-runtime-event="${escapeHtml(event.type || 'event')}"><time>${monitorClock(event.timestamp)}</time><span class="as-runtime-event-dot"></span>
-                <strong>${escapeHtml(eventStage)}</strong><p>${escapeHtml(event.message || '运行状态已更新')}</p></div>`;
-            }).join('')
-          : emptyMarkup('等待运行事件','当前记录尚未写入可观察事件');
-        const scenarios = Array.isArray(run.scenarios) && run.scenarios.length
-          ? run.scenarios.map(scenarioName).join('、')
-          : '场景识别中';
-        const failure = run.failure?.message || state.monitorError;
-        count.textContent = activeTone === 'running'
-          ? `阶段完成时更新 · ${completedCount} / ${monitorStages.length} 阶段完成`
-          : activeTone === 'failed'
-            ? `运行失败 · 停在${monitorStages[highest].label}`
-            : `最近完成 · ${monitorStages.length} / ${monitorStages.length} 阶段完成`;
-        root.innerHTML = `<div class="as-runtime-monitor" data-runtime-workspace="${escapeHtml(run.workspace_id)}" data-runtime-status="${activeTone}">
-          <div class="as-runtime-summary"><div class="as-runtime-identity"><span class="as-runtime-live ${activeTone}">${escapeHtml(runStatus(run))}</span>
-            <div class="as-runtime-copy"><strong>${escapeHtml(run.workspace_id)}</strong><span>${escapeHtml(scenarios)} · ${escapeHtml(monitorUpdatedAt(run.updated_at))}</span></div></div>
-            <div class="as-runtime-progress-copy"><strong>${completedCount} / ${monitorStages.length}</strong><span>已完成阶段 · 同阶段内不重绘</span></div></div>
-          <div class="as-runtime-track" id="as-runtime-track"><svg class="as-runtime-route" viewBox="0 0 1200 74" preserveAspectRatio="none" aria-hidden="true">
-            <defs><linearGradient id="as-runtime-route-gradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#18845e"></stop><stop offset="1" stop-color="#159edb"></stop></linearGradient></defs>
-            <path class="as-runtime-route-base" pathLength="100" d="M-100 30 C-12 30 22 25 100 25 C178 25 224 41 300 41 S424 19 500 23 S623 43 700 37 S824 18 900 24 S1024 39 1100 29"></path>
-            <path class="as-runtime-route-progress" pathLength="100" stroke-dasharray="${routeProgress} 100" d="M-100 30 C-12 30 22 25 100 25 C178 25 224 41 300 41 S424 19 500 23 S623 43 700 37 S824 18 900 24 S1024 39 1100 29"></path></svg>
-            <div class="as-runtime-stages">${stageMarkup}</div></div>
-          <div class="as-runtime-history"><div class="as-runtime-history-head"><strong>运行进展</strong><span>最新 ${Math.min(4, events.length)} / ${events.length} 条</span></div>${eventMarkup}</div>
-          ${failure ? `<p class="as-runtime-failure">${escapeHtml(failure)}</p>` : ''}</div>`;
-      };
       const restorePrimaryState = () => {
         try {
           const storageKey = 'offline-audit-primary-state';
@@ -3153,7 +3537,7 @@
           }
           const saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
           sessionStorage.removeItem(storageKey);
-          const restoredView = saved.view === 'monitor' ? 'overview' : saved.view;
+          const restoredView = saved.view;
           if (['overview','ledger','archive'].includes(restoredView)) state.primaryView = restoredView;
           state.query = String(saved.query || '');
           state.status = String(saved.status || 'all');
@@ -3179,8 +3563,6 @@
               <header class="as-hero"><div><span class="as-kicker">AUDIT CONTROL CENTER</span><h1>核销管理中心</h1><p>统一管理每一次线下活动核销。一级页面保存完整历史台账；展开任一记录后，进入该次核销专属的原版错误处置页面。</p></div>
                 <div class="as-hero-command"><span>持久化运行记录</span><strong id="as-hero-count">0</strong><em>每条记录均可展开</em></div></header>
               <section class="as-metric-grid" id="as-metrics"></section>
-              <section class="as-panel"><header class="as-panel-head"><div><small>RUNTIME MONITOR</small><h2>核销运行链路</h2></div><p id="as-monitor-count">正在读取运行状态</p></header>
-                <div class="as-panel-body"><div id="as-monitor-list" aria-live="polite">${emptyMarkup('正在读取运行状态','请稍候')}</div></div></section>
               <section class="as-panel"><header class="as-panel-head"><div><small>LATEST AUDIT RECORDS</small><h2>最近核销记录</h2></div><p>只展示运行摘要；记录操作统一放在核销台账或技术档案</p></header><div class="as-panel-body"><div class="as-run-list" id="as-recent-list">${emptyMarkup('正在读取核销记录','请稍候')}</div></div></section>
             </div></section>
             <section class="as-view" id="as-view-ledger" hidden><section class="as-panel">
@@ -3211,7 +3593,8 @@
         });
       };
       const renderPrimaryData = () => {
-        const completed = state.runs.filter((run) => run.status === 'completed').length;
+        const latestCompleted = state.runs.find((run) => run.status === 'completed');
+        const latestCompletedZipCount = Number(latestCompleted?.scenario_count || 0);
         const running = state.runs.filter((run) => run.status === 'running').length;
         const failed = state.runs.filter((run) => run.status === 'failed').length;
         const errors = state.runs.reduce((sum, run) => sum + Number(run.error_count || 0), 0);
@@ -3222,15 +3605,14 @@
         document.getElementById('as-nav-archive').textContent = state.runs.length;
         document.getElementById('as-metrics').innerHTML = [
           ['核销记录', state.runs.length, '累计持久化运行次数', '#159edb'],
-          ['核销完成', completed, '可展开业务二级页', '#18845e'],
+          ['核销完成', latestCompletedZipCount, '最近一次 input 的 ZIP 总数', '#18845e'],
           ['运行中 / 失败', `${running}/${failed}`, '需要关注的运行状态', '#d84b3e'],
-          ['异常明细', errors, '完成记录中的待处理明细', '#173743'],
+          ['待人工核验', errors, '完成记录中的待处理明细', '#173743'],
         ].map(([label,value,note,color]) => `<article class="as-metric" style="--metric-accent:${color}"><div><span>${label}</span><small>${note}</small></div><strong>${value}</strong></article>`).join('');
         document.getElementById('as-recent-list').innerHTML = state.runs.length
           ? state.runs.slice(0, 5).map((run) => runCard(run, 'overview')).join('')
           : emptyMarkup('还没有核销记录','运行一次正式核销后，记录会自动出现在这里');
         renderLedger();
-        renderRuntimeMonitor();
         document.getElementById('as-archive-list').innerHTML = state.runs.length
           ? state.runs.map(archiveCard).join('')
           : emptyMarkup('技术档案为空','运行记录生成后会同步保存分析文件、日志和DOM断点');
@@ -3270,36 +3652,18 @@
         const value = await apiJson('/api/runs');
         const runs = Array.isArray(value.runs) ? value.runs : [];
         const catalogSignature = runCatalogSignature(runs);
-        const run = selectedMonitorRunFrom(runs);
-        if (probeOnly && run?.status !== 'running' && catalogSignature === state.primaryCatalogSignature) {
+        if (probeOnly && catalogSignature === state.primaryCatalogSignature) {
           return { unchanged: true };
-        }
-        let snapshot = null;
-        let monitorError = '';
-        if (run) {
-          try {
-            snapshot = await apiJson(`/api/runs/${encodeURIComponent(run.workspace_id)}/snapshot`);
-          } catch (error) {
-            monitorError = `运行详情暂不可用：${error.message}`;
-          }
         }
         return {
           unchanged: false,
           runs,
-          monitorWorkspace: run?.workspace_id || '',
-          monitorSnapshot: snapshot,
-          monitorError,
           catalogSignature,
-          refreshSignature: `${catalogSignature}::${stageRefreshSignature(run, snapshot)}`,
         };
       };
       const commitPrimaryState = (next) => {
         state.runs = next.runs;
-        state.monitorWorkspace = next.monitorWorkspace;
-        state.monitorSnapshot = next.monitorSnapshot;
-        state.monitorError = next.monitorError;
         state.primaryCatalogSignature = next.catalogSignature;
-        state.primaryRefreshSignature = next.refreshSignature;
         renderPrimaryData();
       };
       const loadPrimaryRuns = async (announce = false) => {
@@ -3312,18 +3676,14 @@
           toast(error.message);
         }
       };
-      const probePrimaryStage = async () => {
+      const probePrimaryCatalog = async () => {
         if (primaryProbeBusy) return;
         primaryProbeBusy = true;
         try {
           const next = await fetchPrimaryState(true);
-          if (!next.unchanged
-            && !next.monitorError
-            && next.refreshSignature !== state.primaryRefreshSignature) {
-            commitPrimaryState(next);
-          }
+          if (!next.unchanged) commitPrimaryState(next);
         } catch (error) {
-          // 静默探测不得打断当前 stage，也不得把暂时的网络错误渲染到页面。
+          // 静默目录探测不得把暂时的网络错误渲染到页面。
         } finally {
           primaryProbeBusy = false;
         }
@@ -3334,7 +3694,7 @@
           ? PRIMARY_RUNNING_PROBE_MS
           : PRIMARY_IDLE_PROBE_MS;
         primaryProbeTimer = window.setTimeout(async () => {
-          if (document.visibilityState === 'visible') await probePrimaryStage();
+          if (document.visibilityState === 'visible') await probePrimaryCatalog();
           schedulePrimaryProbe();
         }, delay);
       };
@@ -3458,7 +3818,7 @@
           <button class="as-button" id="as-record-technical" type="button">技术档案</button>`;
         topbar.appendChild(tools);
         const workspace = document.querySelector('.eo-workspace');
-        if (workspace) workspace.insertAdjacentHTML('afterbegin', `<div class="as-record-context"><span>当前二级核销页面：<strong>${escapeHtml(context.selected_run)}</strong></span><span>${escapeHtml(runDate(run))} · ${escapeHtml(runStatus(run))} · ${Number(run.scenario_count || 0)} 个场景</span></div>`);
+        if (workspace) workspace.insertAdjacentHTML('afterbegin', `<div class="as-record-context"><span>当前二级核销页面：<strong>${escapeHtml(context.selected_run)}</strong></span><span>${escapeHtml(runDate(run))} · ${escapeHtml(runStatus(run))} · ${Number(run.scenario_count || 0)} 种核销类型</span></div>`);
         ensureTechnicalDrawer();
         document.getElementById('as-back-ledger').addEventListener('click', routeToSystem);
         document.getElementById('as-record-technical').addEventListener('click', () => openTechnical(context.selected_run));

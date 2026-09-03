@@ -235,7 +235,7 @@ class PriceDifferenceSupportTests(unittest.TestCase):
                 ["price_difference_support"],
                 workbook_path=workbook,
             )
-            self.assertEqual(verification["template_version"], "3.7.0")
+            self.assertEqual(verification["template_version"], "3.9.0")
             text = html.read_text(encoding="utf-8")
             self.assertIn("价格补差", text)
             self.assertIn("POS数据电子表缺失或不可核验", text)

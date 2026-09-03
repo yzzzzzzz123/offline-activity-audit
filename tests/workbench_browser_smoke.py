@@ -30,12 +30,16 @@ def seed() -> tuple[str, WorkbenchRunStore, str]:
     store.observe(
         "cases.prepared",
         {
-            "scenarios": ["price_difference_support"],
+            "scenarios": ["price_difference_support", "maintenance_fee"],
             "cases": {
                 "price_difference_support": {
                     "scenario": "price_difference_support",
                     "source_archive": "价格补差样例.zip",
-                }
+                },
+                "maintenance_fee": {
+                    "scenario": "maintenance_fee",
+                    "source_archive": "维护费用样例.zip",
+                },
             },
         },
     )
@@ -51,12 +55,77 @@ def seed() -> tuple[str, WorkbenchRunStore, str]:
         },
     )
     store.observe(
+        "evidence.validated",
+        {
+            "scenario": "maintenance_fee",
+            "evidence": {
+                "documents": [
+                    {"source_file": "维护合同.pdf", "document_type": "signed_contract"},
+                    {"source_file": "POS销售.xlsx", "document_type": "pos_statement"},
+                ]
+            },
+        },
+    )
+    store.observe(
         "result.validated",
         {
             "scenario": "price_difference_support",
             "result": {
                 "scenario": "price_difference_support",
                 "summary": {"conclusion": "supplement", "suggested_approved_amount": 0},
+                "price_difference_support_audit": {
+                    "controls": [
+                        {
+                            "control_id": "fee_nature",
+                            "status": "pass",
+                            "basis": "合同和结算正文均明确价格补差",
+                        },
+                        {
+                            "control_id": "product_correspondence",
+                            "status": "pass",
+                            "basis": "合同与结算商品范围一致",
+                        },
+                        {
+                            "control_id": "all_store_photo_coverage",
+                            "status": "pass",
+                            "basis": "合同门店均有活动期内现场照片",
+                        },
+                        {
+                            "control_id": "price_terms",
+                            "status": "pass",
+                            "basis": "合同原价、活动价和补差单价均明确",
+                        },
+                        {
+                            "control_id": "amount_recalculation",
+                            "status": "fail",
+                            "basis": "金额复算条件不完整",
+                        },
+                    ]
+                },
+            },
+        },
+    )
+    store.observe(
+        "result.validated",
+        {
+            "scenario": "maintenance_fee",
+            "result": {
+                "scenario": "maintenance_fee",
+                "summary": {"conclusion": "supplement", "suggested_approved_amount": 0},
+                "maintenance_fee_audit": {
+                    "controls": [
+                        {
+                            "control_id": "promotional_contract",
+                            "status": "pass",
+                            "basis": "维护合同主体、期间与签章完整",
+                        },
+                        {
+                            "control_id": "pos_spreadsheet",
+                            "status": "pass",
+                            "basis": "POS销售明细可识别且期间一致",
+                        },
+                    ]
+                },
             },
         },
     )
@@ -102,10 +171,48 @@ def seed() -> tuple[str, WorkbenchRunStore, str]:
                         "detail_error_count": 1,
                         "context_error_count": 0,
                     },
-                }
+                },
+                {
+                    "name": "维护费用核销",
+                    "scenario": "maintenance_fee",
+                    "title": "维护费用核销｜只显示错误",
+                    "note": "联动筛选浏览器验收数据",
+                    "headers": [
+                        "问题文件",
+                        "对照文件",
+                        "错误原因",
+                        "处理方式",
+                        "核销影响",
+                        "结论",
+                    ],
+                    "rows": [
+                        {
+                            "excel_row": 5,
+                            "kind": "record",
+                            "section": "detail",
+                            "status": "issue",
+                            "confidence": "medium",
+                            "heading": "POS销售明细缺少盖章页",
+                            "values": [
+                                "POS销售.xlsx",
+                                "维护合同.pdf",
+                                "现有POS销售明细没有可核验的盖章页",
+                                "补交包含完整期间并盖章的POS销售明细",
+                                "本次申报暂不能核销",
+                                "资料需补正",
+                            ],
+                        }
+                    ],
+                    "audit_counts": {
+                        "source_row_count": 1,
+                        "error_count": 1,
+                        "detail_error_count": 1,
+                        "context_error_count": 0,
+                    },
+                },
             ],
         },
-        scenarios=["price_difference_support"],
+        scenarios=["price_difference_support", "maintenance_fee"],
         verification={"html": {"verified": True}},
     )
     completed_workspace_id = workspace.name
@@ -125,6 +232,10 @@ def seed() -> tuple[str, WorkbenchRunStore, str]:
         },
     )
     running_store.observe("scenario.started", {"scenario": "maintenance_fee"})
+    running_store.observe(
+        "evidence.validated",
+        {"scenario": "maintenance_fee", "evidence": {"documents": []}},
+    )
     return completed_workspace_id, running_store, running_workspace.name
 
 
@@ -148,39 +259,31 @@ def main() -> None:
         page.goto(f"http://127.0.0.1:{PORT}/")
         page.wait_for_load_state("networkidle")
         page.wait_for_selector("body.audit-system-page")
-        page.wait_for_selector("#as-monitor-list .as-runtime-monitor")
+        page.wait_for_selector("#as-recent-list .as-run-card")
         assert page.get_by_role("heading", name="核销管理中心").first.is_visible()
+        overview_completed_metric = page.locator("#as-metrics .as-metric").filter(
+            has_text="核销完成"
+        )
+        assert overview_completed_metric.count() == 1
+        assert overview_completed_metric.locator("small").inner_text() == "最近一次 input 的 ZIP 总数"
+        assert overview_completed_metric.locator(":scope > strong").inner_text() == "2"
         assert page.locator("[data-as-view]").count() == 3
         assert page.locator('[data-as-view="monitor"]').count() == 0
-        assert page.locator("#as-view-overview #as-monitor-list").is_visible()
-        assert page.get_by_role("heading", name="核销运行链路").is_visible()
-        assert page.locator("#as-monitor-list [data-runtime-stage]").count() == 6
-        assert page.locator("#as-monitor-list .as-runtime-orb").count() == 6
-        assert page.locator("#as-monitor-list .as-runtime-route").get_attribute(
-            "viewBox"
-        ) == "0 0 1200 74"
-        assert page.locator("#as-monitor-list [data-runtime-event]").count() >= 1
-        assert "阶段完成时更新" in page.locator("#as-monitor-count").inner_text()
-        assert (
-            page.locator("#as-monitor-list .as-runtime-monitor").get_attribute(
-                "data-runtime-workspace"
-            )
-            == running_workspace_id
-        )
-        assert page.locator("#as-monitor-list button").count() == 0
+        assert page.locator("#as-monitor-list").count() == 0
+        assert page.locator("[data-runtime-stage]").count() == 0
+        assert page.get_by_role("heading", name="核销运行链路").count() == 0
+        assert page.get_by_role("heading", name="最近核销记录").is_visible()
         assert page.locator("#as-recent-list button").count() == 0
         assert page.locator("#as-archive-list [data-as-open]").count() == 0
         assert page.locator("#as-archive-list button").count() == 2
 
-        page.locator("#as-monitor-list .as-runtime-monitor").evaluate(
+        page.locator("#as-view-overview").evaluate(
             "node => node.dataset.sameStageSentinel = 'keep'"
         )
         running_store.observe("scenario.started", {"scenario": "maintenance_fee"})
         page.wait_for_timeout(3200)
         assert (
-            page.locator("#as-monitor-list .as-runtime-monitor").get_attribute(
-                "data-same-stage-sentinel"
-            )
+            page.locator("#as-view-overview").get_attribute("data-same-stage-sentinel")
             == "keep"
         )
 
@@ -188,13 +291,10 @@ def main() -> None:
             "evidence.validated",
             {"scenario": "maintenance_fee", "evidence": {"documents": []}},
         )
-        page.wait_for_function(
-            """() => {
-              const monitor = document.querySelector('#as-monitor-list .as-runtime-monitor');
-              return monitor
-                && !monitor.dataset.sameStageSentinel
-                && document.querySelector('[data-runtime-event="evidence.validated"]');
-            }"""
+        page.wait_for_timeout(3200)
+        assert (
+            page.locator("#as-view-overview").get_attribute("data-same-stage-sentinel")
+            == "keep"
         )
         page.screenshot(path=str(screenshot_root / "desktop.png"), full_page=True)
 
@@ -207,10 +307,109 @@ def main() -> None:
         page.wait_for_selector("body.error-only-page")
         assert f"run={workspace_id}" in page.url
         assert page.get_by_role("heading", name="核销错误处置总览").is_visible()
+        assert page.get_by_role("heading", name="核销错误结果").is_visible()
+        assert page.locator(".eo-metric").first.locator(".eo-metric-copy > span").inner_text() == "核销类型"
+        assert page.locator("#eoErrorList .eo-error-card").count() == 2
+        assert page.locator("#eoErrorList .eo-scope").count() == 2
+        assert page.locator("#eoErrorList .eo-error-confidence").count() == 2
+        assert "核销类型 · 价格补差" in page.locator("#eoErrorList .eo-scope").first.inner_text()
+        fixed_error_types = ["", "价格补差", "维护费用"]
+        assert page.locator("#eoErrorType option").evaluate_all(
+            "nodes => nodes.map(node => node.value)"
+        ) == fixed_error_types
+        assert page.locator("#eoErrorVisible").inner_text() == "2"
+        page.locator("#eoErrorConfidence").select_option(value="medium")
+        assert page.locator("#eoErrorVisible").inner_text() == "1"
+        assert page.locator("#eoErrorType option").evaluate_all(
+            "nodes => nodes.map(node => node.value)"
+        ) == fixed_error_types
+        assert "维护费用" in page.locator("#eoErrorList .eo-error-card:visible").inner_text()
+        page.locator("#eoErrorType").select_option(value="价格补差")
+        assert page.locator("#eoErrorConfidence").input_value() == ""
+        assert page.locator("#eoErrorVisible").inner_text() == "1"
+        assert page.locator("#eoErrorType option").evaluate_all(
+            "nodes => nodes.map(node => node.value)"
+        ) == fixed_error_types
+        page.locator("#eoErrorKeyword").fill("不会命中的错误检查项")
+        assert page.locator("#eoErrorVisible").inner_text() == "0"
+        assert page.locator("#eoErrorFilterEmpty").is_visible()
+        assert page.locator("#eoErrorType option").evaluate_all(
+            "nodes => nodes.map(node => node.value)"
+        ) == fixed_error_types
+        page.locator("#eoErrorFilterEmpty [data-error-reset]").click()
+        assert page.locator("#eoErrorVisible").inner_text() == "2"
+        page.wait_for_timeout(200)
+        page.screenshot(path=str(screenshot_root / "desktop-error-log.png"), full_page=True)
+        assert page.locator(".eo-scenario-card").count() == 0
+        assert page.locator("button.eo-tab").count() == 2
+        assert page.locator(".eo-enter").count() == 0
+        assert page.locator('[data-open^="scenario-"]').count() == 0
+
+        page.get_by_role("button", name="正确检查项").click()
+        assert page.get_by_role("heading", name="正确检查项日志").is_visible()
+        assert page.locator("#home").is_hidden()
+        assert page.locator("#passed").is_visible()
+        assert page.locator("#eoPassList .eo-pass-group").count() == 2
+        assert page.locator("#eoPassList .eo-pass-card").count() == 6
+        assert "费用类型核验通过" in "\n".join(
+            page.locator("#eoPassList .eo-pass-card").all_inner_texts()
+        )
+        assert page.locator(".eo-pass-warning").count() == 0
+        assert page.locator("#eoPassVisible").inner_text() == "6"
+        assert page.locator("#eoPassType option").count() == 3
+        assert page.locator("#eoPassCategory option").count() == 7
+        assert "2 种核销方式 · 6 类可选检查 · 1 档可选置信度" in page.locator(
+            "#eoPassFacetSummary"
+        ).inner_text()
+        fixed_pass_types = ["", "价格补差", "维护费用"]
+        page.locator("#eoPassType").select_option(value="价格补差")
+        assert page.locator("#eoPassVisible").inner_text() == "4"
+        assert page.locator("#eoPassCategory option").count() == 5
+        assert page.locator("#eoPassCategory option").evaluate_all(
+            "nodes => nodes.map(node => node.value)"
+        ) == ["", "费用性质", "商品对应", "门店照片", "补差条款"]
+        page.locator("#eoPassConfidence").select_option(value="high")
+        assert page.locator("#eoPassVisible").inner_text() == "4"
+        page.locator("#eoPassCategory").select_option(value="商品对应")
+        assert page.locator("#eoPassVisible").inner_text() == "1"
+        assert page.locator("#eoPassType option").evaluate_all(
+            "nodes => nodes.map(node => node.value)"
+        ) == fixed_pass_types
+        assert page.locator("#eoPassList .eo-pass-card:visible").count() == 1
+        assert "商品对应关系核验通过" in page.locator(
+            "#eoPassList .eo-pass-card:visible"
+        ).inner_text()
+        page.locator("#eoPassKeyword").fill("不会命中的检查项")
+        assert page.locator("#eoPassVisible").inner_text() == "0"
+        assert page.locator("#eoPassFilterEmpty").is_visible()
+        page.get_by_role("button", name="清除全部筛选").click()
+        assert page.locator("#eoPassVisible").inner_text() == "6"
+        assert page.locator("#eoPassList .eo-pass-card:visible").count() == 6
+        page.locator("#eoPassCategory").select_option(value="合同基准")
+        assert page.locator("#eoPassVisible").inner_text() == "1"
+        assert page.locator("#eoPassType option").evaluate_all(
+            "nodes => nodes.map(node => node.value)"
+        ) == fixed_pass_types
+        page.locator("#eoPassType").select_option(value="价格补差")
+        assert page.locator("#eoPassCategory").input_value() == ""
+        assert page.locator("#eoPassVisible").inner_text() == "4"
+        assert page.locator("#eoPassType option").evaluate_all(
+            "nodes => nodes.map(node => node.value)"
+        ) == fixed_pass_types
+        page.locator(".eo-pass-filter-result [data-pass-reset]").click()
+        assert page.locator("#eoPassVisible").inner_text() == "6"
+        page.wait_for_timeout(350)
+        page.screenshot(path=str(screenshot_root / "desktop-pass-log.png"), full_page=True)
+
+        page.get_by_role("button", name="错误总览").click()
+        assert page.get_by_role("heading", name="核销错误处置总览").is_visible()
+        assert page.locator("#passed").is_hidden()
 
         page.get_by_role("button", name="技术档案").click()
         page.get_by_role("button", name="分析文件").click()
-        page.locator('[data-as-analysis^="analysis/results/"]').first.click()
+        page.locator(
+            '[data-as-analysis="analysis/results/price_difference_support.json"]'
+        ).click()
         page.wait_for_function(
             "document.querySelector('#as-analysis-view').textContent.includes('price_difference_support')"
         )

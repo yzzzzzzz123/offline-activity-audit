@@ -32,7 +32,7 @@ from .workbench_store import (
 
 
 ROOT_HTML = PROJECT_ROOT / "offline-activity-audit.html"
-DEFAULT_WORKBENCH_URL = "http://192.0.0.108:8080/"
+DEFAULT_WORKBENCH_URL = "http://192.0.0.148:8080/"
 
 
 class _Tee(TextIO):

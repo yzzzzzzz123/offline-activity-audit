@@ -179,7 +179,19 @@ class WorkbenchStoreTests(unittest.TestCase):
                 "result.validated",
                 {
                     "scenario": "maintenance_fee",
-                    "result": {"scenario": "maintenance_fee", "summary": {"conclusion": "fail"}},
+                    "result": {
+                        "scenario": "maintenance_fee",
+                        "summary": {"conclusion": "fail"},
+                        "maintenance_fee_audit": {
+                            "controls": [
+                                {
+                                    "control_id": "pos_visual_seal",
+                                    "status": "pass",
+                                    "basis": "盖章POS清晰可见",
+                                }
+                            ]
+                        },
+                    },
                 },
             )
             store.complete(
@@ -206,6 +218,11 @@ class WorkbenchStoreTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(snapshot["view"]["sheets"][0]["scenario"], "maintenance_fee")
+            self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 1)
+            self.assertEqual(
+                snapshot["view"]["pass_check_log"]["groups"][0]["items"][0]["title"],
+                "盖章POS核验通过",
+            )
             self.assertGreaterEqual(len(snapshot["dom_checkpoints"]), 5)
             self.assertTrue((workspace / "analysis" / "evidence" / "maintenance_fee.json").is_file())
             events = (workspace / "logs" / "events.jsonl").read_text(encoding="utf-8")
@@ -268,7 +285,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             self.assertEqual(result["output"], str(ROOT_HTML))
             self.assertEqual(
                 result["workbench_url"],
-                "http://192.0.0.108:8080/?run=20260828-codex",
+                "http://192.0.0.148:8080/?run=20260828-codex",
             )
             self.assertEqual(list(root.glob("*.html")), [])
 
@@ -286,6 +303,30 @@ class WorkbenchServerTests(unittest.TestCase):
             workbench_url="http://127.0.0.1:8080/",
         )
         store.write_analysis("facts.json", {"visible": True}, label="结构化事实")
+        store.observe(
+            "result.validated",
+            {
+                "scenario": "maintenance_fee",
+                "result": {
+                    "scenario": "maintenance_fee",
+                    "summary": {"conclusion": "supplement"},
+                    "maintenance_fee_audit": {
+                        "controls": [
+                            {
+                                "control_id": "pos_visual_seal",
+                                "status": "pass",
+                                "basis": "盖章POS清晰可见",
+                            },
+                            {
+                                "control_id": "amount_recalculation",
+                                "status": "fail",
+                                "basis": "金额无法复算",
+                            },
+                        ]
+                    },
+                },
+            },
+        )
         store.complete(
             view_payload=_view_payload(),
             scenarios=["maintenance_fee"],
@@ -332,35 +373,52 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(snapshot["run"]["status"], "completed")
         self.assertEqual(snapshot["run"]["main_flow_tasks"], main_flow_task_list())
         self.assertEqual(snapshot["view"]["sheets"][0]["audit_counts"]["error_count"], 1)
+        self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 1)
+        self.assertEqual(snapshot["view"]["pass_check_log"]["groups"][0]["audit_type"], "维护费用")
 
     def test_root_is_primary_system_and_run_query_is_secondary_record(self) -> None:
         primary = self._html("/")
         primary_context = self._script_payload(primary, "audit-workbench-context")
         self.assertEqual(primary_context["mode"], "system")
         self.assertIsNone(primary_context["selected_run"])
-        self.assertEqual(primary_context["system_version"], "2.2.0")
+        self.assertEqual(primary_context["system_version"], "2.6.0")
         self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
         self.assertIn("audit-system-extension-script", primary)
-        self.assertIn('content="2.2.0"', primary)
-        self.assertIn('id="as-monitor-list"', primary)
-        self.assertIn("核销运行链路", primary)
-        self.assertIn("阶段完成时更新", primary)
-        self.assertIn("同阶段内不重绘", primary)
+        self.assertIn('content="2.6.0"', primary)
+        self.assertIn("const latestCompletedZipCount", primary)
+        self.assertIn("最近一次 input 的 ZIP 总数", primary)
+        self.assertGreaterEqual(primary.count("待人工核验"), 2)
+        self.assertIn('id="as-recent-list"', primary)
+        self.assertNotIn('id="as-monitor-list"', primary)
+        self.assertNotIn("核销运行链路", primary)
+        self.assertNotIn("RUNTIME MONITOR", primary)
+        self.assertNotIn("data-runtime-stage", primary)
+        self.assertNotIn("renderRuntimeMonitor", primary)
         self.assertNotIn("实时刷新", primary)
         self.assertNotIn("window.location.reload(), 5000", primary)
-        self.assertIn("data-runtime-stage", primary)
         self.assertNotIn('data-as-view="monitor"', primary)
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.2")
-        self.assertEqual(config["system_version"], "2.2.0")
+        self.assertEqual(config["api_version"], "1.5")
+        self.assertEqual(config["system_version"], "2.6.0")
         self.assertTrue(config["workbench_read_only"])
         self.assertFalse(config["oss_intake"]["enabled"])
         self.assertEqual(config["main_flow_tasks"], main_flow_task_list())
-        self.assertEqual(config["refresh_policy"]["mode"], "stage_boundary")
         self.assertEqual(
-            config["refresh_policy"]["visible_update_rule"],
+            config["refresh_policy"]["overview"]["mode"],
+            "catalog_signature",
+        )
+        self.assertEqual(
+            config["refresh_policy"]["overview"]["visible_update_rule"],
+            "run_catalog_signature_change",
+        )
+        self.assertEqual(
+            config["refresh_policy"]["record"]["mode"],
+            "stage_boundary",
+        )
+        self.assertEqual(
+            config["refresh_policy"]["record"]["visible_update_rule"],
             "workspace_status_or_stage_index_change",
         )
 
@@ -377,6 +435,29 @@ class WorkbenchServerTests(unittest.TestCase):
             injected["sheets"][0]["scenario"],
             "maintenance_fee",
         )
+        self.assertIn('id="eoErrorList"', secondary)
+        self.assertIn('id="eoErrorType"', secondary)
+        self.assertIn('id="eoErrorConfidence"', secondary)
+        self.assertIn('id="eoErrorKeyword"', secondary)
+        self.assertIn('id="eoErrorFacetSummary"', secondary)
+        self.assertIn('id="eoPassList"', secondary)
+        self.assertIn('id="eoPassType"', secondary)
+        self.assertIn('id="eoPassCategory"', secondary)
+        self.assertIn('id="eoPassConfidence"', secondary)
+        self.assertIn('id="eoPassKeyword"', secondary)
+        self.assertIn("核销错误结果", secondary)
+        self.assertIn("正确检查项日志", secondary)
+        self.assertIn("种核销方式", secondary)
+        self.assertIn("核销类型 ·", secondary)
+        self.assertIn('data-eo-view="passed"', secondary)
+        self.assertNotIn("单项通过不等于整单核销通过", secondary)
+        self.assertNotIn("核销方式始终展示全部；置信度随核销方式和关键词联动", secondary)
+        self.assertNotIn("核销方式始终展示全部；检查分类和置信度只保留当前存在项", secondary)
+        self.assertEqual(injected["pass_check_log"]["total"], 1)
+        self.assertNotIn('class="eo-scenario-card"', secondary)
+        self.assertNotIn('class="eo-enter"', secondary)
+        self.assertNotIn("进入错误清单", secondary)
+        self.assertNotIn("错误场景队列", secondary)
 
     def test_serves_analysis_and_rejects_unlisted_path(self) -> None:
         with self.opener.open(

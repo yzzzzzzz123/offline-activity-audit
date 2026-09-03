@@ -345,7 +345,7 @@ class SelfProcuredGiftMaterialTests(unittest.TestCase):
                 ["self_procured_gift_material"],
                 workbook_path=report,
             )
-            self.assertEqual(check["template_version"], "3.7.0")
+            self.assertEqual(check["template_version"], "3.9.0")
             self.assertIn("活动返图.xls不能替代POS电子表", html.read_text(encoding="utf-8"))
 
 

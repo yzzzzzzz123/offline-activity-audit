@@ -179,7 +179,7 @@ class PosTargetIncentiveTests(unittest.TestCase):
             self.assertEqual(verify_workbook(report, ["pos_target_incentive"])["sheet_names"], ["POS达标激励核销"])
             html = create_html_report_from_workbook(report, root / "audit.html")
             check = verify_html_report(html, ["pos_target_incentive"], workbook_path=report)
-            self.assertEqual(check["template_version"], "3.7.0")
+            self.assertEqual(check["template_version"], "3.9.0")
             text = html.read_text(encoding="utf-8")
             self.assertIn("促销合同未建立POS达标激励权威规则", text)
             self.assertIn("满减活动缺少有效存在证明", text)

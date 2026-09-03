@@ -164,7 +164,7 @@ before it is advertised here or accepted by this runner.
 ## Persistent workbench contract
 
 The only customer-facing HTML is the repository-root `offline-activity-audit.html`. It is the
-persistent Audit System `2.2.0` shell served by the trusted local service and must not be regenerated,
+persistent Audit System `2.6.0` shell served by the trusted local service and must not be regenerated,
 copied, or patched by an audit run. `/` is the level-one management system; each catalog entry expands
 through `/?run=<workspace-id>` into a level-two record. Completed records retain the approved original
 error-desk interface, while incomplete records receive a truthful diagnostic page. A temporary
@@ -174,18 +174,31 @@ as a template, publish either temporary artifact, expose them to the model, or l
 success or failure. Legacy/acceptance workbooks are test-only.
 
 The run-scoped workbook retains every deterministic source row and comparison for schema and coverage
-verification. The fixed workbench's customer view is an **error-only projection** of that verified payload:
-passing rows, passing contract facts, the contract baseline, audit-process narration, and the
-informational watermark policy are not rendered. Hiding them is presentation filtering only; they
-remain available to every downstream decision and to the embedded verification payload.
+verification. The fixed workbench defaults to an **error-only projection** of that verified payload,
+and a sibling `正确检查项` ledger projects only independently passed subchecks from the same deterministic
+scenario results. Group pass entries by audit type and Chinese business category; show the checked
+subject, concise decision basis, source basenames when available, and one high/medium/low confidence.
+A passed subcheck never changes the whole-record conclusion, hides an error, or implies approval.
+Full contract baselines, audit-process narration, informational watermark policy, candidate sets,
+similarity scores, product IDs, hashes, and model reasoning are not rendered in either customer view.
 
-Each completed level-two record contains the fixed original error desk and one error list for every
-scenario submitted in that run:
+Each completed level-two record contains the fixed audit desk with two sibling result views. The
+default error overview contains one continuously stacked list of every grouped customer error from
+that run; the correct-check ledger contains ordered pass entries grouped by audit type:
 
-- the home view shows exactly four metrics: `核销场景`, `错误总数`, `材料 / 结算错误`, and
-  `商品 / 门店错误`; its total is the number of grouped customer actions, not the number of internal
-  failed fields. Each submitted scenario has one real queue entry with its grouped error count and a
-  direct button into that scenario;
+- the home view keeps exactly four metrics in the approved style: `核销类型`, `错误总数`,
+  `材料 / 结算错误`, and `商品 / 门店错误`; its total is the number of grouped customer actions, not
+  the number of internal failed fields. It must not create scenario queues, entry buttons, or per-type
+  subpages. All error cards render directly below the unchanged summary modules in source scenario order,
+  with one continuous sequence and one `核销类型 · <业务类型>` badge per card;
+- the correct-check view uses the same dark rail, cold-gray canvas, four-metric hierarchy, and stacked
+  card grammar with a green pass accent. It includes one group for every submitted audit type even when
+  that group has no independently confirmed pass item, and never creates a scenario-entry button or
+  per-type subpage;
+- both result views expose aligned filter panels with live hit counts and reset controls. Audit type is a
+  fixed facet that always lists every type present in that view regardless of other active filters. The
+  error confidence facet and the correct-check category/confidence facets retain only currently matching
+  values, with per-option hit counts;
 - personnel renders only failed product rows plus failed settlement/payment rows. A product whose
   69 code, fuzzy-compatible name, quantity, and reward all correspond is hidden. The retained internal
   row still contains the original sales product, selected catalog code/name/69 code, settlement
@@ -202,7 +215,7 @@ scenario submitted in that run:
   recognized-content entry per submitted photo;
 - maintenance fee renders only grouped blocking errors for required materials, fee nature, POS seal,
   POS spreadsheet/correspondence, contract, settlement, party/period alignment, fee-specific support,
-  and amount recalculation. It never merges with the other-expense special-approval queue;
+  and amount recalculation. It never merges with other-expense special-approval errors;
 - extra giveaway renders only grouped blocking errors for required materials, fee nature, contract,
   settlement, system sales/delivery, party/period/product correspondence, receipt ratio and zero-value
   gifts, activity photos, duplicate evidence, shipment reconciliation, and gift-amount recalculation.
@@ -212,10 +225,10 @@ scenario submitted in that run:
   only a genuinely unclassifiable fee moves to the special-approval gate. Even when complete, the
   automatic supported amount remains zero and the result stays `待人工核定`.
 
-Every error card must show its scope, exact problem file, comparison/baseline file when applicable,
-concrete causal facts, and one usable handling action. A grouped card count is one queue item even when
+Every error card must show its audit-type badge, exact problem file, comparison/baseline file when applicable,
+concrete causal facts, and one usable handling action. A grouped card counts as one error even when
 its expandable table contains many affected rows; for example, 36 contract-product code failures are
-one `合同商品` card with 36 complete detail rows, not 36 home-queue items.
+one `合同商品` card with 36 complete detail rows, not 36 separate error cards.
 
 Personnel product records use the uniquely selected knowledge-base product's complete authoritative
 name internally and never add a `结算第N行` prefix. A unique fuzzy name is an accepted medium-confidence
@@ -318,10 +331,26 @@ screenshot, or photo content that must be resubmitted. Do not emit shorthand suc
 or a source-free sentence such as `Excel门店与收款人无法逐一确认`. Keep candidate sets, internal product IDs, RAG wording,
 hashes, convergence, and model reasoning out of the customer interface.
 
-For field-store errors, distinguish a legible but wrong watermark location from a missing/unreadable
-watermark. A legible conflict is labeled `门店水印错误`, shows the contract store and photo watermark
-location side by side, and requests corrected watermark content; it must never be described as a
-clarity problem. The submitted filename cannot override a conflicting watermark.
+If the field-store and watermark names fully correspond, pass location directly without a map call or
+location-confidence issue. For every legible name difference, invoke the fixed Baidu Maps Streamable
+HTTP MCP through `map_search_places`, reading its server-side AK from `BAIDU_MAPS_API_KEY` in the current
+process or, on Windows, the current user's environment configuration. This permits direct routine runs
+without another interactive terminal; never read the AK from a repository file or command-line argument,
+persist it in run outputs, or expose the authenticated URL. Store returned coordinates as `BD09LL`. A selected same
+POI, a verified mall/store parent-child relation, or selected POIs within 100 metres is compatible with
+high location confidence. The two searches need not be independently unique: preserve a credibly unique
+side, require every unresolved side's selected candidate to meet the internal 0.60 name-relevance
+threshold, and require both sides to meet it when neither is credibly unique; accept the best candidate
+pair only when it forms a passing spatial relationship. A distant pair, the 100-to-300-metre gray zone, no credible candidate pair, unavailable
+MCP, or missing comparable coordinates is `门店地点低置信度` / manual review, not an automatic
+`门店水印错误`. A uniquely resolved distant pair keeps its measured distance and requests either
+authoritative same/nearby evidence or corrected-location content. New determinations do not emit the
+legacy `mismatch` result. A validated verified location-registry entry may resolve an unavailable or
+inconclusive MCP result, but a resolver/registry conflict remains low-confidence/manual. Show the
+provider, MCP attempt status, relationship, distance, confidence, threshold and concise evidence basis
+in the ledger, but never expose the internal relevance score in customer-facing output.
+Missing/unreadable watermarks remain separate, and filenames never prove or override
+location.
 
 Contract parties/customer, contract period/business date, and seal integrity remain global controls.
 Contract watermark visibility is informational only. Product-reference views cannot prove a store,
@@ -336,13 +365,20 @@ never divide a total automatically.
 The canonical customer page is the root `offline-activity-audit.html`. The trusted service in
 `audit_core.workbench_server` serves its level-one system at `/`, injects the selected verified view
 payload into the same fixed HTML response for `/?run=<workspace-id>`, and exposes relative,
-read-only workbench APIs plus the separately authenticated OSS transport endpoint. API contract `1.2`
+read-only workbench APIs plus the separately authenticated OSS transport endpoint. API contract `1.5`
 keeps all workbench resources read-only; only `/api/intake/oss` and its authenticated job status resource
 belong to the transport adapter. Injection changes the response, never the file on disk. The page reads the
 run catalog, atomic snapshot, append-only events, observable log, manifest-approved analysis files,
 and DOM-data checkpoints. A direct `file://` open redirects to loopback; LAN clients use the same
 relative API paths. The page has no CDN, remote font, third-party script, or remote business-data
 dependency.
+
+For completed records, `view.pass_check_log` is a schema `1.0` read-only projection with `total`,
+audit-type and scope counts, and ordered `groups[].items[]`. Each item contains only a generated check
+id, Chinese category/title, subject, concise basis, source basenames/count, confidence, and a presentation
+scope. The trusted server rebuilds it at read time from immutable
+`analysis/results/<scenario>.json` when an older snapshot predates this field; it must never modify the
+archived worktree or infer a pass from an absent/failed status.
 
 The assets under `skills/orchestrate-offline-audit/assets/` are retained only as the deterministic
 run-scoped view-payload compiler. `audit_core.html_report.create_html_report_from_workbook` may assemble
@@ -356,21 +392,31 @@ label, or interaction for an ordinary business request. The page may change only
 explicitly requests a frontend/workbench redesign. The same change must update its version, read-only
 API contract, browser verification, affected tests, AGENTS/README, and this Skill contract.
 
-Audit System `2.2.0` freezes the persistent two-level standard: the level-one page contains system
-overview, full run ledger, and technical archives. Runtime monitoring is embedded in the overview and
-must not appear as a separate navigation view. It reads the selected run snapshot and renders a truthful
-six-stage planet-and-orbit inspection chain (bootstrap, intake, analysis, evidence, decision,
-verification) plus the four newest observable events. A silent probe may inspect a running snapshot,
-but the visible system updates only when the selected workspace, terminal status, or six-stage progress
-index changes; events written inside the same stage must not rerender the overview. A running level-two
-record reloads under the same boundary rule, never on a fixed timer. Inactive catalog discovery is
-silent, and the ledger also retains its explicit manual refresh. A full-page reload always opens system
-overview; the ledger state saved
-before opening a level-two record is consumed only once when returning. Module actions stay exclusive:
-overview summaries and runtime monitoring have no record buttons, ledger rows only open records, and
-technical-archive cards only open logs and checkpoints. Every run expands into its own
-level-two page. A completed level-two page preserves the approved original dark scenario rail,
-cold-gray grid canvas, error-only hero, four grouped-error metrics, and scenario queues. A running or
+Audit System `2.6.0` freezes the persistent two-level standard: the level-one page contains system
+overview, full run ledger, and technical archives. The overview contains only aggregate metrics and the
+newest run records; it must not render a runtime chain, stage nodes, or observable event stream. Its
+`核销完成` metric shows the top-level input ZIP count from the newest completed run, not the cumulative
+number of completed run records. Its silent probe reads only the run catalog and rerenders when the catalog signature changes. The canonical
+level-one aggregate metric and completed-run count label present `error_count` as `待人工核验` without
+changing the underlying count or the level-two disposition content. The canonical six-stage checklist
+remains in manifests, snapshots, `/api/config`, and running-record refresh logic; it
+is not a level-one visualization. A running level-two record reloads only when its stage advances or it
+enters a terminal state, never on a fixed timer. Inactive catalog discovery is silent, and the ledger
+also retains its explicit manual refresh. A full-page reload always opens system overview; the ledger
+state saved before opening a level-two record is consumed only once when returning. Module actions stay
+exclusive: overview summaries have no record buttons, ledger rows only open records, and technical-
+archive cards only open logs and checkpoints. Every run expands into its own
+level-two page. A completed level-two page preserves the approved original dark rail and cold-gray grid
+canvas. Its rail contains exactly `错误总览` and `正确检查项`: the first stays the default red-accented
+view with four grouped-error metrics and vertically stacked error cards; the second is a green-accented
+human-readable pass ledger grouped first by audit type and then by check category. Both views must
+support combinable client-side filters, show the current match count, offer a one-action reset, and never
+modify the underlying snapshot. Audit type is fixed: it always lists every type present in the view and
+is never narrowed by another filter. Error confidence and pass category/confidence are linked facets:
+omit zero-result options under the other active conditions and append the corresponding match count to
+each remaining option. All grouped errors remain visible before filtering in the default overview, each
+with one audit-type badge. Neither view has a scenario
+queue, entry button, or per-type subpage. A running or
 failed page preserves only truthful status and diagnostic data. Customer output uses Chinese business
 labels. Technical JSON is visible only in the explicitly labeled technical archive and must never
 include model-private reasoning. Formal frontend delivery is PC-only: verify at 1440×960 and keep

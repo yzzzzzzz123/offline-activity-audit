@@ -284,7 +284,7 @@ class GiveawayPromotionAuditTests(unittest.TestCase):
                 ["giveaway_promotion"],
                 workbook_path=workbook,
             )
-            self.assertEqual(html_check["template_version"], "3.7.0")
+            self.assertEqual(html_check["template_version"], "3.9.0")
             html_text = html.read_text(encoding="utf-8")
             self.assertIn("giveaway_promotion", html_text)
             self.assertIn("额外搭赠", html_text)

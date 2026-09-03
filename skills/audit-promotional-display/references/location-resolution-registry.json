@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "entries": [
+    {
+      "contract_name": "挺拇指生活超市（横沥店）",
+      "visible_location": "东莞市·南铭购物乐园",
+      "city": "东莞市",
+      "relationship": "parent_child",
+      "contract_address": "东莞市横沥镇中山中路88号南铭购物乐园二楼",
+      "watermark_address": "东莞市横沥镇中山中路88号南铭购物乐园",
+      "distance_meters": null,
+      "basis": "公开门店清单将挺拇指生活超市列在横沥镇中山中路88号南铭购物乐园；东莞市市场监督管理局抽检附件同时将其经营主体东莞市中润超级市场有限公司列在同址二楼。合同门店是南铭购物乐园内的店铺，照片水印显示的是其所在商场，属于同一建筑的父子POI关系。",
+      "sources": [
+        {
+          "title": "横沥镇消费券适用门店清单（挺拇指生活超市地址）",
+          "publisher": "东莞时间网",
+          "url": "https://idg.timedg.com/p/21121592.html",
+          "checked_on": "2026-09-02"
+        },
+        {
+          "title": "食品监督抽检合格产品信息附件2（东莞市中润超级市场有限公司地址）",
+          "publisher": "东莞市市场监督管理局",
+          "url": "https://dgamr.dg.gov.cn/attachment/0/119/119636/3869289.pdf",
+          "checked_on": "2026-09-02"
+        }
+      ]
+    },
+    {
+      "contract_name": "润家连锁超市（美联购物中心店）",
+      "visible_location": "深圳市宝安区·深圳紫云快捷宾馆",
+      "city": "深圳市",
+      "relationship": "nearby",
+      "contract_address": "深圳市宝安区沙井街道上南片区美联购物中心（Google Maps坐标113.8425809,22.7183578）",
+      "watermark_address": "深圳市宝安区沙井街道上南大街169号联诚购物广场正对面（Google Maps坐标113.84195,22.71844）",
+      "distance_meters": 65.4,
+      "basis": "合同门店名称明确带有“美联购物中心店”；Google Maps分别定位美联购物中心和照片水印中的深圳紫云快捷宾馆，两个唯一地点的WGS84坐标直线距离为65.4米，不超过100米临近阈值。水印文字虽与合同门店不同，但地点关系为临近，高置信度，不构成门店水印错误。",
+      "sources": [
+        {
+          "title": "美联购物中心地点结果",
+          "publisher": "Google Maps",
+          "url": "https://www.google.com/maps/search/?api=1&query=%E7%BE%8E%E8%81%94%E8%B4%AD%E7%89%A9%E4%B8%AD%E5%BF%83%20%E6%B7%B1%E5%9C%B3%E5%B8%82%E5%AE%9D%E5%AE%89%E5%8C%BA%E6%B2%99%E4%BA%95%E8%A1%97%E9%81%93",
+          "checked_on": "2026-09-02"
+        },
+        {
+          "title": "深圳紫云快捷宾馆地点结果",
+          "publisher": "Google Maps",
+          "url": "https://www.google.com/maps/search/?api=1&query=%E6%B7%B1%E5%9C%B3%E7%B4%AB%E4%BA%91%E5%BF%AB%E6%8D%B7%E5%AE%BE%E9%A6%86",
+          "checked_on": "2026-09-02"
+        }
+      ]
+    }
+  ]
+}

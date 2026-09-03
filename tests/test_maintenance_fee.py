@@ -363,7 +363,7 @@ class MaintenanceFeeAuditTests(unittest.TestCase):
                 ["maintenance_fee"],
                 workbook_path=workbook,
             )
-            self.assertEqual(html_check["template_version"], "3.7.0")
+            self.assertEqual(html_check["template_version"], "3.9.0")
             self.assertGreater(html_check["record_counts"]["维护费用核销"], 0)
             self.assertIn("maintenance_fee", html.read_text(encoding="utf-8"))
 

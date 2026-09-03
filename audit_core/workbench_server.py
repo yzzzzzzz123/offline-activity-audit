@@ -18,6 +18,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .html_report import DATA_CLOSE, DATA_OPEN
+from .pass_check_log import attach_pass_check_log, load_workspace_results
 from .oss_intake import (
     CALLBACK_PATH,
     DEFAULT_CALLBACK_ATTEMPTS,
@@ -42,8 +43,8 @@ from .workbench_store import (
 )
 
 
-API_VERSION = "1.2"
-SYSTEM_VERSION = "2.2.0"
+API_VERSION = "1.5"
+SYSTEM_VERSION = "2.6.0"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8080
 MAX_API_BYTES = 24 * 1024 * 1024
@@ -240,13 +241,17 @@ class WorkbenchCatalog:
                     "dom_checkpoints": [],
                 }
             snapshot["run"] = manifest
+            snapshot["view"] = attach_pass_check_log(
+                snapshot.get("view"),
+                load_workspace_results(workspace),
+            )
             snapshot["recent_events"] = self.events(workspace_id)[-120:]
             return snapshot
 
         legacy = self.root / f"{workspace_id}.html"
         if not legacy.is_file():
             raise FileNotFoundError(workspace_id)
-        view = _legacy_payload(legacy)
+        view = attach_pass_check_log(_legacy_payload(legacy), {})
         modified = datetime.fromtimestamp(
             legacy.stat().st_mtime, timezone.utc
         ).isoformat(timespec="seconds")
@@ -539,10 +544,17 @@ class Handler(BaseHTTPRequestHandler):
             "system_version": SYSTEM_VERSION,
             "main_flow_tasks": main_flow_task_list(),
             "refresh_policy": {
-                "mode": "stage_boundary",
-                "visible_update_rule": "workspace_status_or_stage_index_change",
-                "running_probe_interval_ms": 2500,
-                "idle_probe_interval_ms": 15000,
+                "overview": {
+                    "mode": "catalog_signature",
+                    "visible_update_rule": "run_catalog_signature_change",
+                    "running_probe_interval_ms": 2500,
+                    "idle_probe_interval_ms": 15000,
+                },
+                "record": {
+                    "mode": "stage_boundary",
+                    "visible_update_rule": "workspace_status_or_stage_index_change",
+                    "running_probe_interval_ms": 2500,
+                },
             },
             "service_started_at": self.server.started_at,
             "html": ROOT_HTML.name,

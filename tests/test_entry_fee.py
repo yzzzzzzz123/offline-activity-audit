@@ -225,7 +225,7 @@ class EntryFeeTests(unittest.TestCase):
             self.assertEqual(verify_workbook(report, ["entry_fee"])["sheet_names"], ["进场费核销"])
             html = create_html_report_from_workbook(report, root / "audit.html")
             check = verify_html_report(html, ["entry_fee"], workbook_path=report)
-            self.assertEqual(check["template_version"], "3.7.0")
+            self.assertEqual(check["template_version"], "3.9.0")
             text = html.read_text(encoding="utf-8")
             self.assertIn("缺少合同要求的系统扣款凭证", text)
 

@@ -450,13 +450,44 @@ def verify_html_report(
         'id="error-only-preview-style"',
         'id="error-only-preview-script"',
         'id="eoBackTop"',
+        'id="eoErrorList"',
+        'id="eoErrorType"',
+        'id="eoErrorConfidence"',
+        'id="eoErrorKeyword"',
+        'id="eoErrorVisible"',
+        'id="eoErrorFacetSummary"',
+        'id="eoErrorFilterEmpty"',
+        'id="eoPassList"',
+        'id="eoPassType"',
+        'id="eoPassCategory"',
+        'id="eoPassConfidence"',
+        'id="eoPassKeyword"',
+        'id="eoPassFacetSummary"',
+        'id="eoPassFilterEmpty"',
         'class="eo-tab"',
-        'class="eo-enter"',
         'class="eo-error-card"',
+        'data-eo-view="passed"',
+        "核销类型 ·",
+        "正确检查项日志",
     )
     missing_controls = [control for control in required_controls if control not in html]
     if missing_controls:
         raise AuditError("HTML缺少交互按钮：" + "、".join(missing_controls))
+    forbidden_scenario_navigation = (
+        'class="eo-scenario-card"',
+        'class="eo-enter"',
+        'data-open="scenario-',
+        "进入错误清单",
+        "错误场景队列",
+    )
+    invalid_navigation = [
+        marker for marker in forbidden_scenario_navigation if marker in html
+    ]
+    if invalid_navigation:
+        raise AuditError(
+            "HTML不得按错误场景分类或要求再次进入："
+            + "、".join(invalid_navigation)
+        )
     if any(marker in html for marker in FORBIDDEN_DENSITY_TOGGLE_MARKERS):
         raise AuditError("HTML不得提供紧凑/宽松显示切换")
     forbidden_ui = [marker for marker in FORBIDDEN_UI_MARKERS if marker in html]

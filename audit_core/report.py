@@ -629,8 +629,8 @@ def _failed_display_controls(
         failed.append("现场照片")
     if item.get("period_match") != "match":
         failed.append("活动日期")
-    if item.get("store_match") == "mismatch":
-        failed.append("门店水印错误")
+    if item.get("store_match") in {"mismatch", "location_unverified"}:
+        failed.append("门店地点低置信度")
     elif item.get("store_match") not in {"exact", "compatible"}:
         failed.append("门店水印缺失或无法核对")
     if item.get("display_match") != "pass":
@@ -762,7 +762,7 @@ def _contract_photo_text(
     hard_failure = (
         not item.get("photo_files")
         or item.get("period_match") == "mismatch"
-        or item.get("store_match") == "mismatch"
+        or item.get("store_match") in {"mismatch", "location_unverified"}
         or item.get("display_match") == "fail"
         or (
             contract.get("requires_promotion")
@@ -772,7 +772,7 @@ def _contract_photo_text(
     )
     uncertain = (
         item.get("period_match") != "match"
-        or item.get("store_match") != "exact"
+        or item.get("store_match") not in {"exact", "compatible"}
         or item.get("display_match") != "pass"
     )
     level = "unmatched" if hard_failure else ("fuzzy" if uncertain else "exact")
@@ -877,12 +877,24 @@ def _display_resubmission_items(
         photo_details.append("补拍合同已确认商品的清晰包装，并保留完整现场环境")
     if item.get("period_match") != "match":
         photo_details.append("让完整拍摄日期看得见")
-    if item.get("store_match") == "mismatch":
-        photo_details.append(
-            f"更正照片水印地点：当前识别为“{item.get('visible_location') or '未识别'}”，"
-            f"应显示可与合同门店“{item.get('contract_store_name')}”唯一对应的门店名称或地址；"
-            "这是水印地点错误，不是清晰度问题"
-        )
+    if item.get("store_match") in {"mismatch", "location_unverified"}:
+        resolution = item.get("location_resolution") or {}
+        if resolution.get("status") == "unrelated":
+            distance = resolution.get("distance_meters")
+            distance_text = (
+                f"（两个唯一地点直线距离约{_number(distance)}米）"
+                if distance is not None
+                else ""
+            )
+            photo_details.append(
+                f"地图核验结果相距较远{distance_text}，地点置信度低；"
+                "补充能证明两处同址或临近的权威地址材料，否则重新提交水印地点正确的现场照片"
+            )
+        else:
+            photo_details.append(
+                "配置百度地图 MCP 后重新核验，或补充能唯一证明两处同址、商场与店铺关系或实际距离的权威地址材料；"
+                "当前地点置信度低，转人工核验"
+            )
     elif item.get("store_match") not in {"exact", "compatible"}:
         photo_details.append(
             f"让照片水印显示可与合同门店“{item.get('contract_store_name')}”唯一对应的门店名称或地址"
@@ -1199,9 +1211,29 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
     period_labels = {"match": "一致", "mismatch": "不一致", "unverifiable": "无法确认"}
     store_labels = {
         "exact": "一致",
-        "compatible": "基本一致",
-        "mismatch": "不一致",
+        "compatible": "地图核验高置信度",
+        "mismatch": "地图核验低置信度",
         "filename_only": "无法确认（仅见文件名）",
+        "location_unverified": "地图核验低置信度",
+    }
+    location_status_labels = {
+        "not_applicable": "未识别水印地点",
+        "not_needed": "名称直接一致",
+        "same_place": "同一POI",
+        "parent_child": "同一建筑内的商场与店铺",
+        "nearby": "100米内临近地点",
+        "unrelated": "相距较远，低置信度",
+        "ambiguous": "候选配对未形成可信结论，低置信度待人工核验",
+        "unavailable": "解析不可用，低置信度待人工核验",
+    }
+    location_provider_labels = {
+        "deterministic_name": "名称直接核对",
+        "baidu_maps_mcp": "百度地图 MCP",
+        "authoritative_registry": "已复核权威地点映射",
+        "baidu_maps_mcp+authoritative_registry": "百度地图 MCP与权威映射冲突复核",
+        "google_maps_grounding_lite_mcp": "历史 Google Maps MCP",
+        "google_maps_grounding_lite_mcp+authoritative_registry": "历史 Google Maps MCP与权威映射冲突复核",
+        "none": "未配置地点解析服务",
     }
     display_labels = {"pass": "符合", "fail": "不符合", "uncertain": "无法确认"}
     display_basis_labels = {
@@ -1548,6 +1580,95 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
         )
         store_record = contract_stores.get(int(item["store_line_no"]), {})
         contract_address = str(store_record.get("address") or "合同未列地址")
+        location_resolution = item.get("location_resolution") or {}
+        location_confidence = str(
+            location_resolution.get("confidence")
+            or (
+                "high"
+                if location_resolution.get("status") in {"same_place", "parent_child", "nearby"}
+                else "not_applicable"
+                if location_resolution.get("status") in {"not_applicable", "not_needed"}
+                else "low"
+            )
+        )
+        location_confidence_label = {
+            "high": "高",
+            "low": "低",
+            "not_applicable": "不适用",
+        }.get(location_confidence, "低")
+        location_status = location_status_labels.get(
+            str(location_resolution.get("status") or "unavailable"),
+            str(location_resolution.get("status") or "待人工核验"),
+        )
+        location_provider = location_provider_labels.get(
+            str(location_resolution.get("provider") or "none"),
+            str(location_resolution.get("provider") or "未配置地点解析服务"),
+        )
+        mcp_note = (
+            "地图MCP已调用"
+            if location_resolution.get("mcp_attempted")
+            else (
+                "地图MCP未配置"
+                if location_resolution.get("mcp_status") == "not_configured"
+                else (
+                    "未识别水印地点，无需调用地图MCP"
+                    if location_resolution.get("status") == "not_applicable"
+                    else "名称一致，无需调用地图MCP"
+                )
+            )
+        )
+        location_basis = _clip(
+            location_resolution.get("basis")
+            or item.get("store_match_basis")
+            or "未提供地点解析依据",
+            360,
+        )
+        contract_location_poi = location_resolution.get("contract_poi") or {}
+        watermark_location_poi = location_resolution.get("watermark_poi") or {}
+        coordinate_system = location_resolution.get("coordinate_system")
+        location_data_parts: list[str] = []
+        if contract_location_poi.get("address"):
+            location_data_parts.append(
+                f"合同地址：{contract_location_poi['address']}"
+            )
+        if watermark_location_poi.get("address"):
+            location_data_parts.append(
+                f"水印地址：{watermark_location_poi['address']}"
+            )
+        if contract_location_poi.get("source_url"):
+            location_data_parts.append(
+                "合同地点来源："
+                f"{contract_location_poi.get('source_title') or contract_location_poi.get('name') or '地点结果'} "
+                f"{contract_location_poi['source_url']}"
+            )
+        if watermark_location_poi.get("source_url"):
+            location_data_parts.append(
+                "水印地点来源："
+                f"{watermark_location_poi.get('source_title') or watermark_location_poi.get('name') or '地点结果'} "
+                f"{watermark_location_poi['source_url']}"
+            )
+        if all(
+            contract_location_poi.get(key) is not None
+            and watermark_location_poi.get(key) is not None
+            for key in ("longitude", "latitude")
+        ):
+            location_data_parts.append(
+                "坐标："
+                f"{contract_location_poi['longitude']},{contract_location_poi['latitude']} → "
+                f"{watermark_location_poi['longitude']},{watermark_location_poi['latitude']}"
+                + (f"（{coordinate_system}）" if coordinate_system else "")
+            )
+        if location_resolution.get("distance_meters") is not None:
+            location_data_parts.append(
+                f"直线距离：{_number(location_resolution['distance_meters'])}米"
+            )
+        if not location_data_parts:
+            location_data_parts.append(
+                "名称直接对应，无需坐标检索"
+                if location_resolution.get("status") == "not_needed"
+                else "本次未取得可比地址或坐标"
+            )
+        location_data = _clip("；".join(location_data_parts), 700)
         failed_controls = _failed_display_controls(
             item,
             contract,
@@ -1585,11 +1706,20 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             empty="未识别到有效文字",
         )
         visual_basis = _clip(display_description, 120)
+        location_confidence_line = (
+            f"地点置信度：{location_confidence_label}\n"
+            if location_confidence != "not_applicable"
+            else ""
+        )
         photo_column_text = (
             f"文件：{photo_names}\n"
             f"可见文字：{visible_text}\n"
             f"识别日期：{item.get('visible_date') or '未识别'}\n"
             f"识别地点：{item.get('visible_location') or '未识别'}\n"
+            f"地点核验：{location_status}（{location_provider}；{mcp_note}）\n"
+            f"{location_confidence_line}"
+            f"地点核验数据：{location_data}\n"
+            f"地点核验依据：{location_basis}\n"
             f"陈列标准核验：{display}（{display_basis}）\n"
             f"视觉依据：{visual_basis}\n"
             f"可见纵列数：{vertical_count_text}\n"
@@ -1620,6 +1750,7 @@ def _add_display_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
                 contract_product_result=contract_product_result,
             )
             + "\n"
+            f"合同门店 → 水印地点：{location_status}；{location_basis}\n"
             f"现场照片文字及包装关键特征 → 商品知识库：{photo_knowledge}\n"
             f"已确认现场商品 → 合同商品范围：{_photo_contract_product_text(item)}\n"
             "核销边界：现场照片不参与销售明细核销；销售Excel仅核对合同附件"

@@ -23,11 +23,14 @@
       const displayNumber = (value) => Number.isFinite(value)
         ? String(Number(value.toFixed(6)))
         : '未识别';
+      const confidenceLabel = (value) => ({ high: '高', medium: '中', low: '低' }[value] || '高');
+      const normalizedConfidence = (value) => ['high', 'medium', 'low'].includes(value) ? value : 'high';
       const headerFiles = (sheet, index) => {
         const values = lines(sheet.headers?.[index] || '');
         return (values.length > 1 ? values.slice(1) : values).join('、');
       };
       const issueRows = (sheet) => (sheet.rows || []).filter((row) => row.status === 'issue');
+      let errorSequence = 0;
       const textBlock = (value) => lines(value).map((line) => `<div class="eo-line">${escapeHtml(line)}</div>`).join('');
       const actionText = (row) => {
         const value = String(row.values?.[5] || '');
@@ -36,11 +39,11 @@
         const items = lines(match[1]).map((line) => line.replace(/^\d+\.\s*/, '')).filter(Boolean);
         return items.join('；') || '补充能够直接核验该错误的清晰材料后重新提交。';
       };
-      const errorCard = ({ index, title, scope, source = '', baseline = '', problem, action, extra = '', search = '' }) => `
-        <article class="eo-error-card" data-search="${escapeHtml([title, scope, source, baseline, problem, action, search].join(' ').toLocaleLowerCase('zh-CN'))}">
-          <div class="eo-error-index">${String(index).padStart(2, '0')}</div>
+      const errorCard = ({ title, auditType, source = '', baseline = '', problem, action, extra = '', search = '', confidence = 'high' }) => `
+        <article class="eo-error-card" data-audit-type="${escapeHtml(auditType)}" data-error-confidence="${normalizedConfidence(confidence)}" data-search="${escapeHtml([title, auditType, source, baseline, problem, action, search].join(' ').toLocaleLowerCase('zh-CN'))}">
+          <div class="eo-error-index">${String(++errorSequence).padStart(2, '0')}</div>
           <div class="eo-error-main">
-            <header class="eo-error-head"><h3>${escapeHtml(title)}</h3><span class="eo-scope">${escapeHtml(scope)}</span></header>
+            <header class="eo-error-head"><h3>${escapeHtml(title)}</h3><div class="eo-error-badges"><span class="eo-scope">核销类型 · ${escapeHtml(auditType)}</span><span class="eo-error-confidence">置信度 · ${confidenceLabel(normalizedConfidence(confidence))}</span></div></header>
             ${source ? `<div class="eo-field source"><span>问题文件</span><div>${escapeHtml(source)}</div></div>` : ''}
             ${baseline ? `<div class="eo-field source"><span>对照文件</span><div>${escapeHtml(baseline)}</div></div>` : ''}
             <div class="eo-field"><span>错误原因</span><div>${problem}</div></div>
@@ -61,8 +64,7 @@
         const excelFile = headerFiles(sheet, 1);
         const settlementFile = headerFiles(sheet, 2);
         const transferFiles = headerFiles(sheet, 3);
-        const cards = rows.map((row, index) => {
-          const scope = row.section === 'settlement' ? '结算与付款' : '商品核销';
+        const cards = rows.map((row) => {
           let source = settlementFile;
           let baseline = excelFile;
           let reason = row.values?.[4] || row.values?.[3] || row.values?.[5];
@@ -80,9 +82,9 @@
             reason = `销售Excel读取到${displayNumber(storeCount)}家门店；转账凭证目前只能确认金额，没有完整显示每笔收款人、对应门店和完整交易日期。因此无法确认Excel中的${displayNumber(storeCount)}家门店分别由谁收款、对应哪一笔转账以及具体转账日期。`;
           }
           const problem = textBlock(reason);
-          return errorCard({ index: index + 1, title: row.heading, scope, source, baseline, problem, action: actionText(row), search: (row.values || []).join(' ') });
+          return errorCard({ title: row.heading, auditType: '人员激励', source, baseline, problem, action: actionText(row), search: (row.values || []).join(' '), confidence: row.confidence });
         }).join('');
-        return { count: rows.length, upstream: settlementCount, local: rows.length - settlementCount, html: cards || '<div class="eo-empty">没有发现核销错误</div>' };
+        return { count: rows.length, upstream: settlementCount, local: rows.length - settlementCount, html: cards };
       };
 
       const displayGlobalLabels = new Set([
@@ -95,26 +97,33 @@
       };
       const displayLocalLabels = (row) => displayIssueLabels(row).filter((label) => !displayGlobalLabels.has(label));
       const displayLocalLabel = (row, label) => {
-        if (!['合同门店', '门店水印错误', '门店水印缺失或无法核对'].includes(label)) return label;
+        if (!['合同门店', '门店水印错误', '门店地点待核验', '门店地点低置信度', '门店水印缺失或无法核对'].includes(label)) return label;
+        if (['门店水印错误', '门店地点待核验', '门店地点低置信度'].includes(label)) return '门店地点低置信度';
         if (label !== '合同门店') return label;
-        return String(row.values?.[3] || '').includes('门店不一致') ? '门店水印错误' : '门店水印缺失或无法核对';
+        return String(row.values?.[3] || '').includes('门店不一致') ? '门店地点低置信度' : '门店水印缺失或无法核对';
       };
       const localDisplayProblem = (row, labels) => {
         const facts = [];
         const photo = row.values?.[1] || '';
         const compare = row.values?.[3] || '';
         if (labels.includes('活动日期')) facts.push(lineWith(photo, '识别日期：'));
-        const hasStoreMismatch = labels.includes('门店水印错误')
+        const hasStoreLowConfidence = labels.includes('门店地点低置信度')
+          || labels.includes('门店水印错误')
           || (labels.includes('合同门店') && compare.includes('门店不一致'));
         const hasStoreEvidenceGap = labels.includes('门店水印缺失或无法核对')
           || (labels.includes('合同门店') && !compare.includes('门店不一致'));
-        if (hasStoreMismatch || hasStoreEvidenceGap) {
+        if (hasStoreLowConfidence || hasStoreEvidenceGap) {
           const contractStore = lineWith(row.values?.[0], '门店：').replace(/^门店：/, '') || row.heading;
           const visibleLocation = lineWith(photo, '识别地点：').replace(/^识别地点：/, '') || '未识别';
-          if (hasStoreMismatch) {
+          const locationCheck = lineWith(photo, '地点核验：');
+          const locationConfidence = lineWith(photo, '地点置信度：');
+          const locationBasis = lineWith(photo, '地点核验依据：').replace(/^地点核验依据：/, '');
+          if (hasStoreLowConfidence) {
             facts.push(`合同门店：${contractStore}`);
             facts.push(`照片水印地点：${visibleLocation}`);
-            facts.push(`水印地点已清楚识别，但“${visibleLocation}”与合同门店“${contractStore}”不一致；这是门店水印错误，不是照片没看清。文件名不能覆盖水印地点冲突。`);
+            facts.push(locationCheck);
+            facts.push(locationConfidence || '地点置信度：低');
+            facts.push(locationBasis || '合同门店与照片水印文字不同，当前地图证据未形成高置信度同址或临近结论，转人工核验。');
           } else {
             facts.push(`合同门店：${contractStore}`);
             facts.push(`照片水印地点：${visibleLocation}`);
@@ -139,15 +148,16 @@
         if (labels.includes('现场商品知识库')) actions.push('补拍同一商品包装：既要看清可对应知识库的名称片段、短码、规格或款式文字，也要保留足够完整的包装外观用于参考图视觉比对；文字与外观能唯一对应同一知识库商品即可，不强制拍到完整名称或69码');
         if (labels.includes('陈列标准')) actions.push('补一张完整堆头全景，能看清1平方米或数清4列');
         if (labels.includes('活动日期')) actions.push('补交能看清完整拍摄日期的现场照片');
-        const hasStoreMismatch = labels.includes('门店水印错误')
+        const hasStoreLowConfidence = labels.includes('门店地点低置信度')
+          || labels.includes('门店水印错误')
           || (labels.includes('合同门店') && String(row.values?.[3] || '').includes('门店不一致'));
         const hasStoreEvidenceGap = labels.includes('门店水印缺失或无法核对')
           || (labels.includes('合同门店') && !String(row.values?.[3] || '').includes('门店不一致'));
-        if (hasStoreMismatch || hasStoreEvidenceGap) {
+        if (hasStoreLowConfidence || hasStoreEvidenceGap) {
           const contractStore = lineWith(row.values?.[0], '门店：').replace(/^门店：/, '') || row.heading;
           const visibleLocation = lineWith(row.values?.[1], '识别地点：').replace(/^识别地点：/, '') || '未识别';
-          actions.push(hasStoreMismatch
-            ? `重新提交水印地点正确的现场照片：当前水印为“${visibleLocation}”，应显示可与合同门店“${contractStore}”唯一对应的门店名称或地址；不是补拍清晰度`
+          actions.push(hasStoreLowConfidence
+            ? '补充能唯一证明两处同址、商场与店铺关系或实际距离的权威地址材料；若地图确认相距较远且无法证明关联，再提交水印地点正确的现场照片'
             : `补交水印中能看清并可与合同门店“${contractStore}”唯一对应的门店名称或地址`);
         }
         return actions.join('；') || '补交能够直接证明本店现场执行情况的清晰照片。';
@@ -251,7 +261,7 @@
           const blockingProblem = contractProblem.filter((line) => !line.includes('水印'));
           const blockingAction = actionText(activity).split('；').filter((item) => item && !item.includes('水印')).join('；');
           if (blockingProblem.length || blockingAction) {
-            upstream.push({ title: '合同PDF核心字段未通过', scope: '合同材料', source: contractFile, problem: textBlock(blockingProblem.join('\n')), action: blockingAction, search: (activity.values || []).join(' ') });
+            upstream.push({ title: '合同PDF核心字段未通过', scope: '合同材料', source: contractFile, problem: textBlock(blockingProblem.join('\n')), action: blockingAction, search: (activity.values || []).join(' '), confidence: activity.confidence });
           }
         }
         if (knowledgeRows.length) {
@@ -262,6 +272,7 @@
             action: '在知识库对应商品的 product_code_aliases 中登记合同业务产品编码，或更正合同中有误的产品编码；商品名称仍只作模糊辅助。',
             extra: detailsTable(`查看 ${knowledgeRows.length} 行合同商品错误清单`, ['合同位置', '合同商品', '知识库商品', '具体错误'], knowledgeRows),
             search: knowledgeRows.flat().join(' '),
+            confidence: 'high',
           });
         }
         if (salesRows.length) {
@@ -274,41 +285,42 @@
             action: '只更正未识别或不一致的严格字段，并让销售Excel逐行对应合同附件；商品名称无需逐字一致。',
             extra: detailsTable(`查看 ${salesRows.length} 行销售错误清单`, ['合同位置', '合同商品', '销售Excel', '具体错误'], salesRows),
             search: salesRows.flat().join(' '),
+            confidence: 'high',
           });
         }
-        const upstreamCards = upstream.map((item, index) => errorCard({ index: index + 1, ...item })).join('');
+        const upstreamCards = upstream.map((item) => errorCard({ ...item, auditType: '堆头/陈列' })).join('');
         const localRows = (sheet.rows || []).filter((row) => row.section === 'detail' && row.status === 'issue' && displayLocalLabels(row).length);
-        const localCards = localRows.map((row, index) => {
+        const localCards = localRows.map((row) => {
           const labels = displayLocalLabels(row);
           const facts = localDisplayProblem(row, labels);
           const problem = `<div class="eo-chips">${labels.map((label) => `<span class="eo-chip">${escapeHtml(displayLocalLabel(row, label))}</span>`).join('')}</div>${facts.length ? `<div style="margin-top:8px">${textBlock(facts.join('\n'))}</div>` : ''}`;
           const source = afterPrefix(row.values?.[1], '文件：') || headerFiles(sheet, 1);
-          return errorCard({ index: index + 1, title: row.heading, scope: '门店现场', source, baseline: contractFile, problem, action: localDisplayAction(row, labels), search: (row.values || []).join(' ') });
+          return errorCard({ title: row.heading, auditType: '堆头/陈列', source, baseline: contractFile, problem, action: localDisplayAction(row, labels), search: (row.values || []).join(' '), confidence: row.confidence });
         }).join('');
-        const html = `${upstreamCards}<div class="eo-section-title"><h3>门店自身错误</h3><span>上游错误不在门店中重复</span></div>${localCards || '<div class="eo-empty">没有发现门店自身错误</div>'}`;
+        const html = `${upstreamCards}${localCards}`;
         return { count: upstream.length + localRows.length, upstream: upstream.length, local: localRows.length, html };
       };
 
       const posterView = (sheet) => {
         const rows = issueRows(sheet);
-        const cards = rows.map((row, index) => {
+        const cards = rows.map((row) => {
           const problem = textBlock([row.values?.[1], row.values?.[4]].filter(Boolean).join('\n'));
           const source = afterPrefix(row.values?.[0], '来源：');
-          return errorCard({ index: index + 1, title: row.heading.replace(/^错误项：/, ''), scope: '展示道具', source, problem, action: actionText(row), search: (row.values || []).join(' ') });
+          return errorCard({ title: row.heading.replace(/^错误项：/, ''), auditType: '海报/展示道具', source, problem, action: actionText(row), search: (row.values || []).join(' '), confidence: row.confidence });
         }).join('');
-        return { count: rows.length, upstream: rows.length, local: 0, html: cards || '<div class="eo-empty">没有发现核销错误</div>' };
+        return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
 
-      const groupedIssueView = (sheet, scope) => {
+      const groupedIssueView = (sheet, auditType) => {
         const rows = issueRows(sheet);
-        const cards = rows.map((row, index) => {
+        const cards = rows.map((row) => {
           const title = String(row.heading || '').replace(/^问题：/, '');
           const source = afterPrefix(row.values?.[0], '文件：');
           const problem = textBlock([row.values?.[1], row.values?.[2], row.values?.[3], row.values?.[4]].filter(Boolean).join('\n'));
           const action = afterPrefix(row.values?.[5], '处理方式：') || actionText(row);
-          return errorCard({ index: index + 1, title, scope, source, problem, action, search: (row.values || []).join(' ') });
+          return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence });
         }).join('');
-        return { count: rows.length, upstream: rows.length, local: 0, html: cards || '<div class="eo-empty">没有发现核销错误</div>' };
+        return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
 
       const projections = data.sheets.map((sheet) => {
@@ -328,98 +340,401 @@
       const materialTotal = projections.reduce((sum, item) => sum + (item.upstream || 0), 0);
       const fieldTotal = projections.reduce((sum, item) => sum + (item.local || 0), 0);
       const materialPercent = total ? Math.round(materialTotal / total * 100) : 0;
-      const metaFor = (item, index) => {
-        if (item.sheet.scenario === 'personnel_incentive') return {
-          code: 'PI', queue: String(index + 1).padStart(2, '0'), accent: '#cf654f', eyebrow: 'PERSONNEL INCENTIVE', navNote: '商品 / 结算错误',
-          note: '商品核销与结算付款中发现需要修正的项目。', parts: [['商品核销', item.local || 0], ['结算与付款', item.upstream || 0]],
-        };
-        if (item.sheet.scenario === 'promotional_display') return {
-          code: 'PD', queue: String(index + 1).padStart(2, '0'), accent: '#d79a20', eyebrow: 'PROMOTIONAL DISPLAY', navNote: '合同 / 门店错误',
-          note: '合同、销售明细与门店现场错误已分层归并。', parts: [['合同与销售', item.upstream || 0], ['门店现场', item.local || 0]],
-        };
-        if (item.sheet.scenario === 'poster_material') return {
-          code: 'PR', queue: String(index + 1).padStart(2, '0'), accent: '#238b84', eyebrow: 'DISPLAY PROPS', navNote: '展示材料错误',
-          note: '仅列展示道具材料中需要重新提交的错误。', parts: [['展示道具', item.upstream || item.count]],
-        };
-        if (item.sheet.scenario === 'maintenance_fee') return {
-          code: 'MF', queue: String(index + 1).padStart(2, '0'), accent: '#2f75b5', eyebrow: 'MAINTENANCE FEE', navNote: '资料 / 金额错误',
-          note: '仅列维护费用资料链、费用性质与金额复算中的处理项。', parts: [['资料与金额', item.upstream || item.count]],
-        };
-        if (item.sheet.scenario === 'giveaway_promotion') return {
-          code: 'GP', queue: String(index + 1).padStart(2, '0'), accent: '#4f8b57', eyebrow: 'EXTRA GIVEAWAY', navNote: '搭赠 / 执行错误',
-          note: '仅列额外搭赠合同、出货、结算、小票与活动执行中的处理项。', parts: [['搭赠与执行', item.upstream || item.count]],
-        };
-        if (item.sheet.scenario === 'price_difference_support') return {
-          code: 'PD', queue: String(index + 1).padStart(2, '0'), accent: '#c55a11', eyebrow: 'PRICE DIFFERENCE', navNote: 'POS / 照片错误',
-          note: '仅列价格补差合同、POS、结算、全门店活动价照片与金额复算中的处理项。', parts: [['补差与执行', item.upstream || item.count]],
-        };
-        if (item.sheet.scenario === 'pos_target_incentive') return {
-          code: 'PT', queue: String(index + 1).padStart(2, '0'), accent: '#00a6a6', eyebrow: 'POS TARGET INCENTIVE', navNote: '达标 / 满减错误',
-          note: '仅列经销商POS达标合同、销售基数、结算、满减活动证明和比例复算中的处理项。', parts: [['达标与活动', item.upstream || item.count]],
-        };
-        if (item.sheet.scenario === 'entry_fee') return {
-          code: 'EF', queue: String(index + 1).padStart(2, '0'), accent: '#7f6000', eyebrow: 'ENTRY FEE', navNote: '合同 / 上架错误',
-          note: '仅列进场费合同、合同门店和商品上架、系统扣款凭证与条码费复算中的处理项。', parts: [['进场与扣款', item.upstream || item.count]],
-        };
-        if (item.sheet.scenario === 'self_procured_gift_material') return {
-          code: 'SG', queue: String(index + 1).padStart(2, '0'), accent: '#a64d79', eyebrow: 'SELF-PROCURED GIFT', navNote: '赠品 / POS错误',
-          note: '仅列客户自采赠品物料合同、票据付款、盖章POS及电子表、全门店水印返图、结算和赠送数量复算中的处理项。', parts: [['赠品物料与执行', item.upstream || item.count]],
-        };
-        return {
-          code: 'OE', queue: String(index + 1).padStart(2, '0'), accent: '#7b5aa6', eyebrow: 'OTHER EXPENSE', navNote: '归类 / 审批错误',
-          note: '仅列其他费用归类、特殊审批与基础材料中的处理项。', parts: [['归类与审批', item.upstream || item.count]],
-        };
-      };
-      const navItems = [{ view: 'home', selected: true, code: 'OV', label: '错误总览', note: '本批次全部错误', count: total }]
-        .concat(projections.map((item, index) => {
-          const meta = metaFor(item, index);
-          return { view: `scenario-${index}`, selected: false, code: meta.code, label: item.label, note: meta.navNote, count: item.count };
+      const typeCount = projections.filter((item) => item.count > 0).length;
+      const unifiedErrors = projections.map((item) => item.html).filter(Boolean).join('');
+      const errorTypes = [...new Set(projections.map((item) => item.label))];
+      const errorTypeOptions = errorTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('');
+      const errorConfidenceOptions = ['high', 'medium', 'low'].map((confidence) => `<option value="${confidence}">${confidenceLabel(confidence)}置信度</option>`).join('');
+
+      const fallbackPassGroups = data.sheets.map((sheet) => {
+        const projection = projections.find((item) => item.sheet === sheet);
+        const items = (sheet.rows || []).filter((row) => row.status === 'pass').map((row, index) => ({
+          check_id: `legacy-${sheet.scenario}-${index + 1}`,
+          category: '核销明细',
+          title: '明细检查项通过',
+          subject: row.heading || `第${row.excel_row || index + 1}行`,
+          basis: [...(row.values || [])].reverse().find(Boolean) || '检查结果已通过。',
+          source_files: [],
+          source_file_count: 0,
+          confidence: row.confidence || 'high',
+          scope: row.section === 'detail' ? 'product' : 'material',
         }));
-      const nav = navItems.map((item) => `<button class="eo-tab" type="button" data-view="${item.view}" aria-selected="${item.selected}">
-        <span class="eo-nav-glyph">${item.code}</span><span class="eo-nav-copy"><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.note)}</small></span><em>${item.count}</em>
-      </button>`).join('');
-      const scenarioCards = projections.map((item, index) => {
-        const meta = metaFor(item, index);
-        const parts = meta.parts.map(([label, value]) => `<span>${escapeHtml(label)} ${value}</span>`).join('');
-        const searchText = `${item.label} ${meta.note} ${meta.parts.flat().join(' ')} ${item.html}`.replace(/<[^>]+>/g, ' ').toLocaleLowerCase('zh-CN');
-        return `<article class="eo-scenario-card" style="--scenario-accent:${meta.accent}" data-search="${escapeHtml(searchText)}">
-          <div class="eo-scenario-code">${meta.queue}<small>QUEUE</small></div>
-          <div class="eo-scenario-copy"><small>${meta.eyebrow}</small><h2>${escapeHtml(item.label)}</h2><p>${escapeHtml(meta.note)}</p><div class="eo-breakdown">${parts}</div></div>
-          <div class="eo-scenario-count"><span>待处理</span><strong>${item.count}</strong><em>项</em></div>
-          <button class="eo-enter" type="button" data-open="scenario-${index}">进入错误清单&nbsp; →</button></article>`;
+        return {
+          scenario: sheet.scenario,
+          audit_type: projection?.label || sheet.name || '其他核销',
+          title: sheet.name || projection?.label || '其他核销',
+          item_count: items.length,
+          category_counts: items.length ? { 核销明细: items.length } : {},
+          items,
+        };
+      });
+      const suppliedPassLog = data.pass_check_log && typeof data.pass_check_log === 'object' ? data.pass_check_log : null;
+      const passGroups = Array.isArray(suppliedPassLog?.groups) ? suppliedPassLog.groups : fallbackPassGroups;
+      const passItems = passGroups.flatMap((group) => Array.isArray(group.items) ? group.items : []);
+      const passTotal = passItems.length;
+      const passTypeCount = passGroups.filter((group) => Number(group.item_count ?? group.items?.length ?? 0) > 0).length;
+      const passScopes = passItems.reduce((counts, item) => {
+        const scope = ['material', 'product', 'store', 'amount'].includes(item.scope) ? item.scope : 'material';
+        counts[scope] += 1;
+        return counts;
+      }, { material: 0, product: 0, store: 0, amount: 0 });
+      const passMaterialProduct = passScopes.material + passScopes.product;
+      const passStoreAmount = passScopes.store + passScopes.amount;
+      const passMaterialPercent = passTotal ? Math.round(passMaterialProduct / passTotal * 100) : 0;
+      const passTypes = [...new Set(passGroups
+        .map((group) => group.audit_type || group.title || '其他核销'))];
+      const passCategories = [...new Set(passItems.map((item) => item.category || '核销检查'))];
+      const passConfidences = ['high', 'medium', 'low'].filter((confidence) =>
+        passItems.some((item) => normalizedConfidence(item.confidence) === confidence)
+      );
+      const passTypeOptions = passTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('');
+      const passCategoryOptions = passCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+      const passConfidenceOptions = passConfidences.map((confidence) => `<option value="${confidence}">${confidenceLabel(confidence)}置信度</option>`).join('');
+      const sourceFiles = (item) => {
+        const files = Array.isArray(item.source_files) ? item.source_files.filter(Boolean) : [];
+        const totalFiles = Math.max(files.length, Number(item.source_file_count || 0));
+        if (!files.length) return '';
+        const chips = files.map((file) => `<span>${escapeHtml(file)}</span>`).join('');
+        const remaining = totalFiles > files.length ? `<em>另有 ${totalFiles - files.length} 个来源文件</em>` : '';
+        return `<div class="eo-pass-field eo-pass-source"><span>来源文件</span><div class="eo-pass-files">${chips}${remaining}</div></div>`;
+      };
+      let passSequence = 0;
+      const passGroupHtml = passGroups.map((group, groupIndex) => {
+        const items = Array.isArray(group.items) ? group.items : [];
+        const categories = new Map();
+        items.forEach((item) => {
+          const category = item.category || '核销检查';
+          if (!categories.has(category)) categories.set(category, []);
+          categories.get(category).push(item);
+        });
+        const categoryHtml = [...categories.entries()].map(([category, categoryItems]) => {
+          const cards = categoryItems.map((item) => {
+            passSequence += 1;
+            const confidenceValue = normalizedConfidence(item.confidence);
+            const confidence = confidenceLabel(confidenceValue);
+            return `<article class="eo-pass-card" data-pass-check="${escapeHtml(item.check_id || `pass-${passSequence}`)}" data-pass-category="${escapeHtml(category)}" data-pass-confidence="${confidenceValue}">
+              <div class="eo-pass-index"><span>PASS</span><strong>${String(passSequence).padStart(4, '0')}</strong></div>
+              <div class="eo-pass-main"><header class="eo-pass-head"><div><small>${escapeHtml(category)}</small><h3>${escapeHtml(item.title || '检查项通过')}</h3></div><span class="eo-pass-confidence">置信度 · ${confidence}</span></header>
+                <div class="eo-pass-field"><span>核验对象</span><strong>${escapeHtml(item.subject || group.audit_type || '本次材料')}</strong></div>
+                <div class="eo-pass-field"><span>判断依据</span><div>${textBlock(item.basis || '结构化核销结果已确认该检查项通过。')}</div></div>
+                ${sourceFiles(item)}
+              </div>
+            </article>`;
+          }).join('');
+          return `<section class="eo-pass-category" data-pass-category-block="${escapeHtml(category)}"><header><span>${escapeHtml(category)}</span><em data-pass-category-visible>${categoryItems.length} 项</em></header><div class="eo-pass-stack">${cards}</div></section>`;
+        }).join('');
+        const auditType = group.audit_type || group.title || '其他核销';
+        const categorySummary = [...categories.entries()].map(([label, categoryItems]) => `<span data-pass-breakdown-category="${escapeHtml(label)}">${escapeHtml(label)} <b data-pass-breakdown-visible>${categoryItems.length}</b></span>`).join('');
+        return `<section class="eo-pass-group" data-pass-scenario="${escapeHtml(group.scenario || `group-${groupIndex}`)}" data-pass-type="${escapeHtml(auditType)}">
+          <header class="eo-pass-group-head"><div class="eo-pass-group-code">${String(groupIndex + 1).padStart(2, '0')}<small>TYPE</small></div><div><small>核销类型 · ${escapeHtml(auditType)}</small><h2>${escapeHtml(group.title || group.audit_type || '正确检查项')}</h2><div class="eo-pass-breakdown">${categorySummary || '<span>暂无通过项</span>'}</div></div><div class="eo-pass-group-count"><span>当前显示</span><strong data-pass-group-visible>${items.length}</strong><em>项</em></div></header>
+          ${categoryHtml || '<div class="eo-pass-empty"><strong>本类型暂无可独立确认的通过项</strong><span>这不代表未执行核验；没有充分证据的检查不会被写成通过。</span></div>'}
+        </section>`;
       }).join('');
-      const views = projections.map((item, index) => `<section class="eo-view" id="scenario-${index}" hidden>
-        <div class="eo-ledger"><div class="eo-page-command"><button type="button" data-open="home">← 返回错误总览</button><span>ERROR QUEUE / ${escapeHtml(metaFor(item, index).code)}</span></div><header class="eo-ledger-head"><div class="eo-ledger-title"><small>核销错误清单</small><h2>${escapeHtml(item.label)}</h2><p>本页只列需要处理的错误；通过项、合同基准和核销过程均已隐藏。</p></div><div class="eo-impact"><span>待处理</span><strong>${item.count} 项</strong></div></header><div class="eo-stack">${item.html}</div><div class="eo-no-match" hidden>没有匹配的错误</div></div>
-      </section>`).join('');
 
       document.body.className = 'error-only-page';
       document.body.innerHTML = `<header class="eo-topbar"><div class="eo-topbar-inner">
-        <div class="eo-brand"><div class="eo-brand-mark">参半<small>CANBAN</small></div><div class="eo-brand-copy"><strong>离线活动核销</strong><span>异常处置工作台 / ERROR DESK</span></div></div>
-      </div></header><main class="eo-shell"><div class="eo-app-grid"><aside class="eo-rail" aria-label="核销场景导航">
-        <div class="eo-rail-head"><div><div class="eo-rail-code">CB / OFFLINE AUDIT</div><h2>核销主工作台</h2></div><p>错误处置视图</p></div>
-        <nav class="eo-rail-nav" aria-label="错误场景">${nav}</nav>
-        <div class="eo-rail-foot"><span>本批次异常范围</span><strong>${projections.length} 个核销场景</strong><em>${total} 组错误待处理</em></div>
-      </aside><div class="eo-workspace">
-        <section class="eo-view" id="home"><div class="eo-home-cockpit">
-          <header class="eo-cockpit-hero"><div class="eo-hero-copy"><span class="eo-kicker">AUDIT ERROR COMMAND</span><h1>核销错误处置总览</h1><p>当前主界面只汇总需要处理的错误。通过项、核销过程以及门店中重复出现的上游错误均不展示。</p></div><div class="eo-total-gauge"><span>待处理总数</span><strong>${total}</strong><em>组错误</em></div></header>
-          <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销场景</span><small>存在错误的业务场景</small></div><strong>${projections.length}</strong></article><article class="eo-metric" style="--metric-accent:#d84b3e"><div class="eo-metric-copy"><span>错误总数</span><small>按错误清单归并后的数量</small></div><strong>${total}</strong></article><article class="eo-metric" style="--metric-accent:#b76d15"><div class="eo-metric-copy"><span>材料 / 结算错误</span><small>合同、销售、结算及道具材料</small></div><strong>${materialTotal}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>商品 / 门店错误</span><small>商品核销与门店现场问题</small></div><strong>${fieldTotal}</strong></article></div>
-          <section class="eo-composition"><div class="eo-composition-title"><small>ERROR COMPOSITION</small><strong>错误构成</strong></div><div class="eo-composition-bar" aria-label="错误构成：材料与结算 ${materialTotal}，商品与门店 ${fieldTotal}"><i style="width:${materialPercent}%"></i><b style="width:${100 - materialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 结算 ${materialTotal}</span><span><i></i>商品 / 门店 ${fieldTotal}</span></div></section>
-          <section class="eo-queue-panel"><header class="eo-queue-head"><div><small>REJECTED SCENARIO QUEUE</small><h2>错误场景队列</h2></div><p>选择场景进入对应错误清单<br>不展示核销过程与通过记录</p></header><div class="eo-scenario-grid">${scenarioCards}</div></section>
-          <div class="eo-no-match" hidden>没有匹配的错误场景</div>
-        </div></section>${views}
-      </div></div></main><button class="eo-back-top" id="eoBackTop" type="button">返回顶部</button>`;
+        <div class="eo-brand"><div class="eo-brand-mark">参半<small>CANBAN</small></div><div class="eo-brand-copy"><strong>离线活动核销</strong><span>核销判断工作台 / AUDIT DESK</span></div></div>
+      </div></header><main class="eo-shell"><div class="eo-app-grid"><aside class="eo-rail" aria-label="核销结果导航">
+        <div class="eo-rail-head"><div><div class="eo-rail-code">CB / OFFLINE AUDIT</div><h2>核销主工作台</h2></div><p>错误与正确检查日志</p></div>
+        <nav class="eo-rail-nav" aria-label="核销结果视图"><button class="eo-tab" type="button" data-eo-view="home" aria-selected="true" aria-current="page" aria-controls="home"><span class="eo-nav-glyph">OV</span><span class="eo-nav-copy"><strong>错误总览</strong><small>本批次全部错误</small></span><em>${total}</em></button><button class="eo-tab eo-tab-pass" type="button" data-eo-view="passed" aria-selected="false" aria-controls="passed"><span class="eo-nav-glyph">OK</span><span class="eo-nav-copy"><strong>正确检查项</strong><small>按核销类型记录</small></span><em>${passTotal}</em></button></nav>
+        <div class="eo-rail-foot"><span>本次核销记录</span><strong>${Math.max(typeCount, passGroups.length)} 种核销类型</strong><em>${total} 组错误 · ${passTotal} 项通过</em></div>
+      </aside><div class="eo-workspace"><section class="eo-view" id="home"><div class="eo-home-cockpit">
+        <header class="eo-cockpit-hero"><div class="eo-hero-copy"><span class="eo-kicker">AUDIT ERROR COMMAND</span><h1>核销错误处置总览</h1><p>当前视图直接列出全部需要处理的错误。已确认通过的子检查可切换到“正确检查项”查看，门店中重复出现的上游错误仍不重复展示。</p></div><div class="eo-total-gauge"><span>待处理总数</span><strong>${total}</strong><em>组错误</em></div></header>
+        <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销类型</span><small>本批次涉及的业务类型</small></div><strong>${typeCount}</strong></article><article class="eo-metric" style="--metric-accent:#d84b3e"><div class="eo-metric-copy"><span>错误总数</span><small>按错误清单归并后的数量</small></div><strong>${total}</strong></article><article class="eo-metric" style="--metric-accent:#b76d15"><div class="eo-metric-copy"><span>材料 / 结算错误</span><small>合同、销售、结算及道具材料</small></div><strong>${materialTotal}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>商品 / 门店错误</span><small>商品核销与门店现场问题</small></div><strong>${fieldTotal}</strong></article></div>
+        <section class="eo-composition"><div class="eo-composition-title"><small>ERROR COMPOSITION</small><strong>错误构成</strong></div><div class="eo-composition-bar" aria-label="错误构成：材料与结算 ${materialTotal}，商品与门店 ${fieldTotal}"><i style="width:${materialPercent}%"></i><b style="width:${100 - materialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 结算 ${materialTotal}</span><span><i></i>商品 / 门店 ${fieldTotal}</span></div></section>
+        <section class="eo-pass-filter-panel eo-error-filter-panel" aria-labelledby="eoErrorFilterTitle"><header class="eo-pass-filter-head"><div><small>FILTER REJECTED CHECKS</small><h2 id="eoErrorFilterTitle">筛选错误检查项</h2></div><div class="eo-pass-filter-result" aria-live="polite"><span>当前命中</span><strong id="eoErrorVisible">${total}</strong><em>/ ${total} 组</em><button type="button" data-error-reset disabled>重置筛选</button></div></header>
+          <div class="eo-pass-filter-grid eo-error-filter-grid"><label><span>核销方式</span><select id="eoErrorType" aria-controls="eoErrorList"><option value="">全部核销方式</option>${errorTypeOptions}</select></label><label><span>置信度</span><select id="eoErrorConfidence" aria-controls="eoErrorList"><option value="">全部置信度</option>${errorConfidenceOptions}</select></label><label class="eo-error-search"><span>关键词</span><input id="eoErrorKeyword" type="search" placeholder="搜索错误项、文件、原因或处理方式" autocomplete="off" aria-controls="eoErrorList"></label></div>
+          <div class="eo-pass-facet-hint eo-facet-summary-only"><em id="eoErrorFacetSummary" aria-live="polite"></em></div>
+        </section>
+        <section class="eo-queue-panel"><header class="eo-queue-head"><div><small>REJECTED ERROR RESULTS</small><h2>核销错误结果</h2></div><p>全部错误直接向下排列<br>每项标明对应核销类型</p></header><div class="eo-scenario-grid eo-stack" id="eoErrorList">${unifiedErrors || '<div class="eo-empty">没有发现核销错误</div>'}</div></section>
+        <div class="eo-pass-filter-empty eo-error-filter-empty" id="eoErrorFilterEmpty" hidden><strong>没有符合条件的错误检查项</strong><span>可调整核销方式、置信度或关键词后重试。</span><button type="button" data-error-reset>清除全部筛选</button></div>
+      </div></section><section class="eo-view" id="passed" hidden><div class="eo-home-cockpit eo-pass-cockpit">
+        <header class="eo-cockpit-hero eo-pass-hero"><div class="eo-hero-copy"><span class="eo-kicker">VERIFIED CHECK LEDGER</span><h1>正确检查项日志</h1><p>按核销类型记录已有充分证据、被独立确认通过的子检查，保留核验对象、判断依据、来源文件与置信度，便于人工回看。</p></div><div class="eo-total-gauge"><span>通过检查项</span><strong>${passTotal}</strong><em>项记录</em></div></header>
+        <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销类型</span><small>形成通过日志的业务类型</small></div><strong>${passTypeCount}</strong></article><article class="eo-metric" style="--metric-accent:#18845e"><div class="eo-metric-copy"><span>通过检查项</span><small>逐个独立子检查计数</small></div><strong>${passTotal}</strong></article><article class="eo-metric" style="--metric-accent:#288d86"><div class="eo-metric-copy"><span>材料 / 商品</span><small>合同、票据、销售与商品检查</small></div><strong>${passMaterialProduct}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>门店 / 金额</span><small>现场、地点、日期与金额规则</small></div><strong>${passStoreAmount}</strong></article></div>
+        <section class="eo-composition eo-pass-composition"><div class="eo-composition-title"><small>PASS COMPOSITION</small><strong>通过项构成</strong></div><div class="eo-composition-bar" aria-label="通过项构成：材料与商品 ${passMaterialProduct}，门店与金额 ${passStoreAmount}"><i style="width:${passMaterialPercent}%"></i><b style="width:${100 - passMaterialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 商品 ${passMaterialProduct}</span><span><i></i>门店 / 金额 ${passStoreAmount}</span></div></section>
+        <section class="eo-pass-filter-panel" aria-labelledby="eoPassFilterTitle"><header class="eo-pass-filter-head"><div><small>FILTER VERIFIED CHECKS</small><h2 id="eoPassFilterTitle">筛选正确检查项</h2></div><div class="eo-pass-filter-result" aria-live="polite"><span>当前命中</span><strong id="eoPassVisible">${passTotal}</strong><em>/ ${passTotal} 项</em><button type="button" data-pass-reset disabled>重置筛选</button></div></header>
+          <div class="eo-pass-filter-grid"><label><span>核销方式</span><select id="eoPassType" aria-controls="eoPassList"><option value="">全部核销方式</option>${passTypeOptions}</select></label><label><span>检查分类</span><select id="eoPassCategory" aria-controls="eoPassList"><option value="">全部检查分类</option>${passCategoryOptions}</select></label><label><span>置信度</span><select id="eoPassConfidence" aria-controls="eoPassList"><option value="">全部置信度</option>${passConfidenceOptions}</select></label><label class="eo-pass-search"><span>关键词</span><input id="eoPassKeyword" type="search" placeholder="搜索检查项、对象、依据或文件" autocomplete="off" aria-controls="eoPassList"></label></div>
+          <div class="eo-pass-facet-hint eo-facet-summary-only"><em id="eoPassFacetSummary" aria-live="polite"></em></div>
+        </section>
+        <section class="eo-pass-ledger"><header class="eo-queue-head"><div><small>VERIFIED PASS RESULTS</small><h2>按核销类型归档</h2></div><p>${passGroups.length} 种核销类型<br>${passTotal} 项可回查判断</p></header><div class="eo-pass-groups" id="eoPassList">${passGroupHtml || '<div class="eo-pass-empty"><strong>暂无正确检查项日志</strong><span>只有被结构化结果明确判定通过的子检查才会出现在这里。</span></div>'}</div></section>
+        <div class="eo-pass-filter-empty" id="eoPassFilterEmpty" hidden><strong>没有符合条件的正确检查项</strong><span>可调整核销方式、检查分类、置信度或关键词后重试。</span><button type="button" data-pass-reset>清除全部筛选</button></div>
+      </div></section></div></div></main><button class="eo-back-top" id="eoBackTop" type="button">返回顶部</button>`;
 
-      const tabs = [...document.querySelectorAll('.eo-tab')];
-      const viewsById = [...document.querySelectorAll('.eo-view')];
-      const openView = (id) => {
-        tabs.forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.view === id)));
-        viewsById.forEach((view) => { view.hidden = view.id !== id; });
-        document.body.dataset.activeView = id;
-        document.querySelectorAll('[data-search]').forEach((item) => { item.hidden = false; });
-        document.querySelectorAll('.eo-no-match').forEach((item) => { item.hidden = true; });
+      document.getElementById('eoBackTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+      const normalizeFilterText = (value) => String(value || '').trim().toLocaleLowerCase('zh-CN');
+      const renderFacetOptions = ({ select, values, allLabel, label, counts, selected }) => {
+        const availableValues = values.filter((value) => counts.has(value));
+        if (selected && !availableValues.includes(selected)) availableValues.unshift(selected);
+        const allOption = document.createElement('option');
+        allOption.value = '';
+        allOption.textContent = allLabel;
+        const options = availableValues.map((value) => {
+          const option = document.createElement('option');
+          const count = counts.get(value) || 0;
+          option.value = value;
+          option.textContent = count
+            ? `${label(value)}（${count}）`
+            : selected === value
+              ? `${label(value)}（当前选择 · 0）`
+              : `${label(value)}（0）`;
+          return option;
+        });
+        select.replaceChildren(allOption, ...options);
+        select.value = selected;
+        select.disabled = availableValues.length === 0;
+        return counts.size;
+      };
+
+      const errorTypeFilter = document.getElementById('eoErrorType');
+      const errorConfidenceFilter = document.getElementById('eoErrorConfidence');
+      const errorKeywordFilter = document.getElementById('eoErrorKeyword');
+      const errorFilterPanel = document.querySelector('.eo-error-filter-panel');
+      const errorVisible = document.getElementById('eoErrorVisible');
+      const errorFilterEmpty = document.getElementById('eoErrorFilterEmpty');
+      const errorFacetSummary = document.getElementById('eoErrorFacetSummary');
+      const errorFilterRecords = [...document.querySelectorAll('#eoErrorList .eo-error-card')].map((card) => ({
+        card,
+        type: card.dataset.auditType || '其他费用',
+        confidence: card.dataset.errorConfidence || 'high',
+        search: normalizeFilterText(card.textContent),
+      }));
+      const errorGlobalTypeCounts = errorFilterRecords.reduce((counts, record) => {
+        counts.set(record.type, (counts.get(record.type) || 0) + 1);
+        return counts;
+      }, new Map(errorTypes.map((type) => [type, 0])));
+      const errorConfidences = ['high', 'medium', 'low'].filter((confidence) =>
+        errorFilterRecords.some((record) => record.confidence === confidence)
+      );
+      const readErrorFilterState = () => ({
+        type: errorTypeFilter.value,
+        confidence: errorConfidenceFilter.value,
+        keyword: normalizeFilterText(errorKeywordFilter.value),
+      });
+      const errorRecordMatches = (record, state, excludedFacet = '') => (
+        (excludedFacet === 'type' || !state.type || record.type === state.type)
+        && (excludedFacet === 'confidence' || !state.confidence || record.confidence === state.confidence)
+        && (!state.keyword || record.search.includes(state.keyword))
+      );
+      const errorConfidenceCounts = (state) => errorFilterRecords.reduce((counts, record) => {
+        if (!errorRecordMatches(record, state, 'confidence')) return counts;
+        counts.set(record.confidence, (counts.get(record.confidence) || 0) + 1);
+        return counts;
+      }, new Map());
+      const refreshErrorFacets = () => {
+        const state = readErrorFilterState();
+        renderFacetOptions({
+          select: errorTypeFilter,
+          values: errorTypes,
+          allLabel: '全部核销方式',
+          label: (value) => value,
+          counts: errorGlobalTypeCounts,
+          selected: state.type,
+        });
+        const confidenceCount = renderFacetOptions({
+          select: errorConfidenceFilter,
+          values: errorConfidences,
+          allLabel: '全部置信度',
+          label: (value) => `${confidenceLabel(value)}置信度`,
+          counts: errorConfidenceCounts(state),
+          selected: state.confidence,
+        });
+        errorFacetSummary.textContent = `${errorGlobalTypeCounts.size} 种核销方式 · ${confidenceCount} 档可选置信度`;
+        return readErrorFilterState();
+      };
+      const applyErrorFilters = () => {
+        const state = refreshErrorFacets();
+        let visibleTotal = 0;
+        errorFilterRecords.forEach((record) => {
+          const matches = errorRecordMatches(record, state);
+          record.card.hidden = !matches;
+          if (matches) visibleTotal += 1;
+        });
+        const filtering = Boolean(state.type || state.confidence || state.keyword);
+        errorVisible.textContent = String(visibleTotal);
+        errorFilterPanel.classList.toggle('is-filtering', filtering);
+        errorFilterEmpty.hidden = visibleTotal !== 0 || total === 0;
+        document.querySelectorAll('[data-error-reset]').forEach((button) => {
+          if (!button.closest('.eo-error-filter-empty')) button.disabled = !filtering;
+        });
+      };
+      const normalizeErrorDependentsForType = () => {
+        const state = readErrorFilterState();
+        const counts = errorConfidenceCounts(state);
+        if (state.confidence && !counts.has(state.confidence)) errorConfidenceFilter.value = '';
+      };
+      const resetErrorFilters = () => {
+        errorTypeFilter.value = '';
+        errorConfidenceFilter.value = '';
+        errorKeywordFilter.value = '';
+        applyErrorFilters();
+      };
+      errorTypeFilter.addEventListener('change', () => {
+        normalizeErrorDependentsForType();
+        applyErrorFilters();
+      });
+      errorConfidenceFilter.addEventListener('change', applyErrorFilters);
+      errorKeywordFilter.addEventListener('input', applyErrorFilters);
+      document.querySelectorAll('[data-error-reset]').forEach((button) => button.addEventListener('click', resetErrorFilters));
+      applyErrorFilters();
+
+      const passTypeFilter = document.getElementById('eoPassType');
+      const passCategoryFilter = document.getElementById('eoPassCategory');
+      const passConfidenceFilter = document.getElementById('eoPassConfidence');
+      const passKeywordFilter = document.getElementById('eoPassKeyword');
+      const passFilterPanel = document.querySelector('#passed .eo-pass-filter-panel');
+      const passVisible = document.getElementById('eoPassVisible');
+      const passFilterEmpty = document.getElementById('eoPassFilterEmpty');
+      const passFacetSummary = document.getElementById('eoPassFacetSummary');
+      const passFilterRecords = [...document.querySelectorAll('#eoPassList .eo-pass-card')].map((card) => ({
+        card,
+        type: card.closest('.eo-pass-group')?.dataset.passType || '其他核销',
+        category: card.dataset.passCategory || '核销检查',
+        confidence: card.dataset.passConfidence || 'high',
+        search: normalizeFilterText(card.textContent),
+      }));
+      const passGlobalTypeCounts = passFilterRecords.reduce((counts, record) => {
+        counts.set(record.type, (counts.get(record.type) || 0) + 1);
+        return counts;
+      }, new Map(passTypes.map((type) => [type, 0])));
+      const passFacetMeta = {
+        type: {
+          select: passTypeFilter,
+          values: passTypes,
+          allLabel: '全部核销方式',
+          label: (value) => value,
+        },
+        category: {
+          select: passCategoryFilter,
+          values: passCategories,
+          allLabel: '全部检查分类',
+          label: (value) => value,
+        },
+        confidence: {
+          select: passConfidenceFilter,
+          values: passConfidences,
+          allLabel: '全部置信度',
+          label: (value) => `${confidenceLabel(value)}置信度`,
+        },
+      };
+      const readPassFilterState = () => ({
+        type: passTypeFilter.value,
+        category: passCategoryFilter.value,
+        confidence: passConfidenceFilter.value,
+        keyword: normalizeFilterText(passKeywordFilter.value),
+      });
+      const passRecordMatches = (record, state, excludedFacet = '') => (
+        (excludedFacet === 'type' || !state.type || record.type === state.type)
+        && (excludedFacet === 'category' || !state.category || record.category === state.category)
+        && (excludedFacet === 'confidence' || !state.confidence || record.confidence === state.confidence)
+        && (!state.keyword || record.search.includes(state.keyword))
+      );
+      const passFacetCounts = (facet, state) => passFilterRecords.reduce((counts, record) => {
+        if (!passRecordMatches(record, state, facet)) return counts;
+        const value = record[facet];
+        counts.set(value, (counts.get(value) || 0) + 1);
+        return counts;
+      }, new Map());
+      const renderPassFacet = (facet, state) => {
+        const meta = passFacetMeta[facet];
+        const counts = facet === 'type' ? passGlobalTypeCounts : passFacetCounts(facet, state);
+        return renderFacetOptions({
+          select: meta.select,
+          values: meta.values,
+          allLabel: meta.allLabel,
+          label: meta.label,
+          counts,
+          selected: state[facet],
+        });
+      };
+      const refreshPassFacets = () => {
+        const state = readPassFilterState();
+        const available = {
+          type: renderPassFacet('type', state),
+          category: renderPassFacet('category', state),
+          confidence: renderPassFacet('confidence', state),
+        };
+        passFacetSummary.textContent = `${available.type} 种核销方式 · ${available.category} 类可选检查 · ${available.confidence} 档可选置信度`;
+        return readPassFilterState();
+      };
+      const applyPassFilters = () => {
+        const state = refreshPassFacets();
+        let visibleTotal = 0;
+        document.querySelectorAll('#eoPassList .eo-pass-group').forEach((group) => {
+          const typeMatches = !state.type || group.dataset.passType === state.type;
+          let groupVisible = 0;
+          const categoryCounts = new Map();
+          group.querySelectorAll('.eo-pass-category').forEach((categoryBlock) => {
+            let categoryVisible = 0;
+            categoryBlock.querySelectorAll('.eo-pass-card').forEach((card) => {
+              const categoryMatches = !state.category || card.dataset.passCategory === state.category;
+              const confidenceMatches = !state.confidence || card.dataset.passConfidence === state.confidence;
+              const keywordMatches = !state.keyword || normalizeFilterText(card.textContent).includes(state.keyword);
+              const matches = typeMatches && categoryMatches && confidenceMatches && keywordMatches;
+              card.hidden = !matches;
+              if (matches) categoryVisible += 1;
+            });
+            categoryBlock.hidden = categoryVisible === 0;
+            const categoryName = categoryBlock.dataset.passCategoryBlock || '核销检查';
+            categoryCounts.set(categoryName, categoryVisible);
+            const categoryVisibleLabel = categoryBlock.querySelector('[data-pass-category-visible]');
+            if (categoryVisibleLabel) categoryVisibleLabel.textContent = `${categoryVisible} 项`;
+            groupVisible += categoryVisible;
+          });
+          group.querySelectorAll('[data-pass-breakdown-category]').forEach((badge) => {
+            const categoryName = badge.dataset.passBreakdownCategory || '';
+            const categoryCount = categoryCounts.get(categoryName) || 0;
+            badge.hidden = categoryCount === 0;
+            const badgeCount = badge.querySelector('[data-pass-breakdown-visible]');
+            if (badgeCount) badgeCount.textContent = String(categoryCount);
+          });
+          group.hidden = groupVisible === 0;
+          const groupVisibleLabel = group.querySelector('[data-pass-group-visible]');
+          if (groupVisibleLabel) groupVisibleLabel.textContent = String(groupVisible);
+          visibleTotal += groupVisible;
+        });
+        const filtering = Boolean(state.type || state.category || state.confidence || state.keyword);
+        passVisible.textContent = String(visibleTotal);
+        passFilterPanel.classList.toggle('is-filtering', filtering);
+        passFilterEmpty.hidden = visibleTotal !== 0 || passTotal === 0;
+        document.querySelectorAll('[data-pass-reset]').forEach((button) => {
+          if (!button.closest('.eo-pass-filter-empty')) button.disabled = !filtering;
+        });
+      };
+      const resetPassFilters = () => {
+        passTypeFilter.value = '';
+        passCategoryFilter.value = '';
+        passConfidenceFilter.value = '';
+        passKeywordFilter.value = '';
+        applyPassFilters();
+      };
+      const normalizePassDependentsForType = () => {
+        let state = readPassFilterState();
+        const categoryCounts = passFacetCounts('category', state);
+        if (state.category && !categoryCounts.has(state.category)) passCategoryFilter.value = '';
+        state = readPassFilterState();
+        const confidenceCounts = passFacetCounts('confidence', state);
+        if (state.confidence && !confidenceCounts.has(state.confidence)) passConfidenceFilter.value = '';
+      };
+      passTypeFilter.addEventListener('change', () => {
+        normalizePassDependentsForType();
+        applyPassFilters();
+      });
+      [passCategoryFilter, passConfidenceFilter].forEach((control) => control.addEventListener('change', applyPassFilters));
+      passKeywordFilter.addEventListener('input', applyPassFilters);
+      document.querySelectorAll('[data-pass-reset]').forEach((button) => button.addEventListener('click', resetPassFilters));
+      applyPassFilters();
+      const resultTabs = [...document.querySelectorAll('[data-eo-view]')];
+      const openResultView = (viewId) => {
+        resultTabs.forEach((tab) => {
+          const selected = tab.dataset.eoView === viewId;
+          tab.setAttribute('aria-selected', String(selected));
+          if (selected) tab.setAttribute('aria-current', 'page');
+          else tab.removeAttribute('aria-current');
+        });
+        document.querySelectorAll('.eo-workspace > .eo-view').forEach((view) => {
+          view.hidden = view.id !== viewId;
+        });
         window.scrollTo({ top: 0, behavior: 'auto' });
       };
-      tabs.forEach((tab) => tab.addEventListener('click', () => openView(tab.dataset.view)));
-      document.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', () => openView(button.dataset.open)));
-      document.getElementById('eoBackTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+      resultTabs.forEach((tab) => tab.addEventListener('click', () => openResultView(tab.dataset.eoView)));
     })();

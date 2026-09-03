@@ -12,6 +12,7 @@ from typing import Any
 
 from .common import AuditError
 from .orchestrator import normalize_producer_model, output_date_from_run_id
+from .pass_check_log import attach_pass_check_log, load_workspace_results
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -392,7 +393,10 @@ class WorkbenchRunStore:
         verification: dict[str, Any],
     ) -> None:
         with self._lock:
-            self._view_payload = view_payload
+            self._view_payload = attach_pass_check_log(
+                view_payload,
+                load_workspace_results(self.workspace),
+            )
             error_count = sum(
                 int((sheet.get("audit_counts") or {}).get("error_count") or 0)
                 for sheet in view_payload.get("sheets") or []
