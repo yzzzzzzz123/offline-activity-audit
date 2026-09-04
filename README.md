@@ -373,7 +373,7 @@ Excel 行/字段、结算行、转账截图或现场照片内容，不再使用�
 配置或验收。
 
 页面外观和交互来自根目录唯一版本化前端 `offline-activity-audit.html`，当前合同为 Audit System
-`2.7.0`，工作台 API 合同为 `1.6`：运行结果查询资源保持只读，仅开放范围受限的同源
+`2.7.1`，工作台 API 合同为 `1.7`：首页“核销记录”指标仅显示标题与数值，运行结果查询资源保持只读，仅开放范围受限的同源
 `POST /api/runs/<workspace-id>/manual-review` 写入人工核验标记；OSS 入站接口继续独立鉴权；
 `/api/config` 返回六项主流程任务，并分别声明首页的 `catalog_signature` 目录刷新策略和二级
 运行档案的 `stage_boundary` 刷新策略。已完成快照的 `view.pass_check_log` 使用独立 `1.0`

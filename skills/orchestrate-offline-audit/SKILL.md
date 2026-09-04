@@ -164,7 +164,7 @@ before it is advertised here or accepted by this runner.
 ## Persistent workbench contract
 
 The only customer-facing HTML is the repository-root `offline-activity-audit.html`. It is the
-persistent Audit System `2.7.0` shell served by the trusted local service and must not be regenerated,
+persistent Audit System `2.7.1` shell served by the trusted local service and must not be regenerated,
 copied, or patched by an audit run. `/` is the level-one management system; each catalog entry expands
 through `/?run=<workspace-id>` into a level-two record. Completed records retain the approved original
 error-desk interface, while incomplete records receive a truthful diagnostic page. A temporary
@@ -366,7 +366,7 @@ The canonical customer page is the root `offline-activity-audit.html`. The trust
 `audit_core.workbench_server` serves its level-one system at `/`, injects the selected verified view
 payload into the same fixed HTML response for `/?run=<workspace-id>`, and exposes relative,
 read-only result APIs, the narrow manual-review marker mutation, and the separately authenticated OSS
-transport endpoint. API contract `1.6` keeps business results read-only;
+transport endpoint. API contract `1.7` keeps business results read-only;
 `POST /api/runs/<workspace-id>/manual-review` accepts only a boolean `reviewed`, while
 `/api/intake/oss` and its authenticated job status resource belong to the transport adapter. Injection
 changes the response, never the file on disk. The page reads the
@@ -400,7 +400,7 @@ label, or interaction for an ordinary business request. The page may change only
 explicitly requests a frontend/workbench redesign. The same change must update its version, workbench
 API contract, browser verification, affected tests, AGENTS/README, and this Skill contract.
 
-Audit System `2.7.0` freezes the persistent two-level standard: the level-one page contains system
+Audit System `2.7.1` freezes the persistent two-level standard: the level-one page contains system
 overview, full run ledger, and technical archives. The overview contains only aggregate metrics and the
 newest run records; it must not render a runtime chain, stage nodes, or observable event stream. Its
 `核销完成` metric shows the top-level input ZIP count from the newest completed run, not the cumulative

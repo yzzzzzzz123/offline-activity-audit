@@ -45,8 +45,8 @@ from .workbench_store import (
 )
 
 
-API_VERSION = "1.6"
-SYSTEM_VERSION = "2.7.0"
+API_VERSION = "1.7"
+SYSTEM_VERSION = "2.7.1"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8080
 MAX_API_BYTES = 24 * 1024 * 1024

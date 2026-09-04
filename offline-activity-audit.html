@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="canban-template-version" content="3.2.0">
-  <meta name="offline-audit-system-version" content="2.7.0">
+  <meta name="offline-audit-system-version" content="2.7.1">
+  <link rel="icon" href="data:,">
   <script>
     if (window.location.protocol === 'file:') {
       window.location.replace('http://192.0.0.148:8080/');
@@ -1697,6 +1698,10 @@
     .eo-total-gauge span { display: block; color: #94aeb9; font-size: 9px; letter-spacing: .08em; }
     .eo-total-gauge strong { display: inline-block; margin-top: 5px; color: #fff; font: 900 48px/.95 var(--eo-mono); letter-spacing: -.08em; }
     .eo-total-gauge em { margin-left: 6px; color: #ff8f84; font-size: 10px; font-style: normal; font-weight: 800; }
+    .eo-total-gauge.eo-total-gauge-paired { display: grid; min-width: 330px; padding: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .eo-gauge-stat { min-width: 0; padding: 18px 20px; }
+    .eo-gauge-stat + .eo-gauge-stat { border-left: 1px solid rgba(255,255,255,.14); }
+    .eo-gauge-stat-type strong { font-size: 38px; }
     .eo-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
     .eo-metric {
       position: relative;
@@ -2185,6 +2190,8 @@
       .eo-cockpit-hero::after { display: none; }
       .eo-hero-copy h1 { font-size: 28px; }
       .eo-total-gauge { min-width: 0; text-align: left; }
+      .eo-total-gauge.eo-total-gauge-paired { width: 100%; min-width: 0; }
+      .eo-gauge-stat { padding: 16px; }
       .eo-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .eo-metric { min-height: 92px; padding: 14px 12px 12px; grid-template-columns: 1fr; }
       .eo-metric strong { font-size: 27px; }
@@ -2689,9 +2696,6 @@
         return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
       });
       const total = projections.reduce((sum, item) => sum + item.count, 0);
-      const materialTotal = projections.reduce((sum, item) => sum + (item.upstream || 0), 0);
-      const fieldTotal = projections.reduce((sum, item) => sum + (item.local || 0), 0);
-      const materialPercent = total ? Math.round(materialTotal / total * 100) : 0;
       const typeCount = projections.filter((item) => item.count > 0).length;
       const unifiedErrors = projections.map((item) => item.html).filter(Boolean).join('');
       const errorTypes = [...new Set(projections.map((item) => item.label))];
@@ -2732,14 +2736,6 @@
       const passItems = passGroups.flatMap((group) => Array.isArray(group.items) ? group.items : []);
       const passTotal = passItems.length;
       const passTypeCount = passGroups.filter((group) => Number(group.item_count ?? group.items?.length ?? 0) > 0).length;
-      const passScopes = passItems.reduce((counts, item) => {
-        const scope = ['material', 'product', 'store', 'amount'].includes(item.scope) ? item.scope : 'material';
-        counts[scope] += 1;
-        return counts;
-      }, { material: 0, product: 0, store: 0, amount: 0 });
-      const passMaterialProduct = passScopes.material + passScopes.product;
-      const passStoreAmount = passScopes.store + passScopes.amount;
-      const passMaterialPercent = passTotal ? Math.round(passMaterialProduct / passTotal * 100) : 0;
       const passTypes = [...new Set(passGroups
         .map((group) => group.audit_type || group.title || '其他核销'))];
       const passCategories = [...new Set(passItems.map((item) => item.category || '核销检查'))];
@@ -2802,9 +2798,7 @@
         <nav class="eo-rail-nav" aria-label="核销结果视图"><button class="eo-tab" type="button" data-eo-view="home" aria-selected="true" aria-current="page" aria-controls="home"><span class="eo-nav-glyph">OV</span><span class="eo-nav-copy"><strong>错误总览</strong><small>本批次全部错误</small></span><em>${total}</em></button><button class="eo-tab eo-tab-pass" type="button" data-eo-view="passed" aria-selected="false" aria-controls="passed"><span class="eo-nav-glyph">OK</span><span class="eo-nav-copy"><strong>正确检查项</strong><small>按核销类型记录</small></span><em>${passTotal}</em></button></nav>
         <div class="eo-rail-foot"><span>本次核销记录</span><strong>${Math.max(typeCount, passGroups.length)} 种核销类型</strong><em>${total} 组错误 · ${passTotal} 项通过</em></div>
       </aside><div class="eo-workspace"><section class="eo-view" id="home"><div class="eo-home-cockpit">
-        <header class="eo-cockpit-hero"><div class="eo-hero-copy"><span class="eo-kicker">AUDIT ERROR COMMAND</span><h1>核销错误处置总览</h1><p>当前视图直接列出全部需要处理的错误。已确认通过的子检查可切换到“正确检查项”查看，门店中重复出现的上游错误仍不重复展示。</p></div><div class="eo-total-gauge"><span>待处理总数</span><strong>${total}</strong><em>组错误</em></div></header>
-        <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销类型</span><small>本批次涉及的业务类型</small></div><strong>${typeCount}</strong></article><article class="eo-metric" style="--metric-accent:#d84b3e"><div class="eo-metric-copy"><span>错误总数</span><small>按错误清单归并后的数量</small></div><strong>${total}</strong></article><article class="eo-metric" style="--metric-accent:#b76d15"><div class="eo-metric-copy"><span>材料 / 结算错误</span><small>合同、销售、结算及道具材料</small></div><strong>${materialTotal}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>商品 / 门店错误</span><small>商品核销与门店现场问题</small></div><strong>${fieldTotal}</strong></article></div>
-        <section class="eo-composition"><div class="eo-composition-title"><small>ERROR COMPOSITION</small><strong>错误构成</strong></div><div class="eo-composition-bar" aria-label="错误构成：材料与结算 ${materialTotal}，商品与门店 ${fieldTotal}"><i style="width:${materialPercent}%"></i><b style="width:${100 - materialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 结算 ${materialTotal}</span><span><i></i>商品 / 门店 ${fieldTotal}</span></div></section>
+        <header class="eo-cockpit-hero"><div class="eo-hero-copy"><span class="eo-kicker">AUDIT ERROR COMMAND</span><h1>核销错误处置总览</h1><p>当前视图直接列出全部需要处理的错误。已确认通过的子检查可切换到“正确检查项”查看，门店中重复出现的上游错误仍不重复展示。</p></div><div class="eo-total-gauge eo-total-gauge-paired"><div class="eo-gauge-stat eo-gauge-stat-type"><span>核销类型</span><strong>${typeCount}</strong><em>种</em></div><div class="eo-gauge-stat"><span>待处理总数</span><strong>${total}</strong><em>组错误</em></div></div></header>
         <section class="eo-pass-filter-panel eo-error-filter-panel" aria-labelledby="eoErrorFilterTitle"><header class="eo-pass-filter-head"><div><small>FILTER REJECTED CHECKS</small><h2 id="eoErrorFilterTitle">筛选错误检查项</h2></div><div class="eo-pass-filter-result" aria-live="polite"><span>当前命中</span><strong id="eoErrorVisible">${total}</strong><em>/ ${total} 组</em><button type="button" data-error-reset disabled>重置筛选</button></div></header>
           <div class="eo-pass-filter-grid eo-error-filter-grid"><label><span>核销方式</span><select id="eoErrorType" aria-controls="eoErrorList">${errorTypeAllOption}${errorTypeOptions}</select></label><label><span>错误原因分类</span><select id="eoErrorCategory" aria-controls="eoErrorList"><option value="">全部错误原因分类</option>${errorReasonOptions}</select></label><label><span>置信度</span><select id="eoErrorConfidence" aria-controls="eoErrorList"><option value="">全部置信度</option>${errorConfidenceOptions}</select></label><label class="eo-error-search"><span>关键词</span><input id="eoErrorKeyword" type="search" placeholder="搜索错误项、文件、原因或处理方式" autocomplete="off" aria-controls="eoErrorList"></label></div>
           <div class="eo-pass-facet-hint eo-facet-summary-only"><em id="eoErrorFacetSummary" aria-live="polite"></em></div>
@@ -2812,9 +2806,7 @@
         <section class="eo-queue-panel"><header class="eo-queue-head"><div><small>REJECTED ERROR RESULTS</small><h2>核销错误结果</h2></div><p>全部错误直接向下排列<br>每项标明对应核销类型</p></header><div class="eo-scenario-grid eo-stack" id="eoErrorList">${unifiedErrors || '<div class="eo-empty">没有发现核销错误</div>'}</div></section>
         <div class="eo-pass-filter-empty eo-error-filter-empty" id="eoErrorFilterEmpty" hidden><strong>没有符合条件的错误检查项</strong><span>可调整核销方式、错误原因分类、置信度或关键词后重试。</span><button type="button" data-error-reset>清除全部筛选</button></div>
       </div></section><section class="eo-view" id="passed" hidden><div class="eo-home-cockpit eo-pass-cockpit">
-        <header class="eo-cockpit-hero eo-pass-hero"><div class="eo-hero-copy"><span class="eo-kicker">VERIFIED CHECK LEDGER</span><h1>正确检查项日志</h1><p>按核销类型记录已有充分证据、被独立确认通过的子检查，保留核验对象、判断依据、来源文件与置信度，便于人工回看。</p></div><div class="eo-total-gauge"><span>通过检查项</span><strong>${passTotal}</strong><em>项记录</em></div></header>
-        <div class="eo-metric-grid"><article class="eo-metric" style="--metric-accent:#159edb"><div class="eo-metric-copy"><span>核销类型</span><small>形成通过日志的业务类型</small></div><strong>${passTypeCount}</strong></article><article class="eo-metric" style="--metric-accent:#18845e"><div class="eo-metric-copy"><span>通过检查项</span><small>逐个独立子检查计数</small></div><strong>${passTotal}</strong></article><article class="eo-metric" style="--metric-accent:#288d86"><div class="eo-metric-copy"><span>材料 / 商品</span><small>合同、票据、销售与商品检查</small></div><strong>${passMaterialProduct}</strong></article><article class="eo-metric" style="--metric-accent:#173743"><div class="eo-metric-copy"><span>门店 / 金额</span><small>现场、地点、日期与金额规则</small></div><strong>${passStoreAmount}</strong></article></div>
-        <section class="eo-composition eo-pass-composition"><div class="eo-composition-title"><small>PASS COMPOSITION</small><strong>通过项构成</strong></div><div class="eo-composition-bar" aria-label="通过项构成：材料与商品 ${passMaterialProduct}，门店与金额 ${passStoreAmount}"><i style="width:${passMaterialPercent}%"></i><b style="width:${100 - passMaterialPercent}%"></b></div><div class="eo-composition-legend"><span><i></i>材料 / 商品 ${passMaterialProduct}</span><span><i></i>门店 / 金额 ${passStoreAmount}</span></div></section>
+        <header class="eo-cockpit-hero eo-pass-hero"><div class="eo-hero-copy"><span class="eo-kicker">VERIFIED CHECK LEDGER</span><h1>正确检查项日志</h1><p>按核销类型记录已有充分证据、被独立确认通过的子检查，保留核验对象、判断依据、来源文件与置信度，便于人工回看。</p></div><div class="eo-total-gauge eo-total-gauge-paired"><div class="eo-gauge-stat eo-gauge-stat-type"><span>核销类型</span><strong>${passTypeCount}</strong><em>种</em></div><div class="eo-gauge-stat"><span>通过检查项</span><strong>${passTotal}</strong><em>项记录</em></div></div></header>
         <section class="eo-pass-filter-panel" aria-labelledby="eoPassFilterTitle"><header class="eo-pass-filter-head"><div><small>FILTER VERIFIED CHECKS</small><h2 id="eoPassFilterTitle">筛选正确检查项</h2></div><div class="eo-pass-filter-result" aria-live="polite"><span>当前命中</span><strong id="eoPassVisible">${passTotal}</strong><em>/ ${passTotal} 项</em><button type="button" data-pass-reset disabled>重置筛选</button></div></header>
           <div class="eo-pass-filter-grid"><label><span>核销方式</span><select id="eoPassType" aria-controls="eoPassList">${passTypeAllOption}${passTypeOptions}</select></label><label><span>检查分类</span><select id="eoPassCategory" aria-controls="eoPassList"><option value="">全部检查分类</option>${passCategoryOptions}</select></label><label><span>置信度</span><select id="eoPassConfidence" aria-controls="eoPassList"><option value="">全部置信度</option>${passConfidenceOptions}</select></label><label class="eo-pass-search"><span>关键词</span><input id="eoPassKeyword" type="search" placeholder="搜索检查项、对象、依据或文件" autocomplete="off" aria-controls="eoPassList"></label></div>
           <div class="eo-pass-facet-hint eo-facet-summary-only"><em id="eoPassFacetSummary" aria-live="polite"></em></div>
@@ -3756,7 +3748,7 @@
           </aside>
           <div class="as-workspace">
             <section class="as-view" id="as-view-overview"><div class="as-stack">
-              <header class="as-hero"><div><span class="as-kicker">AUDIT CONTROL CENTER</span><h1>核销管理中心</h1><p>统一管理每一次线下活动核销。一级页面保存完整历史台账；展开任一记录后，进入该次核销专属的原版错误处置页面。</p></div>
+              <header class="as-hero"><div><span class="as-kicker">AUDIT CONTROL CENTER</span><h1>核销管理中心</h1></div>
                 <div class="as-hero-command"><span>持久化运行记录</span><strong id="as-hero-count">0</strong><em>每条记录均可展开</em></div></header>
               <section class="as-metric-grid" id="as-metrics"></section>
               <section class="as-panel"><header class="as-panel-head"><div><small>LATEST AUDIT RECORDS</small><h2>最近核销记录</h2></div><p>只展示运行摘要；记录操作统一放在核销台账或技术档案</p></header><div class="as-panel-body"><div class="as-run-list" id="as-recent-list">${emptyMarkup('正在读取核销记录','请稍候')}</div></div></section>
@@ -3808,7 +3800,7 @@
           ['核销完成', latestCompletedZipCount, '最近一次 input 的 ZIP 总数', '#18845e'],
           ['运行中 / 失败', `${running}/${failed}`, '需要关注的运行状态', '#d84b3e'],
           ['待人工核验', errors, '完成记录中的待处理明细', '#173743'],
-        ].map(([label,value,note,color]) => `<article class="as-metric" style="--metric-accent:${color}"><div><span>${label}</span><small>${note}</small></div><strong>${value}</strong></article>`).join('');
+        ].map(([label,value,note,color]) => `<article class="as-metric" style="--metric-accent:${color}"><div><span>${label}</span>${note ? `<small>${note}</small>` : ''}</div><strong>${value}</strong></article>`).join('');
         document.getElementById('as-recent-list').innerHTML = state.runs.length
           ? state.runs.slice(0, 5).map((run) => runCard(run, 'overview')).join('')
           : emptyMarkup('还没有核销记录','运行一次正式核销后，记录会自动出现在这里');

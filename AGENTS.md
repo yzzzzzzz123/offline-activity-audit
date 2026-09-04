@@ -391,7 +391,7 @@ never prove or override a location, and a truly missing/unreadable watermark rem
 evidence gap.
 
 The canonical customer interface is the root `offline-activity-audit.html`, currently Audit System
-`2.7.0`. Its level-one system, approved original level-two audit desk, copy, layout,
+`2.7.1`. Its level-one system, approved original level-two audit desk, copy, layout,
 customer/technical separation, run-history behavior, relative API contract, responsive behavior, and
 controls remain unchanged during an ordinary audit. It reads only the trusted service's `/api/config`,
 `/api/runs`, run `snapshot`, `log`, `events`, approved `analysis`, and `checkpoints` resources. The
@@ -410,7 +410,7 @@ behavior change. That same change must update the system version, workbench API 
 tests, PC browser verification at 1440×960, this output contract, the orchestration Skill, and
 README; never weaken verification to accept a changed page.
 
-Audit System `2.7.0` freezes the persistent audit-ledger standard: a level-one management center with
+Audit System `2.7.1` freezes the persistent audit-ledger standard: a level-one management center with
 system overview, full audit ledger, and technical archive. The overview contains only aggregate metrics
 and recent run records. It does not show a runtime chain, stage nodes, or observable events, and its
 silent probe reads only `/api/runs`; visible overview content updates when the run-catalog signature
@@ -463,7 +463,7 @@ constant `0.5` or an automatic high-confidence `1`. Only an explicit fully-certa
 contain only high/medium/low and never numeric scores. This is confidence that the item-level judgment
 is accurate, not error severity or an internal retrieval/name-relevance score.
 There are no scenario queues, scenario-entry buttons, or per-type subpages in either sibling view.
-The workbench API contract is `1.6`: a completed snapshot's `view.pass_check_log` uses schema `1.0`
+The workbench API contract is `1.7`: a completed snapshot's `view.pass_check_log` uses schema `1.0`
 with `total`, type/scope counts, and ordered `groups[].items[]`; the server reconstructs this projection
 from immutable `analysis/results/<scenario>.json` for older archives without rewriting their worktrees.
 Error-reason classification is a deterministic client projection from the same immutable error rows and
