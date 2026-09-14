@@ -23,7 +23,8 @@ from .product_rag import (
     ean13_is_valid,
     resolve_product_reference_hits,
 )
-from .model_metrics import record_model_attempt, summarize_codex_events
+from .model_metrics import record_model_attempt, summarize_codex_events, save_model_observations
+from .model_process import run_model_process, configured_timeout, TRANSPORT_FAILURE_TIMEOUT_SECONDS
 from .product_database import load_product_catalog, PRODUCT_KNOWLEDGE_RULES
 from .product_images import attach_product_reference_images
 from .codex_environment import (
@@ -55,7 +56,7 @@ MAX_PRODUCT_REFERENCE_CANDIDATES = 8
 MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO = 4
 MAX_PRODUCT_REFERENCE_VIEWS = 4
 DEFAULT_MODEL = "gpt-6-astra"
-DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 1200
+DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 3600
 DEFAULT_REASONING_EFFORT = "medium"
 PRODUCT_QUERY_REASONING_EFFORT = "medium"
 ALLOWED_REASONING_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max", "ultra"})
@@ -2235,6 +2236,16 @@ def _run_codex_json(
 ) -> dict[str, Any]:
     if reasoning_effort not in ALLOWED_REASONING_EFFORTS:
         raise AuditError(f"不支持的模型推理强度：{reasoning_effort}")
+    try:
+        if attempt_timeout_seconds == DEFAULT_ATTEMPT_TIMEOUT_SECONDS:
+            attempt_timeout_seconds = configured_timeout(
+                DEFAULT_ATTEMPT_TIMEOUT_SECONDS, "OFFLINE_AUDIT_MODEL_TIMEOUT_SECONDS",
+            )
+        transport_timeout = configured_timeout(
+            TRANSPORT_FAILURE_TIMEOUT_SECONDS, "OFFLINE_AUDIT_MODEL_TRANSPORT_TIMEOUT_SECONDS",
+        )
+    except ValueError as exc:
+        raise CodexRequestConfigurationError(str(exc)) from None
     subprocess_environment = _model_subprocess_environment()
     codex_output_schema = _write_codex_output_schema(
         schema,
@@ -2295,8 +2306,12 @@ def _run_codex_json(
         )
         raw_output.unlink(missing_ok=True)
         try:
-            completed = subprocess.run(
+            progress_name = "call-progress-" + hashlib.sha256(str(model_root).encode("utf-8")).hexdigest()[:16]
+            completed = run_model_process(
                 command,
+                label=label,
+                transport_timeout=transport_timeout,
+                progress_callback=lambda value: save_model_observations(progress_name, {"attempt": attempt, **value}),
                 cwd=model_root,
                 input=prompt + retry_hint,
                 text=True,
@@ -2309,8 +2324,16 @@ def _run_codex_json(
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 env=subprocess_environment,
             )
-        except subprocess.TimeoutExpired:
-            last_error = f"单次视觉识别超过 {attempt_timeout_seconds} 秒"
+        except subprocess.TimeoutExpired as exc:
+            partial = exc.stdout or ""
+            if isinstance(partial, bytes):
+                partial = partial.decode("utf-8", errors="replace")
+            metrics.update(summarize_codex_events(partial))
+            metrics.update(getattr(exc, "progress", {}))
+            timeout_kind = getattr(exc, "timeout_kind", "total")
+            metrics["timeout_kind"] = timeout_kind
+            last_error = ("模型连接持续异常，未恢复有效响应" if timeout_kind == "transport"
+                          else f"单次视觉识别超过 {attempt_timeout_seconds} 秒")
             record("timeout", "timeout")
             print(
                 f"AI 识别 {label} 第 {attempt}/{max_attempts} 次失败"
@@ -2507,28 +2530,12 @@ def extract_with_codex(
         )
 
     if scenario == "maintenance_fee":
-        model_root = root / "model-maintenance_fee"
-        model_root.mkdir(parents=True, exist_ok=False)
-        images, source_manifest = _prepare_other_expense_sources(
-            case,
-            model_root,
-            label="维护费用",
-        )
-        return _run_codex_json(
-            codex=codex,
-            model_root=model_root,
-            skill_dir=skill_dir,
-            schema=full_schema,
-            raw_output=model_root / "evidence.json",
-            prompt=_maintenance_fee_prompt(skill_dir, full_schema, source_manifest),
-            images=images,
-            selected_model=selected_model,
-            model_catalog=model_catalog,
-            label="维护费用材料",
-            max_attempts=max_attempts,
+        from .document_pipeline import extract_maintenance_documents
+        return extract_maintenance_documents(
+            case, root, codex=codex, skill_dir=skill_dir, full_schema=full_schema,
+            selected_model=selected_model, selected_reasoning_effort=selected_reasoning_effort,
+            model_catalog=model_catalog, max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
-            reasoning_effort=selected_reasoning_effort,
-            post_validate=lambda value: _validate_maintenance_fee_sources(case, value),
         )
 
     if scenario == "giveaway_promotion":

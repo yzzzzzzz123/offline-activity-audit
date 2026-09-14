@@ -190,12 +190,17 @@ def _safe_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         value = attempt.get(key)
         if isinstance(value, str) and value in allowed:
             result[key] = value
-    for key in ("attempt", "image_count", "prompt_bytes", "delegated_agents_count"):
+    for key in ("attempt", "image_count", "prompt_bytes", "delegated_agents_count",
+                "event_count", "model_event_count", "tool_completed_count", "transport_error_count"):
         value = attempt.get(key)
         if _count(value):
             result[key] = value
     if "delegated_agents_count" in attempt and attempt["delegated_agents_count"] is None:
         result["delegated_agents_count"] = None
+    if attempt.get("timeout_kind") in {"total", "transport"}:
+        result["timeout_kind"] = attempt["timeout_kind"]
+    if attempt.get("phase") in {"starting", "awaiting_model", "model_output", "tool_running", "transport_retry", "finished"}:
+        result["phase"] = attempt["phase"]
     elapsed = attempt.get("elapsed_seconds")
     if type(elapsed) in (int, float) and elapsed >= 0 and (type(elapsed) is int or math.isfinite(elapsed)):
         result["elapsed_seconds"] = elapsed

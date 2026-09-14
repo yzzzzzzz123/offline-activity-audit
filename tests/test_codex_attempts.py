@@ -67,7 +67,7 @@ class CodexAttemptTests(unittest.TestCase):
         with (
             collect_model_artifacts(self.analysis),
             redirect_stdout(self.output), redirect_stderr(self.errors),
-            patch.object(codex_runner.subprocess, "run", side_effect=simulated_run),
+            patch.object(codex_runner, "run_model_process", side_effect=simulated_run),
             patch.object(codex_runner, "prepare_model_directory"),
             patch.object(codex_runner.time, "sleep"),
             patch.object(codex_runner.time, "monotonic", side_effect=lambda: float(next(ticks))),
