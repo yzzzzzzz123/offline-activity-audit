@@ -1,4 +1,4 @@
 interface:
   display_name: "自采赠品物料核销"
   short_description: "核验自采赠品票据、规则、POS、全门店照片和结算"
-  default_prompt: "Use $audit-self-procured-gift-material through the parent orchestrator to audit one registered self_procured_gift_material package and return the verified self-contained HTML."
+  default_prompt: "通过父级编排器使用 $audit-self-procured-gift-material 核销一个已登记的 self_procured_gift_material 材料包，并返回经过验证的自包含 HTML。"

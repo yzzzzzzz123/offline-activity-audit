@@ -3,12 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import unittest
+from copy import deepcopy
+from unittest.mock import patch
+from tests.product_test_support import matching_catalog, MemoryOSS, image_objects
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from audit_core.common import AuditError, validate_json
+from audit_core.common import AuditError, load_json, validate_json
 from audit_core.codex_runner import (
     ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
@@ -38,18 +41,11 @@ from audit_core.personnel import (
     _personnel_sales_knowledge_reconciliation,
 )
 from audit_core.product_rag import (
-    SHARED_PRODUCT_RAG_DIR,
     apply_visible_catalog_text_exact_hits,
-    apply_visible_short_code_exact_hits,
     ean13_is_valid,
-    load_pending_product_rag,
-    load_product_rag,
     product_reference_label,
     resolve_product_reference_hits,
 )
-
-
-PRODUCT_RAG_ASSET_ROOT = SHARED_PRODUCT_RAG_DIR.parent
 
 
 def _raw_hit(confidence: str = "exact") -> dict:
@@ -65,60 +61,20 @@ def _raw_hit(confidence: str = "exact") -> dict:
 class ProductRagTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.catalog = load_product_rag()
+        cls.catalog = matching_catalog()
 
-    def test_catalog_has_real_multi_view_products_with_valid_identifiers(self) -> None:
-        products = self.catalog["products"]
-        self.assertEqual(len(products), 130)
-        self.assertEqual(sum(len(product["views"]) for product in products), 537)
-        by_barcode = {product["barcode_69"]: product for product in products}
-        self.assertEqual(
-            by_barcode["6970356167341"]["product_name"],
-            "参半oralshark玫瑰清茶味净清新牙膏(180g)-线下",
-        )
-        self.assertEqual(
-            by_barcode["6970356167341"]["product_code"],
-            "CP-KQ-YG-0085",
-        )
-        self.assertIn(
-            "SP-1",
-            by_barcode["6970356167341"]["product_code_aliases"],
-        )
-        self.assertEqual(
-            by_barcode["6970356161042"]["product_code"],
-            "CP-KQ-YG-0200",
-        )
-        for product in products:
-            self.assertGreaterEqual(len(product["views"]), 1)
-            self.assertEqual(
-                len({item["view_id"] for item in product["views"]}),
-                len(product["views"]),
-            )
+    def setUp(self):
+        mocked = patch("audit_core.product_images.attach_product_reference_images", side_effect=deepcopy)
+        mocked.start()
+        self.addCleanup(mocked.stop)
+
+    def test_synthetic_database_identities_have_valid_identifiers(self):
+        self.assertEqual(len(self.catalog["products"]), 10)
+        for product in self.catalog["products"]:
             self.assertTrue(ean13_is_valid(product["barcode_69"]))
-
-    def test_catalog_covers_every_controlled_product_directory_and_image(self) -> None:
-        products_root = SHARED_PRODUCT_RAG_DIR / "products"
-        directories = [item for item in products_root.iterdir() if item.is_dir()]
-        physical_codes = {
-            directory.name.rsplit("__", 1)[-1] for directory in directories
-        }
-        catalog_codes = {
-            str(product["product_code"]) for product in self.catalog["products"]
-        }
-        self.assertEqual(catalog_codes, physical_codes)
-
-        physical_images = {
-            image.relative_to(PRODUCT_RAG_ASSET_ROOT).as_posix()
-            for directory in directories
-            for image in directory.iterdir()
-            if image.is_file()
-        }
-        catalog_images = {
-            str(view["image_file"])
-            for product in self.catalog["products"]
-            for view in product["views"]
-        }
-        self.assertEqual(catalog_images, physical_images)
+            self.assertEqual(product["aliases"], [])
+            self.assertEqual(product["product_code_aliases"], [])
+            self.assertTrue(product["image_manifest_key"].startswith("offline-verify/product-reference/"))
 
     def test_personnel_sales_requires_exact_barcode_and_allows_fuzzy_name(self) -> None:
         reconciliation = _personnel_sales_knowledge_reconciliation(
@@ -312,47 +268,6 @@ class ProductRagTests(unittest.TestCase):
             {item["code"] for item in exceptions},
         )
 
-    def test_resolved_barcodes_leave_quarantine_and_enter_catalog(self) -> None:
-        manifest = load_pending_product_rag()
-        pending = manifest["pending_products"]
-        pending_ids = {product["pending_id"] for product in pending}
-        self.assertNotIn("sampleimg-013", pending_ids)
-        self.assertNotIn("sampleimg-026", pending_ids)
-        for product in pending:
-            self.assertNotIn("barcode_69", product)
-            self.assertIn("完整69码", product["reason"])
-
-        by_source = {
-            source["source_id"]: product
-            for product in self.catalog["products"]
-            for source in product["sources"]
-        }
-        expected = {
-            "sampleimg-013": (
-                "6970356163763",
-                "参半锁白牙膏 沁爽青提味(120g)-线下新零售pingu联名款",
-            ),
-            "sampleimg-026": (
-                "6970356168997",
-                "参半益生菌清新口腔喷雾(20ml)沁润蜜桃胶盒装-线下",
-            ),
-        }
-        for source_id, (barcode, product_name) in expected.items():
-            product = by_source[source_id]
-            self.assertEqual(product["barcode_69"], barcode)
-            self.assertEqual(product["product_name"], product_name)
-            barcode_views = [
-                view for view in product["views"] if view["face"] == "barcode"
-            ]
-            self.assertGreaterEqual(len(barcode_views), 1)
-            self.assertTrue(
-                any(
-                    view["identity_strength"] == "strong"
-                    and f"69码 {barcode}" in view["visible_anchors"]
-                    for view in barcode_views
-                )
-            )
-
     def test_ean13_rejects_wrong_check_digit_or_format(self) -> None:
         self.assertTrue(ean13_is_valid("6970356169338"))
         self.assertTrue(ean13_is_valid("6970356167341"))
@@ -367,10 +282,10 @@ class ProductRagTests(unittest.TestCase):
                 "reference_product_id": "canban-6970356167341",
                 "product_name": "参半oralshark玫瑰清茶味净清新牙膏(180g)-线下",
                 "product_code": "CP-KQ-YG-0085",
-                "product_code_aliases": ["SP-1"],
+                "product_code_aliases": [],
                 "barcode_69": "6970356167341",
-                "specification": "180g",
-                "variant": "玫瑰清茶味",
+                "specification": "",
+                "variant": None,
                 "confidence": "exact",
                 "matched_view_ids": ["sampleimg-003-v01"],
                 "visible_basis": ["现场包装可见参半、SP-1、净清新牙膏和180g"],
@@ -381,26 +296,10 @@ class ProductRagTests(unittest.TestCase):
         self.assertIn("69码：6970356167341", product_reference_label(resolved[0]))
         self.assertIn("精确匹配（高置信度）", product_reference_label(resolved[0]))
 
-    def test_unique_visible_short_code_without_visual_hit_is_not_exact(self) -> None:
-        resolved = apply_visible_short_code_exact_hits(
-            [],
-            ["包装只能看清 sp - 1"],
-            self.catalog,
-        )
-        self.assertEqual(resolved, [])
-
-    def test_unique_visible_short_code_promotes_fuzzy_hit_to_exact(self) -> None:
+    def test_removed_aliases_cannot_promote_a_visual_candidate(self):
         candidate = resolve_product_reference_hits([_raw_hit("candidate")], self.catalog)
-        resolved = apply_visible_short_code_exact_hits(
-            candidate,
-            ["SP1"],
-            self.catalog,
-        )
-        self.assertEqual(resolved[0]["confidence"], "exact")
-
-    def test_shared_visible_short_code_remains_fuzzy_without_disambiguation(self) -> None:
-        resolved = apply_visible_short_code_exact_hits([], ["SP-4"], self.catalog)
-        self.assertEqual(resolved, [])
+        resolved = apply_visible_catalog_text_exact_hits(candidate, ["SP-1"], self.catalog)
+        self.assertEqual(resolved[0]["confidence"], "candidate")
 
     def test_unique_visible_bundle_text_promotes_existing_visual_hit(self) -> None:
         raw = {
@@ -854,7 +753,7 @@ class ProductRagTests(unittest.TestCase):
         self.assertFalse(hasattr(display_module, "_sales_catalog_reconciliation"))
         self.assertFalse(hasattr(display_module, "sales_product_correspondence"))
 
-    def test_packaging_code_alias_retrieves_photo_candidate(self) -> None:
+    def test_unregistered_packaging_code_alias_cannot_retrieve_candidate(self) -> None:
         alias_query = {
             "photo_queries": [
                 {
@@ -866,10 +765,7 @@ class ProductRagTests(unittest.TestCase):
             ]
         }
         selected = _select_product_rag_candidates(self.catalog, alias_query)
-        self.assertIn(
-            "6970356167341",
-            [product["barcode_69"] for product in selected["products"]],
-        )
+        self.assertEqual(selected["products"], [])
 
     def test_newly_registered_controlled_product_is_exposed_to_runtime_catalog(self) -> None:
         raw = {
@@ -918,14 +814,13 @@ class ProductRagTests(unittest.TestCase):
             _select_product_rag_candidates(self.catalog, generic_query)["products"],
             [],
         )
-        with TemporaryDirectory() as temporary:
-            copied = _copy_product_reference_images(
-                SHARED_PRODUCT_RAG_DIR,
-                Path(temporary),
-                selected,
-            )
+        selected = deepcopy(selected)
+        remote = MemoryOSS(image_objects(selected))
+        with TemporaryDirectory() as temporary, patch("audit_core.product_image_runtime.ProductOSS", return_value=remote):
+            copied = _copy_product_reference_images(Path(temporary), selected)
             self.assertLessEqual(len(copied), 4)
             self.assertTrue(all(item["path"].is_file() for item in copied))
+            self.assertEqual(len(remote.calls), len(copied))
 
     def test_candidate_retrieval_honors_four_per_photo_contract(self) -> None:
         products = [
@@ -963,9 +858,9 @@ class ProductRagTests(unittest.TestCase):
             ["product-1", "product-2", "product-3", "product-4"],
         )
 
-    def test_reasoning_policy_keeps_final_judgment_high(self) -> None:
+    def test_reasoning_policy_uses_fixed_medium_default(self) -> None:
         self.assertEqual(PRODUCT_QUERY_REASONING_EFFORT, "medium")
-        self.assertEqual(DEFAULT_REASONING_EFFORT, "high")
+        self.assertEqual(DEFAULT_REASONING_EFFORT, "medium")
         self.assertIn("max", ALLOWED_REASONING_EFFORTS)
 
     def test_invalid_codex_request_configuration_is_not_retried(self) -> None:

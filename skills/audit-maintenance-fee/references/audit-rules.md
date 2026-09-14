@@ -1,88 +1,74 @@
-# Maintenance-fee audit rules
+# 维护费用核销规则
 
-## Scope and audit object
+## 范围与核销对象
 
-The audit object is one maintenance-fee claim package. `maintenance_fee` is an independent registered
-scenario. It is not `直营`, `personnel_incentive`, or the special-approval `other_expense` channel.
-The archive name may route a structurally compatible package, but the fee nature must also be visible
-in the signed promotional contract, fee-specific support, or settlement.
+核销对象是一个维护费用申报材料包。`maintenance_fee` 是独立登记场景，不属于 `直营`、
+`personnel_incentive` 或特殊审批 `other_expense` 通道。压缩包名称可以路由结构相容的材料包，
+但费用性质还必须在已签署促销合同、费用专项支持资料或结算单中可见。
 
-## Required evidence
+## 必备证据
 
-All of the following are blocking unless the rule explicitly states a conditional requirement:
+除非规则明确说明为条件性要求，以下全部资料均为阻断项：
 
-1. **Stamped POS data**: at least one legible visual POS statement with the dealer seal. It must show
-   enough product/detail and total fields to compare with the electronic POS sheet.
-2. **POS spreadsheet**: exactly one readable `.xlsx` or `.xlsm` containing product-level POS rows,
-   quantities, sales amounts, and a reproducible total. AI must not see this file.
-3. **Signed promotional contract**: exactly one visual contract showing both parties' execution,
-   activity period, maintenance-fee scope, eligible POS/product scope, calculation method, rate, and
-   any amount ceiling that governs the claim.
-4. **Stamped settlement**: exactly one company-template settlement, dealer-stamped, that identifies
-   the dealer, fee item, activity period, POS basis, calculation method, and claimed amount.
-5. **Fee-specific support**: at least one agreement, related document, or execution record that
-   proves the particular maintenance activity. When the contract or agreement requires on-site
-   execution, activity photos are required and must visibly fall within the activity period.
+1. **盖章 POS 数据**：至少一份清晰可读且带经销商印章的视觉 POS 明细。它必须显示足够的商品/
+   明细和合计字段，能够与 POS 电子表比较。
+2. **POS 电子表格**：恰好一份可读取的 `.xlsx` 或 `.xlsm`，包含商品级 POS 行、数量、销售金额
+   和可复现合计。AI 不得看到此文件。
+3. **已签署促销合同**：恰好一份可见合同，显示双方签署、活动期间、维护费用范围、符合条件的
+   POS/商品范围、计算方法、费率及适用于申报的任何金额上限。
+4. **盖章结算单**：恰好一份经销商盖章的公司模板结算单，能够识别经销商、费用项目、活动
+   期间、POS 依据、计算方法和申报金额。
+5. **费用专项支持资料**：至少一份能够证明具体维护活动的协议、相关文件或执行记录。合同或协议
+   要求现场执行时，必须提供活动照片，且可见日期必须位于活动期间内。
 
-An absent role creates a grouped issue in the result. Duplicate candidates for a singleton role are
-ambiguous and fail intake before AI extraction.
+缺失角色会在结果中形成一个分组问题。单例角色存在重复候选时会产生歧义，并在 AI 提取前导致
+接入失败。
 
-## Visible-fact extraction
+## 可见事实提取
 
-Return every supplied visual source once with the role assigned by deterministic intake. Do not use
-the filename as visible content. Preserve document titles, parties, dealer/customer name, period,
-fee wording, calculation method, rate, quantities, sales amounts, claimed amounts, seals/signatures,
-and every useful POS detail row independently. Use `null`, `unclear`, or a limitation instead of
-copying a value from another source.
+每个已提供视觉来源只返回一次，并保留确定性接入分配的角色。不得把文件名当作可见内容。独立
+保留文档标题、相关方、经销商/客户名称、期间、费用表述、计算方法、费率、数量、销售金额、
+申报金额、印章/签字及每条有用 POS 明细。不得从另一来源复制数值，无法确认时使用 `null`、
+`unclear` 或局限说明。
 
-For the POS image, a complete product row needs a visible product name plus its own quantity and sales
-amount. Preserve printed totals separately. A dealer seal is `visible` only when the seal itself can
-be seen. For the settlement, `company_template_visible` requires recognizable company-template
-branding or structure; a generic table titled `结算单` is not enough by itself. A promotional contract
-is signed only when execution marks for the contracting parties are visible.
+对于 POS 图片，完整商品行需要可见商品名称，以及该行自身数量和销售金额。另行保留印刷合计。
+只有印章本身确实可见时，经销商印章才是 `visible`。对于结算单，`company_template_visible`
+要求存在可识别的公司模板标识或结构；仅有标题为 `结算单` 的通用表格不足以成立。只有签约方
+签署标记可见时，才能认定促销合同已签署。
 
-## Deterministic controls
+## 确定性控制
 
-Evaluate and group the following controls. Later evidence cannot silently repair an earlier missing
-authority source.
+核验并分组以下控制。后续证据不能静默修补先前缺失的权威来源。
 
-- `required_materials`: every mandatory role is present and singleton roles are unique.
-- `fee_nature`: the authoritative documents describe maintenance fees. Wording that expressly
-  describes personnel incentives, displays, material production, other expenses, or direct-operation
-  fees is a conflict and blocks this scenario.
-- `pos_visual_seal`: the submitted visual POS data carries a visible dealer seal.
-- `pos_spreadsheet`: the electronic POS file is readable, contains item rows, and has no external
-  formula dependency. Derived totals come only from its own cells.
-- `pos_correspondence`: POS visual and spreadsheet totals match exactly for quantity and to RMB 0.01
-  for sales amount. When both contain detail rows, each visual row must map uniquely to one spreadsheet
-  product and its quantity and amount must match. A total match never repairs a row conflict.
-- `promotional_contract`: the contract is signed and states parties, period, maintenance-fee scope,
-  eligible POS scope, calculation method, rate, and any applicable ceiling.
-- `settlement`: the company-template settlement is dealer-stamped and itemizes the fee, calculation
-  method, POS basis, and claimed amount.
-- `party_alignment`: dealer/customer identity is uniquely compatible across POS, contract, settlement,
-  and spreadsheet when those fields are present. A generic chain name is insufficient when it could
-  refer to several legal parties.
-- `period_alignment`: POS and execution evidence fall within the contract period, and the settlement
-  period does not exceed it.
-- `type_specific_support`: the concrete maintenance activity has at least one independent supporting
-  agreement, related document, or execution record. Required activity photos must be in-period.
-- `amount_recalculation`: apply only the contract's explicit eligible POS scope and explicit formula.
-  The recalculated amount, after contract ceiling if any, must equal the stamped settlement claim to
-  RMB 0.01. Never infer a rate or unit price by division.
+- `required_materials`：每个必备角色都存在，且单例角色唯一。
+- `fee_nature`：权威文档描述维护费用。明确描述人员激励、陈列、物料制作、其他费用或直营费用
+  的表述会形成冲突并阻断本场景。
+- `pos_visual_seal`：已提交视觉 POS 数据带有可见经销商印章。
+- `pos_spreadsheet`：POS 电子文件可读，包含项目行，且没有外部公式依赖。派生合计只能来自其
+  自身单元格。
+- `pos_correspondence`：POS 图片与电子表的数量合计严格一致，销售金额精确到人民币 0.01 元
+  一致。双方都有明细行时，每条视觉行必须唯一映射到一个电子表商品，且数量和金额一致。合计
+  一致绝不能修补明细行冲突。
+- `promotional_contract`：合同已签署，并写明相关方、期间、维护费用范围、符合条件的 POS 范围、
+  计算方法、费率及任何适用上限。
+- `settlement`：公司模板结算单有经销商盖章，并分项列示费用、计算方法、POS 依据和申报金额。
+- `party_alignment`：相关字段存在时，经销商/客户身份在 POS、合同、结算单和电子表之间唯一
+  相容。可能指向多个法律主体时，通用连锁名称不足以成立。
+- `period_alignment`：POS 和执行证据位于合同期内，结算期间不超出合同期。
+- `type_specific_support`：具体维护活动至少有一份独立支持协议、相关文件或执行记录。必需活动
+  照片必须位于活动期内。
+- `amount_recalculation`：只应用合同明确的合格 POS 范围和明确公式。应用合同上限后，复算金额
+  必须与盖章结算申报精确到人民币 0.01 元一致。绝不能通过除法推断费率或单价。
 
-## Amount and decision
+## 金额与决定
 
-The claimed amount comes from the dealer-stamped settlement. Use `ROUND_HALF_UP` to two decimal places.
-If any blocking control fails or the contractual amount cannot be deterministically recomputed, the
-suggested approved amount is `0.00`, the full claim is temporarily held, and the conclusion is
-`human_review`. If all controls pass and the recomputed amount equals the claim, the suggested approved
-amount equals the claim, the held amount is `0.00`, and the conclusion is `pass`.
+申报金额来自经销商盖章结算单。使用 `ROUND_HALF_UP` 保留两位小数。任何阻断控制失败或合同
+金额无法确定性复算时，建议核准金额为 `0.00`、全部申报暂缓，结论为 `human_review`。全部控制
+通过且复算金额等于申报金额时，建议核准金额等于申报金额、暂缓金额为 `0.00`，结论为 `pass`。
 
-## Error grouping and resubmission
+## 错误分组与补交
 
-Group one issue per failed control rather than one issue per missing field. Name every affected source,
-state the visible or deterministic observation, explain the blocking effect, and request the exact
-replacement or missing file. Do not expose model, prompt, Schema, temporary path, confidence internals,
-or implementation terminology in customer-facing facts; the six-column result may show only the
-business confidence label `高/中/低`.
+每个失败控制合并为一个问题，不要为每个缺失字段生成一个问题。执行[统一错误原因与处理方式规范](../../orchestrate-offline-audit/references/error-reasons.md)：
+错误原因仅写相关业务文件及具体缺失、不可读、关系不明或数值差异；替换文件、补交材料等建议只写处理方式。
+业务文件区域只列相关实际文件 basename，不展开角色、事实或数量。阻断影响、完整证据与置信度保留内部结果，
+不能拼接到原因或处理方式。不得在客户文案暴露模型、提示词、Schema、临时路径或实现术语。

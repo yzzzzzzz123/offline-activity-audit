@@ -1,4 +1,4 @@
 interface:
-  display_name: "Offline Audit Orchestrator"
-  short_description: "Audit 1-10 ZIPs into the fixed two-level LAN system"
-  default_prompt: "Use $orchestrate-offline-audit to process one to ten registered scenario ZIPs in input sequentially and publish one verified persistent run archive for the fixed root system, where the level-one ledger expands each run into its own level-two record page; pass a run-id beginning with the YYYYMMDD business date and the actual executor identity as producer-model."
+  display_name: "线下活动核销编排器"
+  short_description: "将 1 至 10 个 ZIP 核销到固定两级局域网系统"
+  default_prompt: "使用 $orchestrate-offline-audit 依次处理 input 中 1 至 10 个已登记场景 ZIP，并为固定根系统发布一个经过验证的持久运行档案；一级台账中的每次运行可展开为独立二级记录页。run-id 以 YYYYMMDD 业务日期开头，producer-model 传入实际执行者标识。"

@@ -35,8 +35,8 @@
       font-size: 14px;
       line-height: 1.65;
     }
-    button, input { font: inherit; }
-    button:focus-visible, input:focus-visible { outline: 3px solid rgba(21, 158, 219, .3); outline-offset: 2px; }
+    button, input, select { font: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgba(21, 158, 219, .3); outline-offset: 2px; }
     .eo-topbar {
       position: sticky;
       z-index: 20;
@@ -153,88 +153,7 @@
     .eo-view:not([hidden]) { animation: eo-view-in .26s ease both; }
     @keyframes eo-view-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
     .eo-home-cockpit { display: grid; gap: 12px; }
-    .eo-cockpit-hero {
-      position: relative;
-      display: grid;
-      min-height: 178px;
-      padding: 28px 30px;
-      overflow: hidden;
-      color: var(--eo-ink);
-      background: var(--eo-surface);
-      border: 1px solid var(--eo-line-dark);
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 28px;
-      clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 0 100%);
-    }
-    .eo-cockpit-hero::before {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      width: 7px;
-      background: var(--eo-danger);
-      content: "";
-    }
-    .eo-cockpit-hero::after {
-      position: absolute;
-      top: 20px;
-      right: 28px;
-      color: #e7edef;
-      content: "REJECTED ONLY";
-      font: 900 28px/1 var(--eo-mono);
-      letter-spacing: .12em;
-    }
-    .eo-hero-copy { position: relative; z-index: 1; }
-    .eo-kicker { display: inline-flex; margin-bottom: 11px; color: var(--eo-danger-deep); align-items: center; gap: 8px; font: 800 9px/1 var(--eo-mono); letter-spacing: .15em; }
-    .eo-kicker::before { width: 24px; height: 2px; background: var(--eo-danger); content: ""; }
-    .eo-hero-copy h1 { max-width: 760px; margin: 0; font-size: clamp(28px, 3.7vw, 45px); line-height: 1.08; letter-spacing: -.04em; }
-    .eo-hero-copy p { max-width: 720px; margin: 13px 0 0; color: var(--eo-soft); font-size: 12px; }
-    .eo-total-gauge { position: relative; z-index: 1; min-width: 170px; padding: 18px 20px; background: var(--eo-dark); border-left: 5px solid var(--eo-danger); text-align: right; }
-    .eo-total-gauge span { display: block; color: #94aeb9; font-size: 9px; letter-spacing: .08em; }
-    .eo-total-gauge strong { display: inline-block; margin-top: 5px; color: #fff; font: 900 48px/.95 var(--eo-mono); letter-spacing: -.08em; }
-    .eo-total-gauge em { margin-left: 6px; color: #ff8f84; font-size: 10px; font-style: normal; font-weight: 800; }
-    .eo-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
-    .eo-metric {
-      position: relative;
-      display: grid;
-      min-height: 105px;
-      padding: 16px 17px 14px;
-      overflow: hidden;
-      background: var(--eo-surface);
-      border: 1px solid var(--eo-line);
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: end;
-      gap: 10px;
-    }
-    .eo-metric::before { position: absolute; top: 0; left: 0; width: 42px; height: 3px; background: var(--metric-accent, var(--eo-dark)); content: ""; }
-    .eo-metric-copy span { display: block; color: #43565f; font-size: 10px; font-weight: 800; }
-    .eo-metric-copy small { display: block; margin-top: 5px; color: var(--eo-muted); font-size: 8px; line-height: 1.45; }
-    .eo-metric strong { color: var(--metric-accent, var(--eo-dark)); font: 900 32px/1 var(--eo-mono); }
-    .eo-composition {
-      display: grid;
-      padding: 15px 18px;
-      background: #f9fbfb;
-      border: 1px solid var(--eo-line);
-      grid-template-columns: 150px minmax(160px, 1fr) auto;
-      align-items: center;
-      gap: 18px;
-    }
-    .eo-composition-title small { display: block; color: var(--eo-muted); font: 800 8px/1 var(--eo-mono); letter-spacing: .12em; }
-    .eo-composition-title strong { display: block; margin-top: 6px; font-size: 13px; }
-    .eo-composition-bar { display: flex; height: 8px; overflow: hidden; background: #dbe3e6; }
-    .eo-composition-bar i, .eo-composition-bar b { display: block; height: 100%; }
-    .eo-composition-bar i { background: var(--eo-danger); }
-    .eo-composition-bar b { background: var(--eo-dark-2); }
-    .eo-composition-legend { display: flex; align-items: center; gap: 13px; color: var(--eo-soft); font-size: 9px; white-space: nowrap; }
-    .eo-composition-legend span { display: inline-flex; align-items: center; gap: 5px; }
-    .eo-composition-legend i { width: 7px; height: 7px; background: var(--eo-danger); }
-    .eo-composition-legend span:last-child i { background: var(--eo-dark-2); }
     .eo-queue-panel { background: var(--eo-surface-soft); border: 1px solid var(--eo-line-dark); }
-    .eo-queue-head { display: flex; min-height: 68px; padding: 15px 18px; background: #fff; border-bottom: 1px solid var(--eo-line); align-items: center; justify-content: space-between; gap: 20px; }
-    .eo-queue-head small { display: block; color: var(--eo-danger-deep); font: 800 8px/1 var(--eo-mono); letter-spacing: .13em; }
-    .eo-queue-head h2 { margin: 6px 0 0; font-size: 18px; line-height: 1.2; }
-    .eo-queue-head p { margin: 0; color: var(--eo-soft); font-size: 10px; text-align: right; }
     .eo-scenario-grid { display: grid; padding: 10px; gap: 8px; }
     .eo-ledger { display: grid; gap: 12px; }
     .eo-page-command { display: flex; min-height: 42px; padding: 7px 10px; background: #fff; border: 1px solid var(--eo-line); align-items: center; justify-content: space-between; gap: 16px; }
@@ -381,16 +300,6 @@
       font-size: 9px;
       font-weight: 800;
     }
-    .eo-error-confidence {
-      flex: 0 0 auto;
-      padding: 3px 7px;
-      color: #74522f;
-      background: #fff8ed;
-      border: 1px solid #ead9bd;
-      border-radius: 2px;
-      font-size: 9px;
-      font-weight: 800;
-    }
     .eo-field {
       display: grid;
       margin-top: 11px;
@@ -432,16 +341,6 @@
     .eo-table td:last-child { color: #8d342d; font-weight: 680; }
     .eo-empty { padding: 24px; color: var(--eo-green); background: #eef8f3; border: 1px solid #cce5d7; }
     .eo-no-match { padding: 20px; color: var(--eo-soft); text-align: center; background: #fff; border: 1px solid var(--eo-line); }
-    .eo-pass-hero::before { background: var(--eo-green); }
-    .eo-pass-hero::after { color: #e1eee9; content: "VERIFIED"; }
-    .eo-pass-hero .eo-kicker { color: #136c4d; }
-    .eo-pass-hero .eo-kicker::before { background: var(--eo-green); }
-    .eo-pass-hero .eo-total-gauge { border-left-color: var(--eo-green); }
-    .eo-pass-hero .eo-total-gauge em { color: #7fe0b8; }
-    .eo-pass-composition .eo-composition-bar i { background: var(--eo-green); }
-    .eo-pass-composition .eo-composition-bar b { background: var(--eo-teal); }
-    .eo-pass-composition .eo-composition-legend i { background: var(--eo-green); }
-    .eo-pass-composition .eo-composition-legend span:last-child i { background: var(--eo-teal); }
     .eo-pass-filter-panel {
       overflow: hidden;
       background: #fff;
@@ -451,23 +350,7 @@
       transition: border-color .18s ease, box-shadow .18s ease;
     }
     .eo-pass-filter-panel.is-filtering { border-color: #9fcbbb; box-shadow: 0 9px 28px rgba(24, 132, 94, .1); }
-    .eo-pass-filter-head {
-      display: flex;
-      min-height: 67px;
-      padding: 12px 16px;
-      background: #f3f8f6;
-      border-bottom: 1px solid #d7e3de;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-    }
-    .eo-pass-filter-head small { display: block; color: #18845e; font: 800 8px/1 var(--eo-mono); letter-spacing: .13em; }
-    .eo-pass-filter-head h2 { margin: 6px 0 0; color: #183f31; font-size: 16px; line-height: 1.15; }
-    .eo-pass-filter-result { display: flex; min-height: 34px; align-items: center; gap: 7px; }
-    .eo-pass-filter-result > span { color: #60756d; font-size: 9px; font-weight: 760; }
-    .eo-pass-filter-result strong { color: var(--eo-green); font: 900 23px/1 var(--eo-mono); }
-    .eo-pass-filter-result em { color: #71847d; font: 750 9px/1 var(--eo-mono); font-style: normal; }
-    .eo-pass-filter-result button, .eo-pass-filter-empty button {
+    .eo-pass-filter-empty button {
       min-height: 30px;
       margin-left: 7px;
       padding: 5px 10px;
@@ -479,17 +362,16 @@
       font-weight: 800;
       transition: color .16s ease, background-color .16s ease, border-color .16s ease;
     }
-    .eo-pass-filter-result button:hover, .eo-pass-filter-empty button:hover { color: #fff; background: var(--eo-green); border-color: var(--eo-green); }
-    .eo-pass-filter-result button:disabled { color: #98aaa3; background: #f2f5f4; border-color: #d9e1de; cursor: default; }
+    .eo-pass-filter-empty button:hover { color: #fff; background: var(--eo-green); border-color: var(--eo-green); }
     .eo-pass-filter-grid {
       display: grid;
       padding: 14px 16px 16px;
-      grid-template-columns: minmax(150px, .8fr) minmax(150px, .9fr) minmax(130px, .65fr) minmax(230px, 1.5fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
     }
     .eo-pass-filter-grid label { display: grid; min-width: 0; gap: 6px; }
     .eo-pass-filter-grid label > span { color: #526960; font-size: 9px; font-weight: 800; letter-spacing: .04em; }
-    .eo-pass-filter-grid select, .eo-pass-filter-grid input {
+    .eo-pass-filter-grid select {
       width: 100%;
       min-width: 0;
       height: 38px;
@@ -503,9 +385,8 @@
       transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
     }
     .eo-pass-filter-grid select { padding-right: 30px; cursor: pointer; }
-    .eo-pass-filter-grid input::placeholder { color: #899a94; font-weight: 620; }
-    .eo-pass-filter-grid select:hover, .eo-pass-filter-grid input:hover { background: #fff; border-color: #9fc5b7; }
-    .eo-pass-filter-grid select:focus-visible, .eo-pass-filter-grid input:focus-visible { background: #fff; border-color: var(--eo-green); box-shadow: 0 0 0 3px rgba(24, 132, 94, .13); }
+    .eo-pass-filter-grid select:hover { background: #fff; border-color: #9fc5b7; }
+    .eo-pass-filter-grid select:focus-visible { background: #fff; border-color: var(--eo-green); box-shadow: 0 0 0 3px rgba(24, 132, 94, .13); }
     .eo-pass-filter-grid select:disabled { color: #90a29b; background: #f2f5f4; border-color: #dce4e1; cursor: not-allowed; }
     .eo-pass-facet-hint {
       display: flex;
@@ -545,25 +426,12 @@
       box-shadow: 0 8px 24px rgba(133, 49, 40, .055);
     }
     .eo-error-filter-panel.is-filtering { border-color: #d8aaa4; box-shadow: 0 9px 28px rgba(190, 59, 49, .09); }
-    .eo-error-filter-panel .eo-pass-filter-head { background: #fcf6f5; border-bottom-color: #ead9d5; }
-    .eo-error-filter-panel .eo-pass-filter-head small { color: #b13e34; }
-    .eo-error-filter-panel .eo-pass-filter-head h2 { color: #5c2924; }
-    .eo-error-filter-panel .eo-pass-filter-result > span { color: #80635f; }
-    .eo-error-filter-panel .eo-pass-filter-result strong { color: var(--eo-danger); }
-    .eo-error-filter-panel .eo-pass-filter-result em { color: #8b716d; }
-    .eo-error-filter-panel .eo-pass-filter-result button,
     .eo-error-filter-empty button { color: #9d382f; border-color: #dfb7b1; }
-    .eo-error-filter-panel .eo-pass-filter-result button:hover,
     .eo-error-filter-empty button:hover { color: #fff; background: var(--eo-danger); border-color: var(--eo-danger); }
-    .eo-error-filter-panel .eo-pass-filter-result button:disabled { color: #ad9b98; background: #f7f3f2; border-color: #e6dcda; }
-    .eo-error-filter-grid { grid-template-columns: minmax(145px, .72fr) minmax(165px, .82fr) minmax(130px, .62fr) minmax(250px, 1.45fr); }
     .eo-error-filter-grid label > span { color: #745b57; }
-    .eo-error-filter-grid select,
-    .eo-error-filter-grid input { color: #4f2d29; background-color: #fffcfb; border-color: #dfd0cd; }
-    .eo-error-filter-grid select:hover,
-    .eo-error-filter-grid input:hover { background: #fff; border-color: #d7aaa4; }
-    .eo-error-filter-grid select:focus-visible,
-    .eo-error-filter-grid input:focus-visible { background: #fff; border-color: var(--eo-danger); box-shadow: 0 0 0 3px rgba(190, 59, 49, .11); }
+    .eo-error-filter-grid select { color: #4f2d29; background-color: #fffcfb; border-color: #dfd0cd; }
+    .eo-error-filter-grid select:hover { background: #fff; border-color: #d7aaa4; }
+    .eo-error-filter-grid select:focus-visible { background: #fff; border-color: var(--eo-danger); box-shadow: 0 0 0 3px rgba(190, 59, 49, .11); }
     .eo-error-filter-grid select:disabled { color: #ab9b98; background: #f7f3f2; border-color: #e7dddb; }
     .eo-error-filter-panel .eo-pass-facet-hint { color: #806963; background: #fdf9f8; border-top-color: #ead9d5; }
     .eo-error-filter-panel .eo-pass-facet-hint b { color: #a23930; }
@@ -575,7 +443,6 @@
     }
     .eo-error-filter-empty span { color: #846b67; }
     .eo-pass-ledger { overflow: hidden; background: var(--eo-surface-soft); border: 1px solid var(--eo-line-dark); }
-    .eo-pass-ledger > .eo-queue-head small { color: #14704f; }
     .eo-pass-groups { display: grid; padding: 10px; gap: 12px; }
     .eo-pass-group { min-width: 0; overflow: hidden; background: #f7faf9; border: 1px solid #cfdcd7; }
     .eo-pass-group-head {
@@ -609,6 +476,8 @@
       display: grid;
       min-width: 0;
       overflow: hidden;
+      content-visibility: auto;
+      contain-intrinsic-size: auto 168px;
       background: #fff;
       border: 1px solid #d7e1dd;
       border-left: 4px solid var(--eo-green);
@@ -622,7 +491,6 @@
     .eo-pass-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
     .eo-pass-head small { display: block; color: #18845e; font: 800 8px/1 var(--eo-mono); letter-spacing: .09em; }
     .eo-pass-head h3 { margin: 5px 0 0; font-size: 14px; line-height: 1.35; }
-    .eo-pass-confidence { flex: 0 0 auto; padding: 3px 7px; color: #176f50; background: #edf8f3; border: 1px solid #cce5da; font-size: 8px; font-weight: 800; }
     .eo-pass-field { display: grid; margin-top: 9px; padding-top: 8px; border-top: 1px solid #e1e8e5; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
     .eo-pass-field > span { color: #6c7f77; font-size: 9px; font-weight: 760; }
     .eo-pass-field > strong, .eo-pass-field > div { min-width: 0; font-size: 11px; overflow-wrap: anywhere; }
@@ -632,6 +500,15 @@
     .eo-pass-files { display: flex; flex-wrap: wrap; gap: 5px; }
     .eo-pass-files span, .eo-pass-files em { padding: 3px 6px; color: #315c4c; background: #f2f7f5; border: 1px solid #d9e6e1; font-size: 8px; font-style: normal; font-weight: 700; }
     .eo-pass-files em { color: #6b7f77; background: #fff; }
+    .eo-evidence { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #c8d4d8; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+    .eo-evidence-count { margin: 0 0 8px; color: #263d49; font-size: 13px; }
+    .eo-evidence-source { margin: 8px 0; padding: 10px 12px; border: 1px solid #dae2e5; background: #f8fafb; border-radius: 6px; }
+    .eo-evidence-source > strong, .eo-evidence-source > small { display: block; }
+    .eo-evidence-source > small { margin: 3px 0; color: #536674; font-size: 11px; }
+    .eo-evidence details { margin-top: 8px; }
+    .eo-evidence summary { cursor: pointer; color: #275969; font-weight: 700; }
+    .eo-evidence details .eo-line { padding: 5px 0; border-bottom: 1px solid #e0e7e9; }
+    .eo-evidence-limit { color: #845a1e; margin-top: 6px; }
     .eo-pass-empty { display: flex; padding: 22px; color: #356151; background: #f0f7f4; flex-direction: column; gap: 4px; }
     .eo-pass-empty strong { font-size: 12px; }
     .eo-pass-empty span { color: #6d8179; font-size: 10px; }
@@ -652,7 +529,6 @@
     }
     @media (max-width: 1120px) {
       .eo-app-grid { grid-template-columns: 215px minmax(0, 1fr); }
-      .eo-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .eo-scenario-card { grid-template-columns: 48px minmax(0, 1fr) 84px; }
       .eo-enter { grid-column: 2 / -1; width: fit-content; }
     }
@@ -667,10 +543,7 @@
       .eo-tab { flex: 0 0 184px; min-height: 52px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); border-left-width: 4px; }
       .eo-rail-foot { display: none; }
       .eo-topbar-inner { min-height: 68px; }
-      .eo-composition { grid-template-columns: 135px minmax(120px, 1fr); }
-      .eo-composition-legend { grid-column: 1 / -1; justify-content: flex-end; }
       .eo-pass-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .eo-error-search { grid-column: 1 / -1; }
     }
     @media (max-width: 620px) {
       .eo-shell, .eo-topbar-inner { width: min(100% - 20px, 1440px); }
@@ -678,17 +551,6 @@
       .eo-brand-copy span { display: none; }
       .eo-shell { padding-top: 10px; }
       .eo-rail-head p { display: none; }
-      .eo-cockpit-hero { min-height: 0; padding: 24px 19px; grid-template-columns: 1fr; align-items: start; }
-      .eo-cockpit-hero::after { display: none; }
-      .eo-hero-copy h1 { font-size: 28px; }
-      .eo-total-gauge { min-width: 0; text-align: left; }
-      .eo-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .eo-metric { min-height: 92px; padding: 14px 12px 12px; grid-template-columns: 1fr; }
-      .eo-metric strong { font-size: 27px; }
-      .eo-composition { grid-template-columns: 1fr; gap: 11px; }
-      .eo-composition-legend { grid-column: auto; justify-content: flex-start; flex-wrap: wrap; }
-      .eo-queue-head { align-items: flex-start; flex-direction: column; gap: 7px; }
-      .eo-queue-head p { text-align: left; }
       .eo-scenario-card { padding: 14px; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; }
       .eo-scenario-code { font-size: 19px; }
       .eo-scenario-count { padding: 9px 0 0; border-top: 1px solid var(--eo-line); border-left: 0; grid-column: 1 / -1; text-align: left; }
@@ -704,11 +566,7 @@
       .eo-error-head { align-items: flex-start; flex-direction: column; gap: 6px; }
       .eo-error-badges { justify-content: flex-start; }
       .eo-field { grid-template-columns: 1fr; gap: 4px; }
-      .eo-pass-filter-head { align-items: flex-start; flex-direction: column; gap: 10px; }
-      .eo-pass-filter-result { width: 100%; }
-      .eo-pass-filter-result button { margin-left: auto; }
       .eo-pass-filter-grid { grid-template-columns: 1fr; }
-      .eo-error-search { grid-column: auto; }
       .eo-pass-facet-hint { align-items: flex-start; flex-direction: column; gap: 4px; }
       .eo-pass-facet-hint em { flex: initial; }
       .eo-pass-group-head { grid-template-columns: 38px minmax(0, 1fr); padding: 14px 12px; }
@@ -731,4 +589,7 @@
       html { scroll-behavior: auto; }
       .eo-view:not([hidden]) { animation: none; }
       .eo-scenario-card { transition: none; }
+    }
+    @media print {
+      .eo-pass-card { content-visibility: visible; contain-intrinsic-size: none; }
     }

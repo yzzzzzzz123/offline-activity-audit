@@ -1,22 +1,11 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import copy
 import hashlib
-import hmac
 import json
-import os
 import re
-import secrets
-import shutil
 import sys
-import tempfile
-import time
 import unicodedata
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -28,46 +17,16 @@ from PIL import Image
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_ROOT = SCRIPT_DIR.parent
 PROJECT_ROOT = SCRIPT_DIR.parents[2]
-SHARED_RAG_ROOT = (
-    PROJECT_ROOT / "shared" / "canban-product-multimodal-knowledge-base"
-)
-SHARED_RAG_SCRIPTS = SHARED_RAG_ROOT / "scripts"
-for import_root in (PROJECT_ROOT, SHARED_RAG_SCRIPTS):
-    if str(import_root) not in sys.path:
-        sys.path.insert(0, str(import_root))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from audit_core.common import AuditError, load_json, sha256_file, validate_json
-from audit_core.product_rag import (
-    canonical_product_name,
-    catalog_product_name_values,
-    clear_product_rag_cache,
-    ean13_is_valid,
-    load_product_rag,
-)
-from ingest_product_reference import (
-    CATALOG_PATH,
-    KNOWLEDGE_ASSET_ROOT,
-    KNOWLEDGE_ROOT,
-    PRODUCTS_ROOT,
-    SCHEMA_PATH,
-    _acquire_lock,
-    _catalog_product_directory,
-    _relative_text,
-    _release_lock,
-    _write_catalog_atomic,
-)
+from audit_core.product_rag import canonical_product_name, catalog_product_name_values, ean13_is_valid
+from audit_core.product_database import load_product_catalog
+from audit_core.product_oss import manifest_key
 
 
 OBSERVATION_SCHEMA_PATH = SKILL_ROOT / "references" / "observation-manifest.schema.json"
-API_ORIGIN = "https://api.canban.cn"
-API_PATH = "/outapi/oms/product/sku/mapping"
-SIGNATURE_METHOD = "HmacSHA256"
-SIGNATURE_HEADER_NAMES = (
-    "x-ca-key",
-    "x-ca-nonce",
-    "x-ca-signature-method",
-    "x-ca-timestamp",
-)
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 PRODUCT_CODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 CATEGORY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -116,15 +75,13 @@ def _parse_args() -> argparse.Namespace:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    match = subparsers.add_parser("match", help="查询接口并生成无凭据接入计划")
+    match = subparsers.add_parser("match", help="查询数据库并生成无凭据图片接入计划")
     match.add_argument("--source-root", required=True)
     match.add_argument("--observations", required=True)
     match.add_argument("--output", required=True)
-    match.add_argument("--request-gap-ms", type=int, default=120)
 
-    apply_parser = subparsers.add_parser("apply", help="预演或原子应用已收敛计划")
-    apply_parser.add_argument("--plan-file", required=True)
-    apply_parser.add_argument("--confirm", action="store_true")
+    validate = subparsers.add_parser("validate", help="重新查库并核验计划与原始图片，不上传")
+    validate.add_argument("--plan-file", required=True)
 
     reconcile = subparsers.add_parser("reconcile", help="对账权威库存清单与正式catalog")
     reconcile.add_argument("--workbook", required=True)
@@ -141,113 +98,6 @@ def _write_json(path: Path, value: Any) -> None:
     )
 
 
-def _windows_user_environment(name: str) -> str:
-    if os.name != "nt":
-        return ""
-    try:
-        import winreg
-
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
-            value, _ = winreg.QueryValueEx(key, name)
-    except (FileNotFoundError, OSError):
-        return ""
-    return str(value).strip()
-
-
-def _read_api_secret(name: str) -> str:
-    return os.environ.get(name, "").strip() or _windows_user_environment(name)
-
-
-def _signature_headers(access_key: str, timestamp: str, nonce: str) -> dict[str, str]:
-    canonical = "\n".join(
-        (
-            f"x-ca-key:{access_key}",
-            f"x-ca-nonce:{nonce}",
-            f"x-ca-signature-method:{SIGNATURE_METHOD}",
-            f"x-ca-timestamp:{timestamp}",
-        )
-    )
-    return {
-        "canonical": canonical,
-        "signature_headers": ",".join(SIGNATURE_HEADER_NAMES),
-    }
-
-
-def _signed_request(
-    access_key: str,
-    secret_key: str,
-    barcode: str,
-) -> urllib.request.Request:
-    query = urllib.parse.urlencode({"barcode": barcode})
-    resource = f"{API_PATH}?{query}"
-    timestamp = str(int(time.time() * 1000))
-    nonce = secrets.token_hex(16)
-    signature_values = _signature_headers(access_key, timestamp, nonce)
-    string_to_sign = "\n".join(
-        (
-            "GET",
-            "application/json",
-            "",
-            "",
-            "",
-            signature_values["canonical"],
-            resource,
-        )
-    )
-    signature = base64.b64encode(
-        hmac.new(
-            secret_key.encode("utf-8"),
-            string_to_sign.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-    ).decode("ascii")
-    return urllib.request.Request(
-        f"{API_ORIGIN}{resource}",
-        method="GET",
-        headers={
-            "Accept": "application/json",
-            "X-Ca-Key": access_key,
-            "X-Ca-Timestamp": timestamp,
-            "X-Ca-Nonce": nonce,
-            "X-Ca-Signature-Method": SIGNATURE_METHOD,
-            "X-Ca-Signature-Headers": signature_values["signature_headers"],
-            "X-Ca-Signature": signature,
-        },
-    )
-
-
-def _fetch_one(access_key: str, secret_key: str, barcode: str) -> dict[str, Any]:
-    last_error: Exception | None = None
-    for attempt in range(1, 4):
-        request = _signed_request(access_key, secret_key, barcode)
-        try:
-            with urllib.request.urlopen(request, timeout=20) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-                return {
-                    "barcode": barcode,
-                    "http_status": int(response.status),
-                    "api_status": payload.get("status"),
-                    "msg": payload.get("msg"),
-                    "list": list((payload.get("data") or {}).get("list") or []),
-                }
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            try:
-                payload = json.loads(body)
-            except json.JSONDecodeError:
-                payload = {}
-            return {
-                "barcode": barcode,
-                "http_status": int(exc.code),
-                "api_status": payload.get("status"),
-                "msg": payload.get("msg") or "http_error",
-                "list": list((payload.get("data") or {}).get("list") or []),
-            }
-        except (OSError, TimeoutError, json.JSONDecodeError) as exc:
-            last_error = exc
-            if attempt < 3:
-                time.sleep(0.3 * attempt)
-    raise AuditError(f"商品映射接口连续三次失败：barcode={barcode}，error={last_error}")
 
 
 def _normalize_text(value: Any) -> str:
@@ -368,12 +218,12 @@ def _candidate_metrics(
 
 
 def _valid_exact_candidates(
-    api_result: dict[str, Any],
+    database_result: dict[str, Any],
     barcode: str,
 ) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     seen_codes: set[str] = set()
-    for raw in api_result.get("list") or []:
+    for raw in database_result.get("list") or []:
         if not isinstance(raw, dict):
             continue
         product_code = str(raw.get("product_code") or "").strip()
@@ -383,10 +233,10 @@ def _valid_exact_candidates(
             returned_barcode != barcode
             or not product_name
             or PRODUCT_CODE_PATTERN.fullmatch(product_code) is None
-            or product_code.casefold() in seen_codes
+            or product_code in seen_codes
         ):
             continue
-        seen_codes.add(product_code.casefold())
+        seen_codes.add(product_code)
         result.append(
             {
                 "product_code": product_code,
@@ -414,7 +264,7 @@ def _select_candidate(
         )
     )
     if not scored:
-        return None, "not_found", "接口未返回同码且三字段有效的候选", scored
+        return None, "not_found", "数据库没有同码且三字段有效的候选", scored
 
     approved_code = str(observation.get("approved_product_code") or "").strip()
     if approved_code:
@@ -426,13 +276,13 @@ def _select_candidate(
             return None, "approval_invalid", "人工批准编码不在精确同码候选中", scored
         if not approved["compatible"]:
             return None, "approval_conflict", "人工批准候选与可见名称、品类或规格冲突", scored
-        return approved, "explicit_approved", "人工确认了精确同码且名称相容的接口候选", scored
+        return approved, "explicit_approved", "人工确认了精确同码且名称相容的数据库候选", scored
 
     compatible = [item for item in scored if item["compatible"]]
     if not compatible:
         return None, "name_conflict", "精确同码候选均与可见产品名、品类或规格不相容", scored
     if len(scored) == 1:
-        return compatible[0], "api_unique", "接口仅返回一个精确同码且名称相容的候选", scored
+        return compatible[0], "database_unique", "数据库仅有一个精确同码且名称相容的候选", scored
     if len(compatible) == 1:
         return compatible[0], "name_unique", "同码候选中仅一个与可见名称、品类和规格相容", scored
 
@@ -458,23 +308,22 @@ def _select_candidate(
 
 
 def _validate_source_root(path: Path) -> Path:
-    source_root = path.resolve()
-    knowledge_root = KNOWLEDGE_ROOT.resolve()
-    if path.is_symlink() or not source_root.is_dir():
-        raise AuditError(f"source-root 必须是存在的普通目录：{source_root}")
-    if source_root == knowledge_root or not source_root.is_relative_to(knowledge_root):
-        raise AuditError(
-            "source-root 必须是商品知识库下的一个受控素材集合，不能是知识库根目录："
-            f"{source_root}"
-        )
-    return source_root
+    if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()) or not path.is_dir():
+        raise AuditError("source-root 必须是操作者明确指定的普通素材目录")
+    root = path.resolve()
+    if root == Path(root.anchor) or root == PROJECT_ROOT or root in PROJECT_ROOT.parents:
+        raise AuditError("source-root 不能是磁盘根目录或项目根目录")
+    return root
 
 
 def _inspect_source_folder(
     source_root: Path,
     observation: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    folder = (source_root / str(observation["source_folder"])).resolve()
+    supplied = source_root / str(observation["source_folder"])
+    if supplied.is_symlink() or (hasattr(supplied, "is_junction") and supplied.is_junction()):
+        raise AuditError("单商品来源不得是链接或联接")
+    folder = supplied.resolve()
     if (
         folder.is_symlink()
         or not folder.is_dir()
@@ -482,6 +331,8 @@ def _inspect_source_folder(
     ):
         raise AuditError(f"观察项必须指向 source-root 的一个普通直接子目录：{folder}")
     children = sorted(folder.iterdir(), key=lambda item: item.name.casefold())
+    if any(item.is_symlink() or (hasattr(item, "is_junction") and item.is_junction()) for item in children):
+        raise AuditError("来源图片不得是链接或联接")
     nested = [item for item in children if item.is_dir()]
     if nested:
         raise AuditError(f"单商品文件夹不得嵌套目录：{nested[0]}")
@@ -519,8 +370,6 @@ def _inspect_source_folder(
 
 
 def _match(args: argparse.Namespace) -> int:
-    if args.request_gap_ms < 0 or args.request_gap_ms > 5_000:
-        raise AuditError("request-gap-ms 必须在0到5000之间")
     source_root = _validate_source_root(Path(args.source_root))
     observations_path = Path(args.observations).resolve()
     manifest = load_json(observations_path)
@@ -539,28 +388,20 @@ def _match(args: argparse.Namespace) -> int:
                 f"观察清单69码未通过EAN-13校验：{observation['source_folder']}={barcode}"
             )
 
-    access_key = _read_api_secret("CANBAN_API_ACCESS_KEY")
-    secret_key = _read_api_secret("CANBAN_API_SECRET_KEY")
-    if not access_key or not secret_key:
-        raise AuditError(
-            "缺少 CANBAN_API_ACCESS_KEY 或 CANBAN_API_SECRET_KEY；"
-            "凭据只能来自进程或 Windows 用户环境"
-        )
-
-    api_results: dict[str, dict[str, Any]] = {}
+    database_catalog = load_product_catalog()
+    database_results: dict[str, dict[str, Any]] = {}
     barcodes = list(dict.fromkeys(str(item["barcode_69"]) for item in observations))
-    for index, barcode in enumerate(barcodes, start=1):
-        api_results[barcode] = _fetch_one(access_key, secret_key, barcode)
-        if index % 10 == 0 or index == len(barcodes):
-            print(f"queried {index}/{len(barcodes)}", file=sys.stderr)
-        if index != len(barcodes):
-            time.sleep(args.request_gap_ms / 1000)
+    for barcode in barcodes:
+        database_results[barcode] = {"list": [
+            {"barcode": p["barcode_69"], "product_name": p["product_name"], "product_code": p["product_code"]}
+            for p in database_catalog["products"] if p["barcode_69"] == barcode
+        ]}
 
     plan_products: list[dict[str, Any]] = []
     for observation in observations:
         barcode = str(observation["barcode_69"])
-        api_result = api_results[barcode]
-        candidates = _valid_exact_candidates(api_result, barcode)
+        database_result = database_results[barcode]
+        candidates = _valid_exact_candidates(database_result, barcode)
         selected, status, basis, scored = _select_candidate(observation, candidates)
         source_files = _inspect_source_folder(source_root, observation)
         selected_identity = None
@@ -571,11 +412,7 @@ def _match(args: argparse.Namespace) -> int:
                 "product_name": str(selected["product_name"]),
                 "barcode_69": barcode,
             }
-            target_directory = _catalog_product_directory(
-                barcode,
-                selected_identity["product_name"],
-                selected_identity["product_code"],
-            ).name
+            target_directory = manifest_key(selected_identity["product_code"])
         plan_products.append(
             {
                 "source_folder": str(observation["source_folder"]),
@@ -589,35 +426,27 @@ def _match(args: argparse.Namespace) -> int:
                 "name_evidence_files": list(observation["name_evidence_files"]),
                 "barcode_evidence_files": list(observation["barcode_evidence_files"]),
                 "source_files": source_files,
-                "api_http_status": api_result.get("http_status"),
-                "api_status": api_result.get("api_status"),
-                "api_message": api_result.get("msg"),
+                "data_source": "product_catalog.products",
                 "selection_status": status,
                 "selection_basis": basis,
                 "selected": selected_identity,
-                "target_directory": target_directory,
+                "image_manifest_key": target_directory,
                 "candidates": scored,
+                "approved_product_code": observation.get("approved_product_code"),
             }
         )
 
     plan = {
-        "schema_version": "1.0",
-        "kind": "new-product-onboarding-rag-plan",
+        "schema_version": "2.0",
+        "kind": "product-oss-onboarding-plan",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "selection_policy": (
-            "包装先视觉提取；接口69码精确过滤；产品名、品类、规格和可见款式唯一模糊匹配；"
+            "包装先视觉提取；数据库69码精确过滤；产品名、品类、规格和可见款式唯一模糊匹配；"
             "未显示的套盒、箱规、升级、代言、专供或国际修饰不得抢占；不能唯一收敛即失败关闭。"
         ),
-        "api": {
-            "origin": API_ORIGIN,
-            "path": API_PATH,
-            "query_field": "barcode",
-        },
-        "catalog_sha256_before": sha256_file(CATALOG_PATH),
+        "database": database_catalog["data_source"],
         "observations_sha256": sha256_file(observations_path),
-        "source_root_relative": source_root.relative_to(
-            KNOWLEDGE_ASSET_ROOT.resolve()
-        ).as_posix(),
+        "source_root": str(source_root),
         "products": plan_products,
     }
     output = Path(args.output).resolve()
@@ -628,329 +457,59 @@ def _match(args: argparse.Namespace) -> int:
         "products": len(plan_products),
         "resolved": len(plan_products) - len(unresolved),
         "unresolved": len(unresolved),
-        "http_200": sum(item["api_http_status"] == 200 for item in plan_products),
-        "api_200": sum(item["api_status"] == 200 for item in plan_products),
+        "database_rows": len(database_catalog["products"]),
         "output": str(output),
     }
     print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
     return 0 if not unresolved else 2
 
 
-def _safe_slug(value: str, *, max_length: int) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
-    if not slug:
-        raise AuditError(f"值无法生成稳定ID：{value}")
-    if len(slug) <= max_length:
-        return slug
-    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:10]
-    return f"{slug[: max_length - 11].rstrip('-')}-{digest}"
+def _prepare_publish(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """验证计划仍来自当前数据库及未变更原始素材；不执行上传或身份写入。"""
+    if plan.get("schema_version") != "2.0" or plan.get("kind") != "product-oss-onboarding-plan":
+        raise AuditError("plan-file 不是受支持的数据库到 OSS 接入计划，请重新 match")
+    database = load_product_catalog()
+    if any((plan.get("database") or {}).get(key) != database["data_source"].get(key)
+           for key in ("type", "sha256", "image_manifest_keys_sha256")):
+        raise AuditError("商品数据库自计划生成后已变化或计划不是数据库来源，必须重新 match")
+    by_code = {p["product_code"]: p for p in database["products"]}
+    items = plan.get("products")
+    if not isinstance(items, list) or not items:
+        raise AuditError("接入计划缺少商品")
+    source_path = Path(str(plan.get("source_root") or ""))
+    if not source_path.is_absolute():
+        raise AuditError("接入计划必须记录显式来源绝对路径")
+    source_root = _validate_source_root(source_path)
+    operations, seen = [], set()
+    for item in items:
+        selected = item.get("selected") or {}
+        current = by_code.get(selected.get("product_code"))
+        if current is None or any(selected.get(key) != current[key] for key in ("product_code", "product_name", "barcode_69")):
+            raise AuditError("图片接入计划中的商品身份未通过当前数据库核验")
+        if current["product_code"] in seen:
+            raise AuditError("多个来源不能同时覆盖同一商品图片集")
+        seen.add(current["product_code"])
+        expected_key = manifest_key(current["product_code"])
+        if item.get("image_manifest_key") != expected_key or item.get("barcode_69") != current["barcode_69"]:
+            raise AuditError("计划商品图片集或观察条码与数据库不一致")
+        candidates = [{"product_code": p["product_code"], "product_name": p["product_name"], "barcode": p["barcode_69"]}
+                      for p in database["products"] if p["barcode_69"] == current["barcode_69"]]
+        selected_again, _, _, _ = _select_candidate(item, candidates)
+        if selected_again is None or selected_again["product_code"] != current["product_code"]:
+            raise AuditError("视觉观察已不能唯一收敛到所选商品，请重新 match")
+        files = _inspect_source_folder(source_root, item)
+        if files != item.get("source_files"):
+            raise AuditError("来源图片自计划生成后已变化，请重新 match")
+        operations.append({"product_code": current["product_code"], "source_dir": str(source_root / item["source_folder"]),
+                           "image_manifest_key": expected_key, "image_count": len(files)})
+    return operations
 
 
-def _catalog_product_id(barcode: str, product_code: str) -> str:
-    prefix = f"canban-{barcode}-"
-    return prefix + _safe_slug(product_code, max_length=79 - len(prefix))
-
-
-def _view_id_prefix(product_code: str) -> str:
-    return "kb-" + _safe_slug(product_code, max_length=54)
-
-
-def _verify_source_files(
-    source_root: Path,
-    item: dict[str, Any],
-) -> tuple[Path, list[Path]]:
-    folder = (source_root / str(item["source_folder"])).resolve()
-    if folder.is_symlink() or not folder.is_dir() or folder.parent != source_root.resolve():
-        raise AuditError(f"计划来源目录已失效或越界：{folder}")
-    current = sorted(
-        [child for child in folder.iterdir() if child.is_file()],
-        key=lambda child: child.name.casefold(),
-    )
-    if any(child.suffix.lower() not in IMAGE_SUFFIXES for child in current):
-        raise AuditError(f"计划后来源目录新增了非图片文件：{folder}")
-    if any(child.is_dir() for child in folder.iterdir()):
-        raise AuditError(f"计划后来源目录出现嵌套目录：{folder}")
-    planned = {str(file_item["name"]): file_item for file_item in item["source_files"]}
-    if [child.name for child in current] != sorted(planned, key=str.casefold):
-        raise AuditError(f"计划后来源图片集合已变化：{folder}")
-    for child in current:
-        record = planned[child.name]
-        if sha256_file(child) != str(record["sha256"]):
-            raise AuditError(f"计划后来源图片哈希已变化：{child}")
-        with Image.open(child) as image:
-            if image.size != (int(record["width"]), int(record["height"])):
-                raise AuditError(f"计划后来源图片尺寸已变化：{child}")
-    return folder, current
-
-
-def _catalog_entry(
-    source_root: Path,
-    item: dict[str, Any],
-) -> tuple[dict[str, Any], Path, list[Path]]:
-    selected = item.get("selected")
-    if not isinstance(selected, dict):
-        raise AuditError(f"计划含未收敛商品，禁止应用：{item.get('source_folder')}")
-    product_code = str(selected.get("product_code") or "")
-    product_name = str(selected.get("product_name") or "")
-    barcode = str(selected.get("barcode_69") or "")
-    if (
-        PRODUCT_CODE_PATTERN.fullmatch(product_code) is None
-        or not product_name
-        or barcode != str(item.get("barcode_69") or "")
-        or not ean13_is_valid(barcode)
-    ):
-        raise AuditError(f"计划三字段无效：{item.get('source_folder')}")
-    source_folder, source_images = _verify_source_files(source_root, item)
-    destination = _catalog_product_directory(barcode, product_name, product_code)
-    if destination.name != str(item.get("target_directory") or ""):
-        raise AuditError(f"计划目标目录与三字段不一致：{item.get('source_folder')}")
-
-    name_evidence = set(str(value) for value in item["name_evidence_files"])
-    barcode_evidence = set(str(value) for value in item["barcode_evidence_files"])
-    source_record = {
-        "source_id": str(item["source_id"]),
-        "collection": str(item["collection"]),
-        "source_folder": _relative_text(source_folder),
-        "observed_product_name": str(item["observed_product_name"]),
-        "observed_specification": str(item["observed_specification"]),
-        "observed_variant": item.get("observed_variant"),
-    }
-    planned_files = {str(value["name"]): value for value in item["source_files"]}
-    view_prefix = _view_id_prefix(product_code)
-    views: list[dict[str, Any]] = []
-    for index, source_image in enumerate(source_images, start=1):
-        record = planned_files[source_image.name]
-        anchors: list[str] = []
-        if source_image.name in name_evidence:
-            anchors.extend(
-                [
-                    f"包装可见产品名称 {item['observed_product_name']}",
-                    f"包装可见规格 {item['observed_specification']}",
-                ]
-            )
-            if item.get("observed_variant"):
-                anchors.append(f"包装可见款式/香型 {item['observed_variant']}")
-        if source_image.name in barcode_evidence:
-            anchors.append(f"包装可见69码 {barcode}")
-        face = "unclassified"
-        if source_image.name in name_evidence:
-            face = "front"
-        if source_image.name in barcode_evidence:
-            face = "barcode"
-        views.append(
-            {
-                "view_id": f"{view_prefix}-v{index:02d}",
-                "face": face,
-                "image_file": _relative_text(destination / source_image.name),
-                "source_original_name": source_image.name,
-                "source_id": str(item["source_id"]),
-                "source_collection": str(item["collection"]),
-                "source_folder": _relative_text(source_folder),
-                "sha256": str(record["sha256"]),
-                "width": int(record["width"]),
-                "height": int(record["height"]),
-                "identity_strength": "strong" if anchors else "unreviewed",
-                "visible_anchors": anchors,
-                "limitations": [
-                    (
-                        "该视图只证明列出的包装可见锚点；正式三字段仍以精确69码和接口唯一名称匹配为准"
-                        if anchors
-                        else "未单独标注物理面；使用时必须与现场可见文字、69码或包装锚点逐图比较"
-                    )
-                ],
-            }
-        )
-    supporting = [f"规格 {item['observed_specification']}"]
-    if item.get("observed_variant"):
-        supporting.append(f"款式/香型 {item['observed_variant']}")
-    product = {
-        "product_id": _catalog_product_id(barcode, product_code),
-        "brand": str(item["brand"]),
-        "product_name": product_name,
-        "product_code": product_code,
-        "barcode_69": barcode,
-        "specification": str(item["observed_specification"]),
-        "variant": item.get("observed_variant"),
-        "aliases": [],
-        "variant_aliases": [],
-        "specification_aliases": [],
-        "product_code_aliases": [],
-        "match_policy": "exact_or_candidate",
-        "identity_anchors": {
-            "strong": [
-                f"产品名称 {product_name}",
-                f"产品编码 {product_code}",
-                f"69码 {barcode}",
-            ],
-            "supporting": supporting,
-        },
-        "non_identity_fields": [
-            "防伪二维码及其内容",
-            "批次、生产日期、限用日期等可变喷码",
-            "包装折痕、破损、反光和拍摄背景",
-        ],
-        "sources": [source_record],
-        "views": views,
-    }
-    return product, destination, source_images
-
-
-def _prepare_apply(plan: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    if plan.get("schema_version") != "1.0" or plan.get("kind") != "new-product-onboarding-rag-plan":
-        raise AuditError("plan-file 不是受支持的新商品接入计划")
-    if sha256_file(CATALOG_PATH) != str(plan.get("catalog_sha256_before") or ""):
-        raise AuditError("正式catalog自计划生成后已变化；必须重新match，禁止应用陈旧计划")
-    source_relative = Path(str(plan.get("source_root_relative") or ""))
-    if source_relative.is_absolute():
-        raise AuditError("计划 source_root_relative 必须是共享知识库相对路径")
-    source_root = (KNOWLEDGE_ASSET_ROOT / source_relative).resolve()
-    _validate_source_root(source_root)
-    catalog = copy.deepcopy(load_product_rag(KNOWLEDGE_ROOT))
-    products = list(catalog["products"])
-
-    existing_ids = {str(item["product_id"]).casefold() for item in products}
-    existing_names = {str(item["product_name"]).strip().casefold() for item in products}
-    existing_codes = {str(item["product_code"]).strip().casefold() for item in products}
-    existing_sources = {
-        str(source["source_id"]).casefold()
-        for product in products
-        for source in product.get("sources") or []
-    }
-    existing_views = {
-        str(view["view_id"]).casefold()
-        for product in products
-        for view in product.get("views") or []
-    }
-    operations: list[dict[str, Any]] = []
-    for item in plan.get("products") or []:
-        product, destination, source_images = _catalog_entry(source_root, item)
-        collision_values = (
-            (str(product["product_id"]).casefold(), existing_ids, "product_id"),
-            (str(product["product_name"]).strip().casefold(), existing_names, "产品名称"),
-            (str(product["product_code"]).strip().casefold(), existing_codes, "产品编码"),
-            (str(item["source_id"]).casefold(), existing_sources, "source_id"),
-        )
-        for value, existing, label in collision_values:
-            if value in existing:
-                raise AuditError(f"新商品{label}与catalog重复：{value}")
-            existing.add(value)
-        for view in product["views"]:
-            view_id = str(view["view_id"]).casefold()
-            if view_id in existing_views:
-                raise AuditError(f"新商品view_id与catalog重复：{view_id}")
-            existing_views.add(view_id)
-        if destination.exists():
-            raise AuditError(f"目标商品目录已存在，拒绝覆盖：{destination}")
-        operations.append(
-            {
-                "item": item,
-                "product": product,
-                "destination": destination,
-                "source_images": source_images,
-            }
-        )
-    if len(operations) != len(plan.get("products") or []):
-        raise AuditError("计划商品数量不完整")
-    catalog["products"].extend(operation["product"] for operation in operations)
-    validate_json(catalog, SCHEMA_PATH)
-    return catalog, operations
-
-
-def _validate_catalog_coverage() -> dict[str, int]:
-    catalog = load_product_rag(KNOWLEDGE_ROOT)
-    physical = {
-        path.name
-        for path in PRODUCTS_ROOT.iterdir()
-        if path.is_dir() and not path.is_symlink()
-    }
-    referenced = {
-        (KNOWLEDGE_ASSET_ROOT / str(view["image_file"])).resolve().parent.name
-        for product in catalog["products"]
-        for view in product.get("views") or []
-    }
-    if physical != referenced:
-        missing = sorted(referenced - physical)
-        extra = sorted(physical - referenced)
-        raise AuditError(
-            "products物理目录与catalog未一一覆盖："
-            f"missing={missing[:1]}，extra={extra[:1]}"
-        )
-    return {
-        "catalog_products": len(catalog["products"]),
-        "catalog_views": sum(len(item.get("views") or []) for item in catalog["products"]),
-        "physical_directories": len(physical),
-    }
-
-
-def _remove_created_directory(path: Path, allowed_names: set[str]) -> None:
-    resolved = path.resolve()
-    if resolved.parent != PRODUCTS_ROOT.resolve() or path.name not in allowed_names:
-        raise AuditError(f"回滚路径越界，拒绝删除：{path}")
-    if path.exists():
-        shutil.rmtree(path)
-
-
-def _apply(args: argparse.Namespace) -> int:
-    plan_path = Path(args.plan_file).resolve()
-    plan = load_json(plan_path)
-    catalog, operations = _prepare_apply(plan)
-    result = {
-        "status": "dry_run" if not args.confirm else "applied",
-        "catalog_products_before": len(catalog["products"]) - len(operations),
-        "catalog_products_after": len(catalog["products"]),
-        "products_added": len(operations),
-        "views_added": sum(len(operation["product"]["views"]) for operation in operations),
-        "target_directories": [operation["destination"].name for operation in operations],
-    }
-    if not args.confirm:
-        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
-        return 0
-
-    descriptor = _acquire_lock()
-    original_catalog = CATALOG_PATH.read_bytes()
-    allowed_names = {operation["destination"].name for operation in operations}
-    stage_root: Path | None = None
-    moved: list[Path] = []
-    catalog_replaced = False
-    try:
-        if sha256_file(CATALOG_PATH) != str(plan["catalog_sha256_before"]):
-            raise AuditError("获得写锁后catalog已变化；必须重新match")
-        stage_root = Path(
-            tempfile.mkdtemp(prefix=".new-product-onboarding-", dir=KNOWLEDGE_ROOT)
-        )
-        for operation in operations:
-            stage_destination = stage_root / operation["destination"].name
-            stage_destination.mkdir()
-            planned_files = {
-                str(value["name"]): value
-                for value in operation["item"]["source_files"]
-            }
-            for source_image in operation["source_images"]:
-                target = stage_destination / source_image.name
-                shutil.copy2(source_image, target)
-                if sha256_file(target) != str(planned_files[source_image.name]["sha256"]):
-                    raise AuditError(f"复制后图片哈希不一致：{source_image}")
-        for operation in operations:
-            staged = stage_root / operation["destination"].name
-            os.replace(staged, operation["destination"])
-            moved.append(operation["destination"])
-        _write_catalog_atomic(catalog, original_catalog)
-        catalog_replaced = True
-        result.update(_validate_catalog_coverage())
-    except Exception:
-        if catalog_replaced:
-            CATALOG_PATH.write_bytes(original_catalog)
-            clear_product_rag_cache()
-        for destination in reversed(moved):
-            _remove_created_directory(destination, allowed_names)
-        clear_product_rag_cache()
-        raise
-    finally:
-        if stage_root is not None and stage_root.exists():
-            shutil.rmtree(stage_root)
-        _release_lock(descriptor)
-
-    print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+def _validate_plan(args: argparse.Namespace) -> int:
+    operations = _prepare_publish(load_json(Path(args.plan_file)))
+    print(json.dumps({"status": "validated", "uploaded": False, "products": operations,
+                      "next_step": "审查后使用 shared/product-database/publish_product_images.py 逐商品预演；写入获准才加 --apply"},
+                     ensure_ascii=False))
     return 0
 
 
@@ -1048,19 +607,19 @@ def _reconcile(args: argparse.Namespace) -> int:
     def duplicate_values(rows_value: list[dict[str, Any]], key: str) -> dict[str, int]:
         counts: dict[str, int] = {}
         for row in rows_value:
-            value = str(row[key]).casefold()
+            value = str(row[key])
             counts[value] = counts.get(value, 0) + 1
         return {value: count for value, count in counts.items() if count > 1}
 
-    catalog = load_product_rag(KNOWLEDGE_ROOT)
+    catalog = load_product_catalog()
     products = list(catalog["products"])
-    by_code = {str(product["product_code"]).casefold(): product for product in products}
-    stock_codes = {str(row["product_code"]).casefold() for row in stock_rows}
+    by_code = {str(product["product_code"]): product for product in products}
+    stock_codes = {str(row["product_code"]) for row in stock_rows}
     matches: list[dict[str, Any]] = []
     missing_products: list[dict[str, Any]] = []
     field_mismatches: list[dict[str, Any]] = []
     for row in stock_rows:
-        product = by_code.get(str(row["product_code"]).casefold())
+        product = by_code.get(str(row["product_code"]))
         if product is None:
             missing_products.append(row)
             continue
@@ -1090,7 +649,7 @@ def _reconcile(args: argparse.Namespace) -> int:
             "barcode_69": str(product["barcode_69"]),
         }
         for product in products
-        if str(product["product_code"]).casefold() not in stock_codes
+        if str(product["product_code"]) not in stock_codes
     ]
     duplicate_stock_codes = duplicate_values(stock_rows, "product_code")
     duplicate_all_codes = duplicate_values(authority_rows, "product_code")
@@ -1112,7 +671,8 @@ def _reconcile(args: argparse.Namespace) -> int:
         "out_of_stock_rows": len(out_of_stock_rows),
         "expected_stock_products": len(stock_rows),
         "catalog_products": len(products),
-        "catalog_views": sum(len(product.get("views") or []) for product in products),
+        "products_with_image_manifest": sum(bool(product.get("image_manifest_key")) for product in products),
+        "database": catalog["data_source"],
         "matched_products": len(matches),
         "exact_barcode_matches": sum(item["barcode_match"] for item in matches),
         "exact_name_matches": sum(item["name_match_status"] == "exact" for item in matches),
@@ -1145,8 +705,8 @@ def main() -> int:
     args = _parse_args()
     if args.command == "match":
         return _match(args)
-    if args.command == "apply":
-        return _apply(args)
+    if args.command == "validate":
+        return _validate_plan(args)
     return _reconcile(args)
 
 

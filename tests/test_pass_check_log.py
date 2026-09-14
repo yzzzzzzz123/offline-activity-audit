@@ -112,6 +112,7 @@ class PassCheckLogTests(unittest.TestCase):
             [
                 "10-1挺拇指生活超市(横沥店).jpg",
                 "10-2挺拇指生活超市(横沥店).jpg",
+                "促销合同.pdf",
             ],
         )
         paired = next(item for item in group["items"] if item["title"] == "已配对明细逐行核验通过")

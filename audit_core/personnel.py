@@ -24,7 +24,6 @@ from .product_rag import (
     canonical_product_name,
     catalog_product_name_values,
     ean13_is_valid,
-    load_product_rag,
     product_name_similarity,
 )
 
@@ -692,7 +691,8 @@ def audit_personnel_case(
 ) -> dict[str, Any]:
     sales_path = Path(case["sales_excel"]).resolve()
     sales = read_personnel_sales(sales_path)
-    product_catalog = load_product_rag()
+    from .product_database import load_product_catalog
+    product_catalog = load_product_catalog()
     sales_knowledge = _personnel_sales_knowledge_reconciliation(
         sales["skus"], product_catalog
     )

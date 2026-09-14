@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Blocking material diagnostic result; not a business approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "diagnostic_only",
+    "generated_at",
+    "summary",
+    "original_intake_error",
+    "archives"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "kind": {
+      "const": "material_diagnostic"
+    },
+    "diagnostic_only": {
+      "const": true
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conclusion"
+      ],
+      "properties": {
+        "conclusion": {
+          "const": "human_review"
+        }
+      }
+    },
+    "original_intake_error": {
+      "type": "string"
+    },
+    "archives": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/archive"
+      },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  "$defs": {
+    "scenario": {
+      "enum": [
+        "personnel_incentive",
+        "promotional_display",
+        "poster_material",
+        "other_expense",
+        "maintenance_fee",
+        "giveaway_promotion",
+        "price_difference_support",
+        "pos_target_incentive",
+        "entry_fee",
+        "self_procured_gift_material",
+        null
+      ]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario",
+        "confidence",
+        "basis"
+      ],
+      "properties": {
+        "scenario": {
+          "enum": [
+            "personnel_incentive",
+            "promotional_display",
+            "poster_material",
+            "other_expense",
+            "maintenance_fee",
+            "giveaway_promotion",
+            "price_difference_support",
+            "pos_target_incentive",
+            "entry_fee",
+            "self_procured_gift_material"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "basis": {
+          "type": "string"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file_id",
+        "source_file",
+        "kind"
+      ],
+      "properties": {
+        "spreadsheet_check": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "basis"],
+          "properties": {
+            "status": {"enum": ["structure_recognized", "structure_unconfirmed"]},
+            "basis": {"type": "string", "minLength": 1}
+          }
+        },
+        "file_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "visual",
+            "spreadsheet",
+            "container",
+            "unsupported"
+          ]
+        },
+        "parent_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file_id",
+        "source_file",
+        "document_type",
+        "confidence",
+        "title",
+        "document_number",
+        "page_number",
+        "total_pages",
+        "visible_facts",
+        "limitations"
+      ],
+      "properties": {
+        "file_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_type": {
+          "enum": [
+            "signed_promotional_contract",
+            "settlement",
+            "stamped_pos_data",
+            "activity_photo",
+            "invoice_receipt",
+            "payment_record",
+            "supporting_document",
+            "sales_outbound_record",
+            "store_receipt",
+            "special_approval",
+            "system_deduction_proof",
+            "entry_contract",
+            "other",
+            "unknown"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "document_number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "page_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "total_pages": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "visible_facts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "title",
+        "observed",
+        "source_files",
+        "expected",
+        "impact",
+        "action",
+        "confidence"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "scenario_unconfirmed",
+            "material_unconfirmed",
+            "material_unreadable",
+            "duplicate_submission",
+            "required_material_unconfirmed",
+            "missing_material",
+            "singleton_role_ambiguous",
+            "business_checks_pending"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observed": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expected": {
+          "type": "string",
+          "minLength": 1
+        },
+        "impact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
+      }
+    },
+    "archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archive_id",
+        "source_archive",
+        "scenario",
+        "scenario_hint",
+        "scenario_label",
+        "scenario_candidates",
+        "inventory",
+        "documents",
+        "issues"
+      ],
+      "properties": {
+        "archive_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_archive": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario": {
+          "$ref": "#/$defs/scenario"
+        },
+        "scenario_hint": {
+          "$ref": "#/$defs/scenario"
+        },
+        "scenario_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario_candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        },
+        "inventory": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "documents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/document"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          },
+          "minItems": 1
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # OSS 自动输入目录
 
-启用 `POST /api/intake/oss` 后，上游使用 `verifyCode`、`fileId`、`downloadUrl` 提交任务，
+启用 `POST /api/intake/oss` 后，上游使用 `verifyCode`、`analyzeId`、`downloadUrl` 提交任务，
 服务会把每个通过传输校验的原始 ZIP 持久保存为：
 
 ```text
@@ -12,7 +12,7 @@ input-oss/<job_id>/<OSS 对象原始文件名>.zip
 
 原始 ZIP 在任务完成或失败后都会保留，便于追溯和人工复核。服务记录下载响应的 ETag、
 实际大小和自行计算的 SHA-256；下载未完成、超过上限或 ZIP 格式校验失败时，残缺文件会删除。
-正式 worktree 完成后，服务使用相同 `verifyCode`、`fileId` 和中文 `result` 调用配置的
+正式 worktree 完成后，服务使用相同 `verifyCode`、`analyzeId` 和中文 `result` 调用配置的
 `/api/v1/ai/analyze/callback`。回调失败不会删除原包或已完成 worktree，也不会重新运行 AI。
 解压内容、模型工作区、临时工作簿、页面投影和子进程结果回执仍属于运行期临时产物，结束后
 自动清理。

@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .common import AuditError, normalize_text, sha256_file
-from .legacy_activity_workbook import extract_activity_return_workbook
+from .legacy_activity_workbook import LegacyWorkbookMaterialError, extract_activity_return_workbook
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
@@ -19,10 +19,65 @@ MAX_ARCHIVE_FILES = 2_000
 MAX_MEMBER_BYTES = 250 * 1024 * 1024
 MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 200
+SCENARIO_MARKERS: dict[str, tuple[str, ...]] = {
+    "personnel_incentive": ("人员激励", "人员奖励"),
+    "promotional_display": ("堆头", "促销陈列"),
+    "poster_material": ("展示道具", "物料", "海报"),
+    "other_expense": ("其他费用", "其他"),
+    "maintenance_fee": ("维护费用", "维护费"),
+    "giveaway_promotion": ("额外搭赠", "搭赠"),
+    "price_difference_support": ("价格补差", "补差"),
+    "pos_target_incentive": ("pos激励达标", "pos达标激励", "pos激励"),
+    "entry_fee": ("进场费", "条码费"),
+    "self_procured_gift_material": ("自采赠品物料", "自采赠品", "自采物料"),
+}
+
+
+def scenarios_from_archive_name(name: str) -> tuple[str, ...]:
+    """Read declared scenario markers without inspecting the archive's files.
+
+    A selected route does not prove the submitted fee or documents comply with
+    that scenario's business rules. A generic material marker inside the more
+    specific self-procured name is not a second declared scenario. Generic
+    expense names select maintenance only when no specific type is declared.
+    """
+    normalized = normalize_text(Path(name).stem)
+    matches = {
+        scenario for scenario, markers in SCENARIO_MARKERS.items()
+        if any(marker in normalized for marker in markers)
+    }
+    if "self_procured_gift_material" in matches:
+        remaining = normalized
+        for marker in SCENARIO_MARKERS["self_procured_gift_material"]:
+            remaining = remaining.replace(marker, "")
+        if not any(marker in remaining for marker in SCENARIO_MARKERS["poster_material"]):
+            matches.discard("poster_material")
+    if not matches and "费用" in normalized:
+        matches.add("maintenance_fee")
+    return tuple(scenario for scenario in SCENARIO_MARKERS if scenario in matches)
+
+
+def scenario_from_archive_name(name: str) -> str | None:
+    matches = scenarios_from_archive_name(name)
+    return matches[0] if len(matches) == 1 else None
 
 
 class ArchiveInputError(AuditError):
     """Raised when a ZIP cannot be routed or extracted safely."""
+
+
+class MaterialInputError(ArchiveInputError):
+    """A business input problem that must retain a customer-facing outcome.
+
+    ArchiveClassificationError fails the audit and returns the naming reason;
+    other material blockers complete diagnosis under the ZIP's declared type.
+    Archive integrity, unsafe members, extraction limits, and missing runtime
+    dependencies must keep using ArchiveInputError instead.
+    """
+
+
+class ArchiveClassificationError(MaterialInputError):
+    """The ZIP name cannot select one scenario; fail before AI and return why."""
 
 
 def _open_zip(path: Path) -> zipfile.ZipFile:
@@ -105,12 +160,16 @@ def _archive_shape(path: Path) -> dict[str, Any]:
 
 def _classify_archive(path: Path) -> dict[str, Any]:
     shape = _archive_shape(path)
+    name_scenario = scenario_from_archive_name(path.name)
+    if name_scenario is None:
+        raise ArchiveClassificationError(
+            f"ZIP 名称缺少唯一分类标记（未标明或包含多个分类标记）：{path.name}"
+        )
     excel_count = int(shape["excel_count"])
     pdf_count = int(shape["pdf_count"])
     image_count = int(shape["image_count"])
     names = list(shape["normalized_names"])
     raw_names = list(shape["names"])
-    archive_text = normalize_text(path.stem)
     settlement_count = sum("结算单" in name or "结算表" in name for name in names)
     transfer_count = sum(
         any(marker in name for marker in ("红包", "转账", "付款", "收款"))
@@ -225,7 +284,7 @@ def _classify_archive(path: Path) -> dict[str, Any]:
     )
 
     if (
-        any(marker in archive_text for marker in ("价格补差", "补差"))
+        name_scenario == "price_difference_support"
         and nested_archive_count == 0
         and rar_count == 1
         and excel_count <= 1
@@ -237,7 +296,7 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         return {**shape, "scenario": "price_difference_support"}
 
     if (
-        any(marker in archive_text for marker in ("pos激励达标", "pos达标激励", "pos激励"))
+        name_scenario == "pos_target_incentive"
         and nested_archive_count == 0
         and rar_count == 0
         and excel_count <= 1
@@ -246,7 +305,7 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         return {**shape, "scenario": "pos_target_incentive"}
 
     if (
-        any(marker in archive_text for marker in ("自采赠品物料", "自采赠品", "自采物料"))
+        name_scenario == "self_procured_gift_material"
         and nested_archive_count == 0
         and rar_count == 0
         and legacy_xls_count == 1
@@ -259,7 +318,7 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         return {**shape, "scenario": "self_procured_gift_material"}
 
     if (
-        any(marker in archive_text for marker in ("进场费", "条码费"))
+        name_scenario == "entry_fee"
         and nested_archive_count == 0
         and rar_count == 1
         and excel_count == 0
@@ -269,7 +328,7 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         return {**shape, "scenario": "entry_fee"}
 
     if (
-        any(marker in archive_text for marker in ("维护费用", "维护费"))
+        name_scenario == "maintenance_fee"
         and nested_archive_count == 0
         and image_count + pdf_count >= 1
         and maintenance_pos_count + maintenance_settlement_count >= 1
@@ -277,7 +336,7 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         return {**shape, "scenario": "maintenance_fee"}
 
     if (
-        any(marker in archive_text for marker in ("额外搭赠", "搭赠"))
+        name_scenario == "giveaway_promotion"
         and nested_archive_count == 0
         and excel_count == 0
         and image_count + pdf_count >= 1
@@ -285,7 +344,7 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         return {**shape, "scenario": "giveaway_promotion"}
 
     if (
-        "其他" in archive_text
+        name_scenario == "other_expense"
         and excel_count == 0
         and nested_archive_count == 0
         and image_count + pdf_count >= 4
@@ -302,36 +361,27 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         and poster_invoice_count == 1
         and poster_settlement_count == 1
         and poster_photo_zip_count == 1
-        and ("展示道具" in archive_text or "物料" in archive_text or "海报" in archive_text)
+        and name_scenario == "poster_material"
     ):
         return {**shape, "scenario": "poster_material"}
 
-    if excel_count == 1 and pdf_count == 1 and image_count >= 1:
+    if name_scenario == "promotional_display" and excel_count == 1 and pdf_count == 1 and image_count >= 1:
         return {**shape, "scenario": "promotional_display"}
 
-    if excel_count == 1 and pdf_count == 0 and image_count >= 2:
-        personnel_named = "人员激励" in archive_text or settlement_count == 1
-        if personnel_named and settlement_count == 1 and transfer_count >= 1:
+    if name_scenario == "personnel_incentive" and excel_count == 1 and pdf_count == 0 and image_count >= 2:
+        if settlement_count == 1 and transfer_count >= 1:
             return {**shape, "scenario": "personnel_incentive"}
-        raise ArchiveInputError(
-            f"疑似人员激励包但材料角色不明确：{path.name}；"
+        raise MaterialInputError(
+            f"人员激励包材料角色不明确：{path.name}；"
             f"结算单候选={settlement_count}，转账截图候选={transfer_count}。"
             "需提供且仅提供一张名称可识别的结算单，以及至少一张红包/转账凭证。"
         )
 
-    missing: list[str] = []
-    if excel_count != 1:
-        missing.append(f"Excel 应为1份、实际{excel_count}份")
-    if pdf_count == 0 and image_count < 2:
-        missing.append(f"人员类图片至少2张、实际{image_count}张")
-    if pdf_count > 0 and pdf_count != 1:
-        missing.append(f"堆头合同 PDF 应为1份、实际{pdf_count}份")
-    if pdf_count == 1 and image_count < 1:
-        missing.append("堆头现场照片缺失")
-    detail = "；".join(missing) or (
-        f"Excel={excel_count}，PDF={pdf_count}，图片={image_count}"
+    raise MaterialInputError(
+        f"材料组成不满足 ZIP 名称指定的核销方式：{path.name}；"
+        f"Excel={excel_count}，PDF={pdf_count}，图片={image_count}。"
+        "保留名称指定的核销类型继续材料诊断。"
     )
-    raise ArchiveInputError(f"无法判断材料类型或材料缺失：{path.name}；{detail}")
 
 
 def discover_archives(input_dir: str | Path) -> dict[str, dict[str, Any]]:
@@ -374,7 +424,7 @@ def discover_archives(input_dir: str | Path) -> dict[str, dict[str, Any]]:
                 "entry_fee": "进场费",
                 "self_procured_gift_material": "自采赠品物料",
             }[scenario]
-            raise ArchiveInputError(
+            raise MaterialInputError(
                 f"同类材料重复：发现两份{label} ZIP；同一类型最多提交一份。"
             )
         classified[scenario] = item
@@ -558,7 +608,7 @@ def _material_files(root: Path, suffixes: set[str]) -> list[Path]:
 
 def _one(paths: list[Path], label: str, archive_name: str) -> Path:
     if len(paths) != 1:
-        raise ArchiveInputError(
+        raise MaterialInputError(
             f"{archive_name} 中{label}应为1份，实际{len(paths)}份："
             + "、".join(path.name for path in paths)
         )
@@ -569,7 +619,7 @@ def _unique_image_names(images: list[Path], archive_name: str) -> None:
     lowered = [path.name.casefold() for path in images]
     duplicates = sorted({name for name in lowered if lowered.count(name) > 1})
     if duplicates:
-        raise ArchiveInputError(
+        raise MaterialInputError(
             f"{archive_name} 中存在同名现场图片，无法稳定绑定：" + "、".join(duplicates)
         )
 
@@ -601,7 +651,7 @@ def prepare_cases(
         raise ArchiveInputError("不支持的核销场景：" + "、".join(sorted(unknown)))
     missing = selected - set(classified)
     if selected_scenarios is not None and missing:
-        raise ArchiveInputError("input/ 未找到指定核销场景：" + "、".join(sorted(missing)))
+        raise MaterialInputError("input/ 未找到指定核销场景：" + "、".join(sorted(missing)))
     for scenario in (
         "personnel_incentive",
         "promotional_display",
@@ -635,7 +685,7 @@ def prepare_cases(
             settlement = _one(settlements, "结算单图片", archive.name)
             transfers = [path for path in images if path != settlement]
             if not transfers:
-                raise ArchiveInputError(f"{archive.name} 缺少转账/红包截图")
+                raise MaterialInputError(f"{archive.name} 缺少转账/红包截图")
             cases[scenario] = {
                 "scenario": scenario,
                 "source_archive": archive.resolve(),
@@ -681,7 +731,7 @@ def prepare_cases(
             )
             field_photos = _material_files(Path(photo_extraction["root"]), IMAGE_SUFFIXES)
             if not field_photos:
-                raise ArchiveInputError(f"{archive.name} 的现场返图 ZIP 没有图片")
+                raise MaterialInputError(f"{archive.name} 的现场返图 ZIP 没有图片")
             _unique_image_names(field_photos, nested_archive.name)
             role_images = {contract_image, invoice_image, settlement_image}
             remaining_images = [path for path in images if path not in role_images]
@@ -723,12 +773,12 @@ def prepare_cases(
                 {name for name in document_names if document_names.count(name) > 1}
             )
             if duplicate_document_names:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中存在同名维护费用资料，无法稳定绑定："
                     + "、".join(duplicate_document_names)
                 )
             if len(excels) > 1:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中POS电子表应最多1份，实际{len(excels)}份："
                     + "、".join(path.name for path in excels)
                 )
@@ -742,7 +792,7 @@ def prepare_cases(
 
             def optional_single(paths: list[Path], label: str) -> Path | None:
                 if len(paths) > 1:
-                    raise ArchiveInputError(
+                    raise MaterialInputError(
                         f"{archive.name} 中{label}应最多1份，实际{len(paths)}份："
                         + "、".join(path.name for path in paths)
                     )
@@ -816,7 +866,7 @@ def prepare_cases(
             bound = {Path(item["path"]) for item in document_roles}
             if bound != set(documents):
                 missing_documents = sorted(path.name for path in set(documents) - bound)
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 存在未绑定的维护费用资料："
                     + "、".join(missing_documents)
                 )
@@ -847,12 +897,12 @@ def prepare_cases(
                 {name for name in document_names if document_names.count(name) > 1}
             )
             if duplicate_document_names:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中存在同名额外搭赠资料，无法稳定绑定："
                     + "、".join(duplicate_document_names)
                 )
             if not documents:
-                raise ArchiveInputError(f"{archive.name} 没有可视核销资料")
+                raise MaterialInputError(f"{archive.name} 没有可视核销资料")
             document_roles = [
                 {"path": path, "role": "visual_document"}
                 for path in documents
@@ -874,16 +924,16 @@ def prepare_cases(
         elif scenario == "price_difference_support":
             documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
             if not documents:
-                raise ArchiveInputError(f"{archive.name} 没有可视核销资料")
+                raise MaterialInputError(f"{archive.name} 没有可视核销资料")
             lowered = [path.name.casefold() for path in documents]
             duplicates = sorted({name for name in lowered if lowered.count(name) > 1})
             if duplicates:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中存在同名价格补差资料，无法稳定绑定："
                     + "、".join(duplicates)
                 )
             if len(excels) > 1:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中POS电子表应最多1份，实际{len(excels)}份："
                     + "、".join(path.name for path in excels)
                 )
@@ -903,7 +953,7 @@ def prepare_cases(
                 and any(marker in normalize_text(path.name) for marker in ("pos", "销售", "陈列销售"))
             ]
             if not pos_files:
-                raise ArchiveInputError(f"{archive.name} 缺少名称可识别的盖章POS数据")
+                raise MaterialInputError(f"{archive.name} 缺少名称可识别的盖章POS数据")
             reserved.update(pos_files)
             outer_other = [path for path in documents if path not in reserved]
             rar_candidates = [
@@ -917,13 +967,13 @@ def prepare_cases(
             )
             activity_photos = _material_files(Path(photo_extraction["root"]), IMAGE_SUFFIXES)
             if not activity_photos:
-                raise ArchiveInputError(f"{photo_archive.name} 没有现场活动图片")
+                raise MaterialInputError(f"{photo_archive.name} 没有现场活动图片")
             non_images = [
                 path for path in Path(photo_extraction["root"]).rglob("*")
                 if path.is_file() and path.suffix.lower() not in IMAGE_SUFFIXES
             ]
             if non_images:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{photo_archive.name} 含非图片成员："
                     + "、".join(path.name for path in non_images)
                 )
@@ -960,16 +1010,16 @@ def prepare_cases(
         elif scenario == "pos_target_incentive":
             documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
             if not documents:
-                raise ArchiveInputError(f"{archive.name} 没有可视核销资料")
+                raise MaterialInputError(f"{archive.name} 没有可视核销资料")
             lowered = [path.name.casefold() for path in documents]
             duplicates = sorted({name for name in lowered if lowered.count(name) > 1})
             if duplicates:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中存在同名POS达标激励资料，无法稳定绑定："
                     + "、".join(duplicates)
                 )
             if len(excels) > 1:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中POS电子表应最多1份，实际{len(excels)}份："
                     + "、".join(path.name for path in excels)
                 )
@@ -982,14 +1032,14 @@ def prepare_cases(
 
             settlement_candidates = incentive_named("结算单", "结算表")
             if len(settlement_candidates) > 1:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中结算单应最多1份，实际{len(settlement_candidates)}份："
                     + "、".join(path.name for path in settlement_candidates)
                 )
             settlement = settlement_candidates[0] if settlement_candidates else None
             contract_candidates = incentive_named("促销合同", "促销协议")
             if len(contract_candidates) > 1:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中促销合同应最多1份，实际{len(contract_candidates)}份："
                     + "、".join(path.name for path in contract_candidates)
                 )
@@ -1023,7 +1073,7 @@ def prepare_cases(
                 document_roles.append({"path": path, "role": role})
             bound = {Path(item["path"]) for item in document_roles}
             if bound != set(documents):
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 存在未绑定的POS达标激励资料："
                     + "、".join(path.name for path in set(documents) - bound)
                 )
@@ -1047,11 +1097,11 @@ def prepare_cases(
         elif scenario == "entry_fee":
             documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
             if not documents:
-                raise ArchiveInputError(f"{archive.name} 没有进场费合同或扣款凭证")
+                raise MaterialInputError(f"{archive.name} 没有进场费合同或扣款凭证")
             lowered = [path.name.casefold() for path in documents]
             duplicates = sorted({name for name in lowered if lowered.count(name) > 1})
             if duplicates:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中存在同名进场费资料，无法稳定绑定："
                     + "、".join(duplicates)
                 )
@@ -1082,13 +1132,13 @@ def prepare_cases(
             photo_root = Path(photo_extraction["root"])
             shelf_photos = _material_files(photo_root, IMAGE_SUFFIXES)
             if not shelf_photos:
-                raise ArchiveInputError(f"{photo_archive.name} 没有进场/上架照片")
+                raise MaterialInputError(f"{photo_archive.name} 没有进场/上架照片")
             non_images = [
                 path for path in photo_root.rglob("*")
                 if path.is_file() and path.suffix.lower() not in IMAGE_SUFFIXES
             ]
             if non_images:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{photo_archive.name} 含非图片成员："
                     + "、".join(path.name for path in non_images)
                 )
@@ -1148,7 +1198,7 @@ def prepare_cases(
             documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
             legacy_workbooks = _material_files(root, {".xls"})
             if len(excels) > 1:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中POS电子表应最多1份，实际{len(excels)}份："
                     + "、".join(path.name for path in excels)
                 )
@@ -1178,14 +1228,17 @@ def prepare_cases(
                 and any(marker in normalize_text(path.name) for marker in ("销售pos", "pos数据", "销售数据"))
             ]
             if not stamped_pos_files:
-                raise ArchiveInputError(f"{archive.name} 缺少名称可识别的盖章POS数据")
+                raise MaterialInputError(f"{archive.name} 缺少名称可识别的盖章POS数据")
             reserved.update(stamped_pos_files)
             unclassified_visuals = [path for path in documents if path not in reserved]
             activity_workbook = _one(legacy_workbooks, "活动返图.xls", archive.name)
-            activity = extract_activity_return_workbook(
-                activity_workbook,
-                temp / "self_procured_gift_material_activity_photos",
-            )
+            try:
+                activity = extract_activity_return_workbook(
+                    activity_workbook,
+                    temp / "self_procured_gift_material_activity_photos",
+                )
+            except LegacyWorkbookMaterialError as exc:
+                raise MaterialInputError(f"{archive.name}：{exc}") from exc
             photo_files = [Path(item["photo_file"]) for item in activity["records"]]
             _unique_image_names(photo_files, activity_workbook.name)
             document_roles: list[dict[str, Any]] = [
@@ -1238,7 +1291,7 @@ def prepare_cases(
                 {name for name in document_names if document_names.count(name) > 1}
             )
             if duplicate_document_names:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 中存在同名其他费用资料，无法稳定绑定："
                     + "、".join(duplicate_document_names)
                 )
@@ -1276,7 +1329,7 @@ def prepare_cases(
                 )
             ]
             if not supporting_files:
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 缺少独立于促销合同和结算单的协议、合同、发票、收据或相关文件"
                 )
             activity_files = [
@@ -1309,7 +1362,7 @@ def prepare_cases(
             bound = {Path(item["path"]) for item in document_roles}
             if bound != set(documents):
                 missing_documents = sorted(path.name for path in set(documents) - bound)
-                raise ArchiveInputError(
+                raise MaterialInputError(
                     f"{archive.name} 存在未绑定的其他费用资料：" + "、".join(missing_documents)
                 )
             all_files = [

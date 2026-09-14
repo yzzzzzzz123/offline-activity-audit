@@ -1,0 +1,6 @@
+{
+  "mode": "oss",
+  "bucket": "xiaokuo-dingding-xianxiahexiao",
+  "endpoint": "https://oss-cn-shenzhen.aliyuncs.com",
+  "prefix": "offline-verify/product-reference/"
+}

@@ -1,4 +1,4 @@
 interface:
-  display_name: "New Product Onboarding RAG Workflow"
-  short_description: "Verify visual product identity and safely add products to RAG."
-  default_prompt: "Use $new-product-onboarding-rag-workflow to identify new product samples, resolve exact barcodes against Canban API candidates, and safely onboard validated reference images."
+  display_name: "新品入库 RAG 工作流"
+  short_description: "核验视觉商品身份并安全写入 RAG 知识库"
+  default_prompt: "使用 $new-product-onboarding-rag-workflow 观察新品包装，从商品数据库同码候选中唯一确认身份，预演并登记参考图片。"

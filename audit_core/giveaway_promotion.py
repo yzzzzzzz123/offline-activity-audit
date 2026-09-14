@@ -367,19 +367,40 @@ def audit_giveaway_promotion_case(
         )
 
     missing_roles: list[str] = []
-    if len(contracts) != 1:
-        missing_roles.append("唯一签章额外搭赠促销合同")
-    if len(settlements) != 1:
-        missing_roles.append("唯一经销商盖章结算单")
-    if len(deliveries) != 1:
-        missing_roles.append("唯一系统销售或出货明细")
+    multiple_roles: list[str] = []
+    for candidates, label in (
+        (contracts, "签章额外搭赠促销合同"),
+        (settlements, "经销商盖章结算单"),
+        (deliveries, "系统销售或出货明细"),
+    ):
+        if not candidates:
+            missing_roles.append(label)
+        elif len(candidates) > 1:
+            sources = _source_names(candidates)
+            multiple_roles.append(label)
+            issues.append(
+                _issue(
+                    "multiple_role_candidates",
+                    f"{label}存在多份材料，主材料无法唯一确认",
+                    sources,
+                    f"识别到{len(candidates)}份{label}：" + "、".join(sources),
+                    f"本次核销的{label}应能明确唯一适用的主材料；文件名称相近不能证明内容重复。",
+                    "未选择其中任意一份作为核销依据，暂缓全部申报。",
+                    "请说明所列各份材料的用途并明确本次适用版本；确认误交的重复文件后再移除。",
+                )
+            )
     if not receipts:
         missing_roles.append("活动期内门店销售小票")
     if not photos:
         missing_roles.append("活动期内门店现场照片")
-    materials_pass = not missing_roles
-    control("required_materials", materials_pass, "五类资料齐全" if materials_pass else "缺少：" + "、".join(missing_roles))
-    if not materials_pass:
+    materials_pass = not missing_roles and not multiple_roles
+    material_problems = []
+    if missing_roles:
+        material_problems.append("缺少：" + "、".join(missing_roles))
+    if multiple_roles:
+        material_problems.append("存在多份且未能唯一绑定：" + "、".join(multiple_roles))
+    control("required_materials", materials_pass, "五类资料齐全" if materials_pass else "；".join(material_problems))
+    if missing_roles:
         issues.append(
             _issue(
                 "required_materials_missing",
@@ -396,9 +417,7 @@ def audit_giveaway_promotion_case(
     settlement = settlements[0] if len(settlements) == 1 else None
     delivery = deliveries[0] if len(deliveries) == 1 else None
 
-    fee_pass, fee_basis, fee_sources = _fee_nature(
-        [item for item in (contract, settlement) if item is not None]
-    )
+    fee_pass, fee_basis, fee_sources = _fee_nature([*contracts, *settlements])
     control("fee_nature", fee_pass, fee_basis)
     if not fee_pass:
         issues.append(
@@ -741,6 +760,52 @@ def audit_giveaway_promotion_case(
                 "补正合同或结算中的赠品商品、数量、单价、小计和申报金额，使全链路精确一致。",
             )
         )
+
+    # An ambiguous principal document blocks comparisons that depend on it.
+    # Their customer-facing cause is the already reported source ambiguity,
+    # rather than fictitious missing documents or invented numeric mismatches.
+    dependent_issues = {
+        "promotional_contract": "promotional_contract_invalid",
+        "settlement": "settlement_invalid",
+        "sales_delivery_statement": "sales_delivery_invalid",
+        "party_alignment": "party_alignment_failed",
+        "period_alignment": "period_alignment_failed",
+        "shipment_reconciliation": "shipment_reconciliation_failed",
+        "product_correspondence": "product_correspondence_failed",
+        "receipt_execution": "receipt_execution_failed",
+        "activity_execution": "activity_execution_missing",
+        "amount_recalculation": "amount_recalculation_failed",
+    }
+    ambiguous_dependencies: dict[str, list[str]] = {}
+    for candidates, label, dependent_controls in (
+        (contracts, "促销合同", (
+            "promotional_contract", "party_alignment", "period_alignment",
+            "product_correspondence", "receipt_execution", "amount_recalculation",
+            *(("activity_execution",) if photos else ()),
+        )),
+        (settlements, "结算单", (
+            "settlement", "party_alignment", "period_alignment",
+            "shipment_reconciliation", "product_correspondence", "amount_recalculation",
+        )),
+        (deliveries, "系统销售或出货明细", (
+            "sales_delivery_statement", "party_alignment", "period_alignment",
+            "shipment_reconciliation", "product_correspondence",
+        )),
+    ):
+        if len(candidates) > 1:
+            for control_id in dependent_controls:
+                ambiguous_dependencies.setdefault(control_id, []).append(
+                    f"{label}{len(candidates)}份（{'、'.join(_source_names(candidates))}）"
+                )
+    for item in controls:
+        reasons = ambiguous_dependencies.get(item["control_id"])
+        if reasons:
+            item["status"] = "fail"
+            item["basis"] = "存在多份主材料候选，尚未选定核销依据：" + "；".join(reasons)
+    suppressed_codes = {
+        dependent_issues[control_id] for control_id in ambiguous_dependencies
+    }
+    issues = [issue for issue in issues if issue["code"] not in suppressed_codes]
 
     supported_amount = claim_amount if not issues else Decimal("0.00")
     held_amount = claim_amount - supported_amount

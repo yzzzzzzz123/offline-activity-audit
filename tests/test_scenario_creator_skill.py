@@ -491,7 +491,7 @@ class ScenarioCreatorContractTests(unittest.TestCase):
                 "interface:\n"
                 '  display_name: "Sample Scene"\n'
                 '  short_description: "Create a synthetic audit scene for tests"\n'
-                f'  default_prompt: "Use ${skill_name} for this package."\n',
+                f'  default_prompt: "使用 ${skill_name} 处理这个材料包。"\n',
             )
             manifest = {
                 "schema_version": "1.0",

@@ -1,82 +1,141 @@
-# ZIP routing rules
+# ZIP 路由规则
 
-## Accepted combinations
+## 接受的组合
 
-Read one to ten ZIPs directly from `input/`:
+从 `input/` 直属目录读取 1 至 10 个 ZIP：
 
-- personnel only;
-- display only;
-- poster/material only;
-- maintenance fee only;
-- extra giveaway only;
-- price difference only;
-- POS target incentive only;
-- entry fee only;
-- self-procured gift material only;
-- any combination containing at most one ZIP of each supported scenario.
+- 仅人员激励；
+- 仅堆头陈列；
+- 仅海报/物料；
+- 仅其他费用；
+- 仅维护费用；
+- 仅额外搭赠；
+- 仅价格补差；
+- 仅 POS 达标激励；
+- 仅进场费；
+- 仅客户自采赠品物料；
+- 任意组合，但每个支持场景最多一个 ZIP。
 
-Reject no ZIP, more than ten ZIPs, or a repeated scenario. Classification uses material shape first; a suggestive filename never repairs an ambiguous material class. The registered maintenance-fee scene is the narrow exception for incomplete mandatory roles: an explicit maintenance marker plus at least one POS/settlement visual routes the package so missing roles can be reported as blocking issues. The registered extra-giveaway scene similarly accepts its marked all-visual package so generic camera filenames can be classified from visible content and missing roles can become report issues. A formal run may select one submitted scenario with `--scenario`; all ZIPs are still checked for safe, unambiguous classification before the selected package is processed.
+无 ZIP、超过 10 个 ZIP 时拒绝。每个外层 ZIP 先按名称中的唯一已登记标记确定核销类型；下述结构模板只约束该类型的正常业务绑定，不能用于猜测类型或改类。
+名称含 `物料` 自动归为海报/物料制作，内嵌于 `自采赠品物料` / `自采物料` 的标记仍按专门自采类型处理。未命中具体已登记类型且含 `费用` 时自动归为维护费用。具体类型优先，因此 `物料制作费用.zip` 为物料制作，`其他费用.zip` 为其他费用；多个具体类型冲突时，通用 `费用` 不参与消歧。
+名称缺少标记或包含多个类型标记时，完成必要归档安全校验后直接生成分类拒绝报告，不调用 AI、不解读内部图片/PDF、不提取材料角色，也不虚构缺件要求。API `1.32` 以 `unclassified_archive_policy=fail_before_ai_and_callback_reason` 对外声明此行为。
+已知类型的场景重复、材料缺失、角色歧义或内部文件误命名引发 `MaterialInputError` 时，正式 runner 继续 AI 材料诊断。先通过归档安全校验，再盘点该包全部来源、按独立文件 ID 向 AI 提供隔离图片/PDF，读取实际文档用途、标题、编号、页码和限制；内部文件名不能充当可见内容。
+确定性诊断完整列出缺失角色、完全重复文件及单例权威材料冲突，技术证据保留完整原始路径；同名不同路径不被静默覆盖，不同页或不同用途不能仅凭名字判为重复。
+混合多包只打回无法唯一分类的 ZIP，其余已知类型照常审核或诊断。分类拒绝与材料诊断均继续正式持久化、页面投影及原有 OSS 中文回调，不生成业务通过或支持金额；分类拒绝不能标成已经完成 AI 材料分析。`material_diagnostic` 不增加已登记业务类别。
+不安全归档、模型执行/权限故障、非法 Schema 与来源越界仍失败关闭；不能转成普通客户材料缺口。
+已登记维护费用场景是“必需角色不完整”这一规则的狭义例外：明确维护标记加至少一份 POS/结算视觉材料即可路由，
+让缺失角色进入阻断问题报告。已登记额外搭赠场景同样接受带标记的全视觉材料包，以便根据可见内容分类通用相机文件名，
+并把缺失角色转为报告问题。正式运行可以用 `--scenario` 选择一个已提交场景；处理选定材料包前，
+仍必须对全部 ZIP 及其嵌套归档执行完整安全检查。已知的其他未选类型按原选择规则排除；无法唯一分类的包仍单独生成分类拒绝报告，不能借 `--scenario` 推定其类型或静默忽略该包。
 
-## Personnel incentive
+## 人员激励
 
-Require exactly one `.xlsx`/`.xlsm`, no PDF, at least two images, exactly one image whose basename identifies it as `结算单` or `结算表`, and at least one image whose basename identifies transfer/red-packet/payment evidence. Every non-settlement image is routed as a transfer screenshot.
+要求恰好一份 `.xlsx`/`.xlsm`、无 PDF、至少两张图片、恰好一张 basename 标明 `结算单` 或 `结算表` 的图片，
+以及至少一张 basename 标明转账/红包/付款证据的图片。所有非结算单图片都路由为转账截图。
 
-If the package has personnel-like shape but the settlement or transfer role is not unique, report the candidate counts and stop.
+材料结构类似人员激励，但结算单或转账角色不唯一时，报告候选数量并转入材料诊断，结合可见内容确定具体缺口或角色冲突。
 
-## Promotional display
+## 促销堆头
 
-Require exactly one `.pdf`, exactly one `.xlsx`/`.xlsm`, and at least one image. Route the PDF as the contract, the Excel as sales support, and every image as a field photo. Nested directories are allowed, but image basenames must remain unique because evidence JSON binds by basename.
+要求恰好一份 `.pdf`、一份 `.xlsx`/`.xlsm`，并至少一张图片。PDF 路由为合同，Excel 路由为销售支持，
+每张图片路由为现场照片。允许嵌套目录，但图片 basename 必须唯一，因为证据 JSON 按 basename 绑定。
 
-## Poster/material production
+## 海报/物料制作
 
-Require no sales Excel, exactly one image basename identifying a promotional contract, exactly one image basename identifying an invoice or receipt, exactly one image basename identifying a settlement form, and exactly one nested ZIP basename identifying field returns, field photos, or watermarked photos. The outer ZIP basename must identify poster, material, or display-prop production so this image-led shape is not confused with another scenario.
+要求无销售 Excel；恰好一张 basename 可识别为促销合同的图片；恰好一张可识别为发票或收据的图片；
+恰好一张可识别为结算单的图片；以及恰好一个 basename 可识别为现场核销、现场照片或水印照片的嵌套 ZIP。
+外层 ZIP basename 必须标明海报、物料或展示道具制作，避免这种图片主导结构与其他场景混淆。
 
-Safely extract the nested photo ZIP with the same limits as the outer package. Route every nested image as a finished-product field photo and require unique basenames. Route explicitly named contract attachments, store lists, quotations, or specifications as contract attachments. Preserve remaining files such as POS evidence as excluded filenames, but do not send them to the poster/material visual pass and do not create audit errors from them.
+嵌套照片 ZIP 必须按外层材料包的同一限制安全解压。每张嵌套图片路由为完工现场照片，并要求 basename 唯一。
+明确命名为合同附件、门店清单、报价单或规格的文件路由为合同附件。
+其余 POS 证据等文件保留为排除文件名，但不得发送到海报/物料视觉步骤，也不得据此生成核销错误。
 
-## Other expense
+## 其他费用
 
-Require an outer ZIP marker `其他`, no sales Excel, no nested ZIP, exactly one visual document named as a promotional contract, exactly one visual document named as a settlement form, and at least one independent agreement, contract, invoice, receipt, or related file. Require at least four visual documents in total. This shape remains distinct from poster/material because it has no nested field-photo ZIP and may contain a PDF ticket or multiple support agreements.
+要求外层 ZIP 标记为 `其他`、无销售 Excel、无嵌套 ZIP；恰好一份名称指向促销合同的视觉文档；
+恰好一份名称指向结算单的视觉文档；以及至少一份独立协议、合同、发票、收据或相关文件。
+视觉文档总数至少四份。该结构因没有嵌套现场照片 ZIP，且可包含 PDF 票据或多份支持协议，与海报/物料场景区分。
 
-Bind every image/PDF basename exactly once as promotional contract, settlement, supporting document, invoice/receipt, activity photo, POS data, or special-approval candidate. Preserve non-visual files as excluded filenames. The outer marker only routes the package: deterministic audit must reject `其他费用` when visible expense descriptions belong to an established category, and must require independent special approval when the fee is genuinely new.
+每个图片/PDF basename 都恰好绑定一次，角色可为促销合同、结算单、支持文档、发票/收据、活动照片、POS 数据或特殊审批候选。
+非视觉文件保留为排除文件名。外层标记只负责路由：可见费用说明属于已有类别时，确定性核销必须拒绝 `其他费用`；
+费用确实为新类型时，必须要求独立特殊审批。
 
-## Maintenance fee
+## 维护费用
 
-Route this registered scene as `maintenance_fee`. Require an outer ZIP marker `维护费用` or `维护费`, no nested ZIP, at least one visual document, and at least one basename identifying POS data or a settlement. This marker may distinguish the scene from a structurally incomplete personnel package, but it never proves that the document body describes maintenance fees.
+将此已登记场景路由为 `maintenance_fee`。要求外层 ZIP 标记为 `维护费用` 或 `维护费`，或未命中具体类型但含 `费用`；无嵌套 ZIP、
+至少一份视觉文档，且至少一个 basename 可识别为 POS 数据或结算单。该标记可以把场景与结构不完整的人员包区分，
+但绝不能证明文档正文描述的是维护费用。
 
-Bind every visual file exactly once. POS/销售数据 candidates become stamped-POS sources; a maximum of one `促销合同` candidate becomes the signed promotional contract; a maximum of one `结算单`/`结算表` candidate becomes the settlement; remaining agreements, related documents, maintenance contracts, and activity/field photos become fee-specific support. Accept zero or one Excel as the POS spreadsheet so a missing electronic sheet becomes a reportable audit issue; reject two or more Excel files because the authority source cannot be uniquely bound. Preserve other files as explicitly accounted sources or excluded filenames. Do not route a maintenance-fee package to `other_expense`, `personnel_incentive`, or a `直营` scenario.
+每份视觉文件恰好绑定一次。POS/销售数据候选成为盖章 POS 来源；最多一个 `促销合同` 候选成为已签促销合同；
+最多一个 `结算单`/`结算表` 候选成为结算单；其余协议、相关文档、维护合同及活动/现场照片成为费用专属支持。
+接受 0 或 1 份 Excel 作为 POS 表格，使电子表缺失成为可报告核销问题；两份或更多 Excel 的权威来源无法唯一绑定时转入材料诊断，列出全部冲突文件，绝不擅自取第一份计算。
+其他文件保留为明确计入的来源或排除文件名。不得把维护费用材料包路由为 `other_expense`、`personnel_incentive` 或 `直营` 场景。
 
-## Extra giveaway
+## 额外搭赠
 
-Route an outer ZIP explicitly marked `额外搭赠` or `搭赠` as `giveaway_promotion` when it has no Excel or nested ZIP and contains at least one visual document. This shape is distinct from maintenance and other expense by its outer marker, distinct from personnel and promotional display by the absence of Excel/PDF pairing, and distinct from poster/material by the absence of a nested field-photo ZIP.
+外层 ZIP 明确标记 `额外搭赠` 或 `搭赠`、无 Excel 或嵌套 ZIP，且至少有一份视觉文档时，路由为 `giveaway_promotion`。
+该结构通过外层标记与维护费用、其他费用区分；通过缺少 Excel/PDF 配对与人员激励、促销堆头区分；
+通过缺少嵌套现场照片 ZIP 与海报/物料区分。
 
-Bind every image/PDF exactly once to the neutral `visual_document` role because camera-export basenames may contain no business role. The visual stage classifies each source from its visible title/content as signed promotional contract, dealer-stamped settlement, system sales/delivery statement, store receipt, activity photo, support, or other. Deterministic source validation requires exact source coverage and rejects more than one contract, settlement, or system sales/delivery statement. Missing mandatory roles remain blocking report issues so an incomplete but unambiguous extra-giveaway package can still produce a precise resubmission list. Preserve nonvisual files as excluded; do not invent an Excel requirement or route the claim to `other_expense`, `maintenance_fee`, or `直营`.
+每份图片/PDF 都恰好绑定到中性的 `visual_document` 角色，因为相机导出 basename 可能不含业务角色。
+视觉阶段根据可见标题/内容，将各来源分类为已签促销合同、经销商盖章结算单、系统销售/出库单、门店收货凭证、
+活动照片、支持材料或其他。确定性来源校验要求完整覆盖来源；超过一份合同、结算单或系统销售/出库单而无法唯一绑定时转入材料诊断。
+缺失必需角色仍为阻断报告问题，使不完整但无歧义的额外搭赠包仍能生成准确补交清单。
+非视觉文件保留为排除项；不得虚构 Excel 要求，也不得把申报路由为 `other_expense`、`maintenance_fee` 或 `直营`。
 
-## Price difference support
+## 价格补差
 
-Route an outer ZIP explicitly marked `补差` or `价格补差` as `price_difference_support` when it contains exactly one visual `促销协议`/`促销合同`, exactly one visual settlement, at least one stamped POS/sales visual, zero or one Excel, and exactly one RAR named as photos/returns/field evidence. Missing Excel remains a blocking report issue; duplicate singleton candidates stop intake.
+外层 ZIP 明确标记 `补差` 或 `价格补差`，且包含恰好一份视觉 `促销协议`/`促销合同`、一份视觉结算单、
+至少一份盖章 POS/销售视觉材料、0 或 1 份 Excel，以及恰好一个名称指向照片/核销/现场证据的 RAR 时，
+路由为 `price_difference_support`。Excel 缺失仍为阻断报告问题；单例候选重复转入材料诊断。
 
-List and validate the RAR before extraction with the same path, link, member-count, member-size and total-expansion boundaries used for ZIP input. Bind every extracted image exactly once as an activity photo and reject non-image RAR members or duplicate basenames. Deterministic audit requires all activity stores—not a sample—to have an in-period image with visible date/address/time watermarks and the contract activity price. Use only the signed contract's explicit support unit amount; never substitute retail original-price minus activity-price.
+解压前，按 ZIP 输入相同的路径、链接、成员数、成员大小及总解压边界列举并校验 RAR。
+每张提取图片恰好绑定一次为活动照片；RAR 含非图片成员或不同路径 basename 重复时由材料诊断保留来源并报告绑定问题；目标路径冲突等不安全结构仍拒绝。
+确定性核销要求所有活动门店——不能只是样本——都有活动期间内、水印可见日期/地址/时间并展示合同活动价的照片。
+只能使用已签合同明确的补差单位金额；绝不能用零售原价减活动价替代。
 
-## POS target incentive
+## POS 达标激励
 
-Route an outer ZIP marked `POS激励达标`, `POS达标激励`, or `POS激励` as `pos_target_incentive` when it has no nested archive, at most one Excel, and at least one visual file. Bind at most one promotional contract and one settlement by basename; duplicate singleton candidates stop intake. Bind POS/sales/data visuals as stamped POS, and bind remaining visuals as photos, receipts, or other activity proof. Missing contract, settlement, Excel, POS, or activity proof remains a blocking report issue.
+外层 ZIP 标记 `POS激励达标`、`POS达标激励` 或 `POS激励`，无嵌套归档、最多一份 Excel 且至少一份视觉文件时，
+路由为 `pos_target_incentive`。按 basename 最多绑定一份促销合同和一份结算单；单例候选重复转入材料诊断。
+POS/销售/数据视觉材料绑定为盖章 POS，其余视觉材料绑定为照片、收据或其他活动证明。
+合同、结算单、Excel、POS 或活动证明缺失，仍为阻断报告问题。
 
-The recipient is the dealer. The signed contract—not the settlement—must establish approved strategic/special-channel eligibility, activity period and mechanic, eligible POS scope, target tiers, rates and cap. Deterministic code reads the unique period/store/sales summary sheet, reconciles every store and total against stamped POS, requires activity-period proof for the full-reduction activity, selects the highest reached contract tier, applies its rate and cap, and compares the dealer-stamped settlement claim.
+收款对象是经销商。必须由已签合同——不能由结算单——确定已批准战略/特殊渠道资格、活动期间和机制、
+合格 POS 范围、目标阶梯、比例及上限。确定性代码读取唯一期间/门店/销售汇总表，逐店及总计与盖章 POS 对账，
+要求满减活动的期间内证明，选择达到的最高合同阶梯，应用对应比例和上限，再比较经销商盖章结算申报。
 
-## Entry fee / barcode fee
+## 进场费/条码费
 
-Route an outer ZIP marked `进场费` or `条码费` as `entry_fee` when it has no nested ZIP or Excel, exactly one RAR named as entry/shelf photos, and exactly one visual contract candidate named `产品推广协议`, `进场费合同`, `条码费合同`, or `进场合同`. Duplicate contract/RAR candidates stop intake.
+外层 ZIP 标记 `进场费` 或 `条码费`、无嵌套 ZIP 或 Excel，且恰好一个名称指向进场/上架照片的 RAR，
+并恰好一个名为 `产品推广协议`、`进场费合同`、`条码费合同` 或 `进场合同` 的视觉合同候选时，路由为 `entry_fee`。
+合同或 RAR 候选重复转入材料诊断。
 
-List and validate the RAR before extraction, require image-only members and unique basenames, and bind each image as `shelf_photo`. Preserve the RAR parent directory as a routing-only `store_hint`; it never proves the photo's store. Bind outer visual files explicitly named as system deduction/entry proof to `system_deduction_proof`; missing proof remains a report issue. Deterministic audit uses the signed contract as authority for parties, channel, product rows, contracted stores, barcode fee and total, matches only visible photo watermarks to contract stores, screens duplicate bytes, and requires the contract's system deduction proof. A product-row barcode fee is summed once per product and is not multiplied by the printed store count unless the contract explicitly says it is per store.
+解压前列举并校验 RAR，要求成员仅含图片且 basename 唯一，每张图片绑定为 `shelf_photo`。
+保留 RAR 父目录为只用于路由的 `store_hint`；它绝不能证明照片门店。
+外层视觉文件明确命名为系统扣费/进场证明时绑定到 `system_deduction_proof`；证明缺失仍为报告问题。
+确定性核销以已签合同作为主体、渠道、商品行、合同门店、条码费及总额的权威来源；
+只把照片可见水印与合同门店匹配，筛查重复字节，并要求合同规定的系统扣费证明。
+除非合同明确说明按门店计费，否则商品行条码费按每商品汇总一次，不乘印刷门店数量。
 
-## Safe extraction
+## 客户自采赠品物料
 
-## Customer self-procured gift material
+外层 ZIP 标记 `自采赠品物料`、`自采赠品` 或 `自采物料` 时，路由为 `self_procured_gift_material`。
+要求无嵌套 ZIP/RAR；恰好一份旧式 `.xls` 活动核销工作簿；最多一份现代 `.xlsx`/`.xlsm` POS 表格；
+恰好一份明确命名的促销合同、一份结算单、一份采购发票/收据；至少一份明确命名的盖章 POS 视觉材料；
+以及任意付款记录或其他视觉呈现。
 
-Route an outer ZIP marked `自采赠品物料`, `自采赠品`, or `自采物料` as `self_procured_gift_material`. Require no nested ZIP/RAR, exactly one legacy `.xls` activity-return workbook, at most one modern `.xlsx`/`.xlsm` POS spreadsheet, exactly one named promotional contract, one settlement, one purchase invoice/receipt, at least one named stamped POS visual, and any payment records or additional visual representations.
+通过隐藏、只读的 Microsoft Excel COM 将旧式 `.xls` 转换到运行范围临时目录，解析 WPS `DISPIMG` 关系，
+并提取每张嵌入活动照片。工作簿每行、门店、期间及客户编码值只保留为路由提示；绝不能把这些单元格视为照片可见证据。
+每张提取照片绑定为 `activity_photo`，要求模型读取照片自身水印与活动内容。活动核销工作簿绝不是 POS 电子表格。
+存在现代 POS 表格时，确定性核销应单独读取，将其与盖章视觉 POS 对账，且不重复计算不同视觉呈现；
+检查全门店照片覆盖、赠品规则数量充足性、采购/收据/付款支持、合同/结算对应及金额算术。
+POS 表格缺失或任何必核控制失败都会阻断全部申报。
 
-Convert the legacy `.xls` through hidden read-only Microsoft Excel COM into the run-scoped temporary directory, resolve WPS `DISPIMG` relationships, and extract every embedded activity photo. Preserve each workbook row, store, period, and customer-code value only as routing hints; never treat those cells as visible photo evidence. Bind each extracted photo as `activity_photo` and require the model to read its own watermark and activity content. The activity-return workbook is never the POS electronic spreadsheet. Deterministic audit separately reads a modern POS spreadsheet when present, reconciles it to the stamped visual POS without double-counting alternate visual representations, checks all-store photo coverage, gift-rule quantity sufficiency, purchase/receipt/payment support, contract/settlement alignment, and amount arithmetic. A missing POS spreadsheet or any failed mandatory control blocks the entire claim.
+## 安全解压
 
-## Safe extraction
+写入任何成员前，拒绝绝对路径、`..`、带盘符路径、NUL 字节、Windows 非法名称、符号链接、加密成员、
+重复/大小写冲突目标、超过 2,000 个成员、单成员超过 250 MiB、总解压超过 1 GiB 或可疑压缩率。
+解压到新的运行范围临时目录，并在运行结束时自动删除。
 
-Before writing any member, reject absolute paths, `..`, drive-qualified paths, NUL bytes, Windows-invalid names, symbolic links, encrypted members, duplicate/case-colliding destinations, more than 2,000 members, a member above 250 MiB, total expansion above 1 GiB, or a suspicious compression ratio. Extract into a new run-scoped temporary directory and remove it automatically at the end of the run.
+核销类型是开始业务核验的前提。ZIP 名称未注明类型或包含多个具体类型时，该包核销失败，不调用 AI；运行 manifest、snapshot、正式收据及 OSS job 均为 `failed`，失败代码为 `classification_failed`，不发布 `run.completed`。CLI 以退出码 2 返回已保存的失败收据，OSS 仍按原三字段契约回传 `核销失败：核销方式无法确认` 及全部具体原因；回传成功只表示送达，不能把核销改成完成。回传失败单独记为 `callback_failed`，原核销失败与原因继续保留。混合批次中已知类型照常检查并保留结果，只要仍有无法分类的包，整次记录为失败。类型已确定且业务核验执行完成后，材料缺失、金额差异等才作为完成结果中的失败检查项展示，与正确检查项并列。旧档案若曾把分类退回标成 completed，工作台只读投影为失败，不重写历史证据或自动重发回调。

@@ -870,7 +870,7 @@ class HtmlReportTests(unittest.TestCase):
                 ["人员激励核销", "堆头核销"],
             )
             self.assertEqual(verification["external_dependency_count"], 0)
-            self.assertEqual(verification["button_count"], 26)
+            self.assertEqual(verification["button_count"], 20)
             self.assertTrue(verification["workbook_content_equal"])
             self.assertTrue(verification["static_template_equal"])
             self.assertEqual(verification["template_version"], "3.9.0")
@@ -903,28 +903,25 @@ class HtmlReportTests(unittest.TestCase):
                 'class="eo-home-cockpit"',
                 'class="eo-tab"',
                 'class="eo-error-card"',
+                'aria-label="${escapeHtml(accessibleName)}"',
                 'class="eo-error-details"',
                 'class="eo-table"',
                 'id="eoErrorList"',
                 'id="eoErrorType"',
                 'id="eoErrorCategory"',
-                'id="eoErrorConfidence"',
-                'id="eoErrorKeyword"',
-                'id="eoErrorVisible"',
-                'id="eoErrorFacetSummary"',
                 'id="eoErrorFilterEmpty"',
                 'id="eoPassList"',
                 'id="eoPassType"',
                 'id="eoPassCategory"',
-                'id="eoPassConfidence"',
-                'id="eoPassKeyword"',
                 'id="eoPassFacetSummary"',
                 'id="eoPassFilterEmpty"',
                 'id="eoBackTop"',
+                'role="tablist" aria-label="核销结果视图"',
+                'id="eo-tab-home" role="tab"',
+                'id="eo-tab-passed" role="tab"',
+                'id="home" role="tabpanel" aria-labelledby="eo-tab-home"',
+                'id="passed" role="tabpanel" aria-labelledby="eo-tab-passed"',
                 'data-eo-view="passed"',
-                "核销错误处置总览",
-                "核销错误结果",
-                "正确检查项日志",
                 "筛选错误检查项",
                 "筛选正确检查项",
                 "种核销方式",
@@ -935,35 +932,81 @@ class HtmlReportTests(unittest.TestCase):
                 'data-error-confidence-score=',
                 'data-pass-confidence-score=',
                 'class="eo-chip eo-error-reason"',
-                "错误总数",
-                "材料 / 结算错误",
-                "商品 / 门店错误",
-                "全部错误直接向下排列",
                 "@media (prefers-reduced-motion: reduce)",
+                "content-visibility: auto;",
+                "contain-intrinsic-size: auto 168px;",
+                "@media print",
+                'aria-label="${escapeHtml(accessibleLabel)}"',
+                "const passFilterRecordByCard = new WeakMap",
+                "const passFilterGroups =",
+                "const passTypeFacetCount = renderPassFacet",
+                "['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End']",
+                "tab.setAttribute('tabindex', selected ? '0' : '-1')",
             ):
                 self.assertIn(required, html)
             self.assertNotIn("单项通过不等于整单核销通过", html)
+            self.assertNotIn("全部错误直接向下排列", html)
+            self.assertNotIn("每项标明对应核销类型", html)
+            self.assertNotIn("当前视图直接列出全部需要处理的错误", html)
+            self.assertNotIn('id="eoErrorFacetSummary"', html)
+            self.assertNotIn('id="eoErrorConfidence"', html)
+            self.assertNotIn('id="eoPassConfidence"', html)
             self.assertNotIn('class="eo-pass-warning"', html)
             self.assertNotIn("核销方式始终展示全部；置信度随核销方式和关键词联动", html)
             self.assertNotIn("核销方式始终展示全部；检查分类和置信度只保留当前存在项", html)
             self.assertNotIn(".eo-chip.eo-error-reason {", html)
+            for removed_summary in (
+                'id="eoErrorKeyword"',
+                'id="eoPassKeyword"',
+                "FILTER REJECTED CHECKS",
+                "FILTER VERIFIED CHECKS",
+                "eo-pass-filter-head",
+                'id="eoErrorVisible"',
+                'id="eoPassVisible"',
+                "重置筛选",
+                "REJECTED ERROR RESULTS",
+                "核销错误结果",
+                "VERIFIED PASS RESULTS",
+                "按核销类型归档",
+                "eo-queue-head",
+                "AUDIT ERROR COMMAND",
+                "核销错误处置总览",
+                "VERIFIED CHECK LEDGER",
+                "<h1>正确检查项日志</h1>",
+                "eo-cockpit-hero",
+                "eo-total-gauge",
+                "待处理总数",
+                'class="eo-metric"',
+                'class="eo-composition',
+                "材料 / 结算错误",
+                "商品 / 门店错误",
+                "材料 / 商品",
+                "门店 / 金额",
+                "ERROR COMPOSITION",
+                "PASS COMPOSITION",
+            ):
+                self.assertNotIn(removed_summary, html)
 
             self.assertIn(
                 '<div class="brand-mark" aria-label="参半 CANBAN"><strong>参半</strong><small>CANBAN</small></div>',
                 html,
             )
-            self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr));", html)
             self.assertIn("const personnelView = (sheet) =>", html)
             self.assertIn("const displayView = (sheet) =>", html)
             self.assertIn("const posterView = (sheet) =>", html)
             self.assertIn("const groupedIssueView = (sheet, auditType) =>", html)
             self.assertIn("合同销售附件第1行", html)
-            self.assertIn("['合同位置', '合同商品', '知识库商品', '具体错误']", html)
+            self.assertIn("problem: groupedRowProblem(sheet, knowledgeRows, 'knowledge')", html)
+            self.assertIn("problem: groupedRowProblem(sheet, salesRows, 'sales')", html)
+            self.assertNotIn("extra: detailsTable(", html)
             self.assertIn(".eo-table td::before", html)
             self.assertIn("consumed !== content.length", html)
             self.assertNotIn("7350元，转账凭证识别金额为7353元", html)
             self.assertNotIn("销售Excel读取到7家门店", html)
             self.assertNotIn("photoKnowledgeAlreadySupported", html)
+            self.assertNotIn(
+                "normalizeFilterText(card.textContent).includes(state.keyword)", html
+            )
 
             for forbidden in (
                 'id="homeIssueTotal"',

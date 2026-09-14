@@ -212,7 +212,7 @@ class GiveawayPromotionRoutingTests(unittest.TestCase):
                 {"visual_document"},
             )
 
-    def test_source_validator_requires_coverage_and_unique_authority_roles(self) -> None:
+    def test_source_validator_requires_coverage_but_preserves_authority_candidates(self) -> None:
         case = {
             "document_roles": [
                 {"path": "合同.jpg", "role": "visual_document"},
@@ -233,11 +233,92 @@ class GiveawayPromotionRoutingTests(unittest.TestCase):
             {"source_file": "合同.jpg", "role": "visual_document", "document_type": "settlement"},
             {"source_file": "结算.jpg", "role": "visual_document", "document_type": "settlement"},
         ]
-        with self.assertRaisesRegex(Exception, "候选不唯一"):
-            _validate_giveaway_promotion_sources(case, duplicated)
+        _validate_giveaway_promotion_sources(case, duplicated)
+
+        repeated_source = deepcopy(duplicated)
+        repeated_source["documents"][1]["source_file"] = "合同.jpg"
+        with self.assertRaisesRegex(Exception, "重复返回同一来源"):
+            _validate_giveaway_promotion_sources(case, repeated_source)
+
+        rebound = deepcopy(duplicated)
+        rebound["documents"][0]["role"] = "settlement"
+        with self.assertRaisesRegex(Exception, "来源角色被改写"):
+            _validate_giveaway_promotion_sources(case, rebound)
 
 
 class GiveawayPromotionAuditTests(unittest.TestCase):
+    def test_multiple_principal_candidates_report_files_without_selecting_or_approving(self) -> None:
+        for document_type, extra_file in (
+            ("signed_promotional_contract", "客户另交合同.jpg"),
+            ("settlement", "客户另交结算.jpg"),
+            ("sales_delivery_statement", "客户另交系统明细.jpg"),
+        ):
+            with self.subTest(document_type=document_type):
+                evidence = _complete_evidence()
+                original = next(
+                    document for document in evidence["documents"]
+                    if document["document_type"] == document_type
+                )
+                additional = deepcopy(original)
+                additional["source_file"] = extra_file
+                if document_type == "settlement":
+                    additional["claimed_gift_amount"] = 999
+                evidence["documents"].append(additional)
+                validate_json(evidence, EVIDENCE_SCHEMA)
+                with tempfile.TemporaryDirectory() as temporary:
+                    case = _case(Path(temporary), evidence)
+                    case["document_roles"] = [
+                        {"path": path, "role": "visual_document"}
+                        for path in case["visual_files"]
+                    ]
+                    _validate_giveaway_promotion_sources(case, evidence)
+                    result = audit_giveaway_promotion_case(case, evidence)
+                validate_json(result, RESULT_SCHEMA)
+                audit = result["giveaway_promotion_audit"]
+                self.assertEqual(audit["missing_roles"], [])
+                self.assertEqual(result["summary"]["missing_role_count"], 0)
+                self.assertEqual(result["summary"]["suggested_approved_amount"], 0)
+                self.assertEqual(result["summary"]["conclusion"], "human_review")
+                self.assertEqual(len(audit["documents"]), 6)
+                self.assertEqual(len(audit["issues"]), 1)
+                issue = audit["issues"][0]
+                self.assertEqual(issue["code"], "multiple_role_candidates")
+                self.assertEqual(issue["source_files"], [original["source_file"], extra_file])
+                self.assertIn("2份", issue["observed"])
+                self.assertIn(original["source_file"], issue["observed"])
+                self.assertIn(extra_file, issue["observed"])
+                self.assertIn("未选择", issue["impact"])
+                material_control = next(
+                    control for control in audit["controls"]
+                    if control["control_id"] == "required_materials"
+                )
+                self.assertEqual(material_control["status"], "fail")
+                self.assertNotIn("缺少", material_control["basis"])
+                if document_type == "settlement":
+                    self.assertEqual(result["summary"]["claimed_amount"], 0)
+                    self.assertIsNone(result["summary"]["shipment_amount"])
+                if document_type == "signed_promotional_contract":
+                    self.assertIsNone(result["summary"]["recalculated_gift_amount"])
+
+    def test_duplicate_contract_does_not_hide_actual_missing_photo(self) -> None:
+        evidence = _complete_evidence()
+        extra_contract = deepcopy(evidence["documents"][0])
+        extra_contract["source_file"] = "另一合同.jpg"
+        evidence["documents"] = [
+            document for document in evidence["documents"]
+            if document["document_type"] != "activity_photo"
+        ] + [extra_contract]
+        with tempfile.TemporaryDirectory() as temporary:
+            result = audit_giveaway_promotion_case(_case(Path(temporary), evidence), evidence)
+        validate_json(result, RESULT_SCHEMA)
+        audit = result["giveaway_promotion_audit"]
+        self.assertEqual(audit["missing_roles"], ["活动期内门店现场照片"])
+        self.assertEqual(
+            {issue["code"] for issue in audit["issues"]},
+            {"multiple_role_candidates", "required_materials_missing", "activity_execution_missing"},
+        )
+        self.assertEqual(result["summary"]["suggested_approved_amount"], 0)
+
     def test_complete_chain_recalculates_and_passes(self) -> None:
         evidence = _complete_evidence()
         validate_json(evidence, EVIDENCE_SCHEMA)

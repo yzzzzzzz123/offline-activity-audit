@@ -1,508 +1,539 @@
-# Offline activity audit project
+# 线下活动核销项目
 
-## Current registered scope
+## 当前已登记范围
 
-This repository audits ten offline-activity scenarios only:
+本仓库只核销以下 10 个线下活动场景：
 
-- `personnel_incentive` through `skills/audit-personnel-incentive`;
-- `promotional_display` through `skills/audit-promotional-display`;
-- `poster_material` through `skills/audit-poster-material`.
-- `other_expense` through `skills/audit-other-expense`.
-- `maintenance_fee` through `skills/audit-maintenance-fee`.
-- `giveaway_promotion` through `skills/audit-giveaway-promotion`.
-- `price_difference_support` through `skills/audit-price-difference-support`.
-- `pos_target_incentive` through `skills/audit-pos-target-incentive`.
-- `entry_fee` through `skills/audit-entry-fee`.
-- `self_procured_gift_material` through `skills/audit-self-procured-gift-material`.
+- `personnel_incentive`，使用 `skills/audit-personnel-incentive`；
+- `promotional_display`，使用 `skills/audit-promotional-display`；
+- `poster_material`，使用 `skills/audit-poster-material`；
+- `other_expense`，使用 `skills/audit-other-expense`；
+- `maintenance_fee`，使用 `skills/audit-maintenance-fee`；
+- `giveaway_promotion`，使用 `skills/audit-giveaway-promotion`；
+- `price_difference_support`，使用 `skills/audit-price-difference-support`；
+- `pos_target_incentive`，使用 `skills/audit-pos-target-incentive`；
+- `entry_fee`，使用 `skills/audit-entry-fee`；
+- `self_procured_gift_material`，使用 `skills/audit-self-procured-gift-material`。
 
-Personnel and promotional-display product identity share the project-level catalog at
-`shared/canban-product-multimodal-knowledge-base`. No scenario Skill owns a private copy.
+所有核销 Skill 的商品知识数据统一来自 MySQL `product_catalog.products`，使用
+`audit_core.product_database.load_product_catalog`。具体边界见 `shared/product-database/audit-knowledge.md`。
+本文“商品知识库/目录”指本次数据库快照；参考图片已迁往私有 OSS，
+GitHub 中的旧图库仅作为完全独立的远端灾备，不检出到本地工作目录；任何其他代码、Skill、维护及评测都不得读取或导入它。
+所有商品身份只查数据库，所有参考图片只查 OSS；恢复灾备须另行授权，恢复到数据库和 OSS 后才恢复正常分析，不存在自动回退。
+商品身份字段为名称、编码与69码；另有可空的 `image_manifest_key`（商品图片集），存储已验证 OSS 图片清单 Object Key，
+不存临时签名链接。四字段在同一只读事务读取；三个身份字段的哈希与图片关联元数据哈希分开保留。
+商品参考图采用用户确认的固定路径覆盖策略：`offline-verify/product-reference/<product_code>/manifest.json`
+关联同目录多视图，不创建 `v1/v2`、时间戳版本目录或应用侧历史图片副本；更新同一视图时覆盖原 Object Key。
+更新完成并校验后再发布清单，不修改桶级策略。上传和核销读取使用独立直连 SDK，不使用系统代理，保留 TLS 校验。
+仅下载选定候选及视图到任务临时目录；同任务复用已验证字节，成功/异常退出自动清理，下次重新读取。
+用户于 2026-09-14 确认：断电、崩溃或强制中断导致的临时材料/参考图残留，在下次正式运行启动时补清理。
+使用 `audit_core.run_temporary` 的归属登记和操作系统占用锁，只检查当前 worktrees 范围在系统临时目录中的自有容器；
+仍有任务或模型子进程使用、归属无法确认、含链接或无法删除时保留并在后续运行重试，不增加定时守护。
+不按目录年龄或 PID 猜测失效，不按旧前缀批量删除。`input/`、`input-oss/`、正式 worktree、凭据及 OSS 正式图片始终不在此清理范围内。
+OSS 是唯一参考图来源，配置缺失同样必须报错；清单/图片错误属于系统故障，不归咎客户照片。凭据使用仓库外当前用户 DPAPI 加密文件。
+被覆盖图片不能凭历史哈希恢复；核销档案及原始业务 ZIP 的留存、不可变规则不变。
+新任务重新查库，同次任务保留一致快照及来源哈希，失败不回退旧 JSON。
 
-The only formal audit runner is:
-
-```powershell
-py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--model <audit-model>] [--reasoning-effort <level>] [--scenario <scenario>]
-```
-
-`input/` must contain one to ten ZIP files. Each supported scenario may appear at most once. Reject unknown, ambiguous, duplicate-type, or unsafe archives with a specific error. A maintenance-fee package whose marker and POS/settlement structure are unambiguous may continue to audit so missing mandatory roles become customer-facing blocking issues; ambiguous duplicate singleton roles still stop intake. A marked all-visual extra-giveaway package may similarly continue so generic camera filenames are classified from visible content and missing roles become blocking report issues; duplicate contract, settlement, or delivery candidates stop evidence acceptance. A marked price-difference package accepts zero or one POS Excel so a missing electronic sheet becomes a blocking report issue, while singleton-role ambiguity still stops intake. A marked POS-target-incentive package likewise accepts missing singleton roles so the contract/activity-proof gaps remain reportable. A marked entry-fee package requires one unique contract and one safely extractable shelf-photo RAR; missing system deduction proof remains a blocking audit issue. A marked self-procured-gift-material package requires one legacy activity-return `.xls`, extracts every embedded DISPIMG photo for visual review, and never treats that workbook as the POS electronic spreadsheet. `--scenario` may select one submitted type for a scenario-only formal result.
-
-The authenticated `POST /api/intake/oss` endpoint is a transport adapter, not another audit pipeline. Its production request contract is exactly `verifyCode`, positive-integer `fileId`, and the temporary pre-signed HTTPS `downloadUrl`; the stable internal idempotency identity is the unchanged `verifyCode:fileId` pair. Keep the signed URL in memory only, persist the verified original archive under `input-oss/<job_id>/`, and invoke the bundled `skills/orchestrate-offline-audit/scripts/run.py` in a child process with that job directory as `--input-dir`. After the formal run and its worktree snapshot are durably complete, POST exactly `verifyCode`, `fileId`, and a deterministic Chinese `result` string to the configured full HTTPS `/api/v1/ai/analyze/callback` URL. Callback retry must retry delivery only and must never download again or rerun AI; a callback failure retains the completed worktree and is recorded separately as `callback_failed`. Preserve the same safe archive routing, six-stage observer flow, AI/deterministic trust boundary, worktree layout, and no-overwrite rule as a manual run. Never copy an OSS object into the shared repository `input/`, flatten different jobs into one directory, persist its signed URL or callback token, accept an arbitrary/non-allowlisted download host, return `downloadUrl` in the callback, or implement business analysis in the HTTP handler. Job receipts live only under hidden `worktrees/.intake/jobs/`, and the visible catalog continues to list formal worktrees only. Verified OSS ZIPs remain in `input-oss` after completion or failure; partial or transport-invalid downloads are removed, while extracted sources and all other run intermediates remain temporary.
-
-## New scenario onboarding
-
-When the user supplies one representative ZIP plus a business prompt and asks to create another
-audit scenario, use `skills/create-offline-audit-scenario/SKILL.md`. This is a development workflow,
-not a formal audit run. First decide whether the request is a new reusable evidence/decision chain or
-only another case of one of the ten registered scenarios. Reuse or update the existing scenario
-when its material roles, authority graph, deterministic controls, amount rule, and output object are
-the same; never create one Skill per customer, month, activity number, or ZIP filename.
-
-A genuinely new scenario is active only after its Skill package, safe ZIP classifier and role binder,
-visual extraction adapter, source-coverage validation, deterministic handler, result Schema,
-six-column intermediate renderer, canonical HTML subinterface, CLI choice, documentation, and
-positive/negative tests are all integrated and verified. Until then, leave it explicitly unregistered;
-do not route an unknown scenario through the personnel, display, or poster fallback path. The formal
-entrypoint remains `orchestrate-offline-audit/scripts/run.py` after every onboarding.
-
-## Trust boundary
-
-Keep extraction and judgment separate. AI or vision steps may only extract visible facts into schema-validated JSON:
-
-- personnel: settlement image and transfer/red-packet screenshots;
-- display: contract PDF and field photos; the field-photo pass may additionally receive the
-  repository-owned, hash-validated product-reference views under
-  `shared/canban-product-multimodal-knowledge-base`, solely to retrieve and compare product identity.
-- poster/material: signed promotional-contract image, invoice or receipt image, settlement-form
-  image, and every watermarked finished-product field photo. POS sales and unrelated evidence are
-  excluded from this visual pass.
-- other expense: every deterministically bound promotional contract, settlement, supporting
-  agreement/document, activity/POS proof, invoice/receipt, and special-approval candidate. The model
-  extracts visible facts only; it does not decide classification, approve a new type, or calculate an
-  approved amount.
-- maintenance fee: every deterministically bound stamped-POS visual, signed promotional contract,
-  settlement, fee-specific support, and activity photo. The POS spreadsheet is excluded from vision;
-  deterministic Python reads it and compares its rows and totals with the stamped POS facts.
-- entry fee: the signed entry contract/product-promotion agreement, every safely extracted shelf
-  photo, and every explicit system-deduction proof. Folder/store hints are routing-only and never
-  establish a visible store, location, date, time, product, or activity.
-
-Product-reference views are not field evidence. They may resolve a catalog product name,
-product code, and 69 code, but must never establish a store, date, display, promotion, price,
-photo uniqueness, or reimbursement decision and must never be returned as submitted photo files.
-
-Never give the model a sales Excel or access to repository inputs, prior results, caches, history, or the acceptance workbook. AI must not calculate amounts, select Excel product names, or make reimbursement decisions.
-
-Deterministic Python must safely unpack and route ZIPs, read Excel cells, preserve original source names and rows, aggregate quantities, map products, calculate differences and supported amounts, detect duplicate images, validate results, and publish a versioned run snapshot into `worktrees/`. The only customer-facing page is the persistent root `offline-activity-audit.html`, served by the trusted local workbench service. A temporary workbook or assembled legacy projection may exist only inside the run-scoped temporary area for deterministic rendering and verification; neither is a delivery file.
-
-Across every scenario and every product-to-product comparison, a product name never has to be
-character-for-character equal. Exact equality is only a score-1 special case; a unique, specification-
-compatible fuzzy name is sufficient. When comparable business sources provide both a 69 code and a
-product-code field, those two identifiers remain strict and must agree exactly; once they agree, a
-differently written product name is shown as fuzzy-compatible and must never create a separate
-`商品名称：不匹配` error. If the name is absent or illegible but strict identifiers and independent
-transaction facts uniquely locate the row, record it only as unavailable auxiliary text; it must not
-affect status, confidence, problem counts, or resubmission. A catalog packaging/code alias such as `SP-4` may support the fuzzy-name field when
-it is visibly written as part of a product description, but it never substitutes for or rewrites a
-strict business-file product-code field.
-
-When one exact product-code-plus-69-code pair maps to several knowledge-base variants, a uniquely
-fuzzy-compatible source name may disambiguate them. For every detected row in a dense contract-PDF
-sales attachment, the formal vision run must perform a second, original-resolution cell pass dedicated
-only to that row's printed product-code, product-name, and 69-code cells. Deterministic preparation must remove
-broad scan whitespace, derive all four orientations, and provide the two lossless landscape reading
-directions plus overlapping row bands. For bands crossed by a red seal, also provide a same-pixel
-black-print crop that suppresses saturated seal color and enlarges the product-code/name/69-code cells; vision
-chooses the upright print and confirms seal-covered characters across both views.
-First-pass quantity, price, and amount may locate the row but must never supply or infer those three cells, and sales Excel or catalog data
-must never be shown to this pass. Preserve identical page/line order, require every nonempty reread 69 code to pass EAN-13 validation, and retry when a visibly populated
-dense row still returns a missing product code, name, or 69 code. Apply only non-empty second-pass readings and
-revalidate the complete contract evidence before deterministic matching. Never turn an OCR omission
-into a product-code mismatch.
-
-For `personnel_incentive`, deterministic code must reconcile every aggregated sales-Excel SKU
-through the same validated repository product knowledge base before it can support an incentive
-amount. The personnel Excel has no product-code field: its valid EAN-13/69 code must exactly match
-the catalog, and its original product name needs only one strong, unique fuzzy-compatible match
-within only that exact-barcode candidate set. Same-code ambiguity, an invalid/unregistered 69 code,
-or an incompatible name fails the product gate. Preserve the diagnostic mapping but cap the affected
-SKU's supported reward at zero. Catalog identity comes from code; product-reference images are not
-sent to the personnel vision pass and are not settlement or transfer evidence.
-
-When a personnel settlement line has no visible barcode, an exact quantity that occurs in exactly one
-still-unused, knowledge-passed Excel SKU is a deterministic medium-confidence route under the
-one-line/one-barcode constraint. Settlement product-name OCR is fuzzy auxiliary evidence only: a
-shortened, misspelled, or corrupted name cannot reject that unique route. When quantity is duplicated,
-the name must still uniquely disambiguate; otherwise leave the line unresolved.
-
-For `promotional_display`, the contract PDF is the authoritative business-audit file. Audit its six
-mandatory controls separately: contracting party, activity budget, execution period, activity
-content, reimbursement/settlement method, and seal. Watermark visibility may be retained only as an
-informational fact; it must never affect status, confidence, amount, or resubmission. The validated repository product
-knowledge base is authoritative only for product identity. Deterministic code must reconcile every
-concrete product in the core contract and every printed contract sales-attachment row to that ledger.
-A supplied valid EAN-13 must equal the catalog 69 code; source-local business product codes are
-preserved and compared strictly between the contract attachment and sales Excel. In product-to-
-knowledge reconciliation the same source code must exactly equal the selected catalog product's
-`product_code` or `product_code_aliases`; an unrelated main code is acceptable only when the source
-code is registered as an exact alias. Product code and 69 code must jointly identify the same product.
-The product name is fuzzy auxiliary evidence and never
-requires exact equality. Registered packaging aliases never make a strict contract, attachment,
-settlement, or sales-file product-code field pass, although they may be fuzzy-name anchors in a
-description field. A contract
-product that cannot map uniquely, contains conflicting identifiers, has an invalid 69 code, or lacks
-the identity needed for a unique match fails its contract gate. Raw contract values remain immutable
-and must never be silently normalized into a pass.
-
-Keep the core contract-product condition and the printed sales attachment semantically separate.
-Only an explicit core term can populate `requires_specific_products` and become a contractual SKU
-condition. `contract.sales_attachment` is a page- and row-preserving transcript of an appended sales
-table; it never creates a core product requirement or promotion requirement, but every printed row is
-still a contract-side product identity that must be reconciled to the knowledge base. Printed
-attachment totals are transcribed when present but are never reconstructed by model arithmetic. When
-no row-level attachment exists, the standalone sales Excel has no contractual row-level baseline:
-mark that reconciliation unverifiable, require the complete contract attachment, and block automatic
-reimbursement rather than substituting photos or the knowledge base.
-
-Product names never require character-for-character equality; unique fuzzy compatibility is sufficient
-for contract-product identity and contract-attachment-to-Excel name comparison. Supplied business-
-file product codes and supplied 69 codes remain strict. A field photo does not need to show a full
-product name or 69 code. First extract useful text from that photo, then use only that text to retrieve
-a small candidate set from the full validated knowledge base, correspond the visible text to catalog-
-controlled text, and compare the packaging with registered reference views. A visible catalog-unique
-packaging alias such as `SP-1`, or another uniquely convergent combination of partial name,
-specification, variant, and bundle text, may establish the text correspondence. `3+2`, `420g`, and
-`量贩装` together may retrieve the registered `3+2` bundle. An exact result requires broad visual
-compatibility with at least one registered multi-view reference, not pixel identity: angle, distance,
-lighting, shelf occlusion, and package pose may differ when the core layout, color blocks, bundle
-structure, and recognizable features agree without conflict. Contract membership is checked
-separately after the photo identity is fixed. A fuzzy photo identity remains unresolved; neither
-contract wording, sales Excel, nor another business source may promote it to exact.
-
-For personnel output, a unique fuzzy product-name match is an accepted medium-confidence match, not
-a resubmission reason by itself. When the 69 code is exact, the knowledge item is uniquely resolved,
-and quantity and reward agree, show `置信度：中` with `无需重新提交`; request a clearer
-settlement line only when the mapping itself remains low-confidence, unmatched, or ambiguous.
-
-The display chain is contract-led and directional:
-
-1. contract core and contract sales attachment → product knowledge base, once, for their own product identity;
-2. field-photo visible text → bounded candidates from the full validated product knowledge base →
-   registered reference-image comparison; then independently compare the resolved photo product with
-   contract scope and the remaining photo facts with contract terms;
-   after that complete pass, run a focused display-standard review with submitted photos and immutable
-   store/photo routing only. It replaces only `display_observation`: three front-facing packages plus
-   the exposed side panel of the third package is still three, while a separately bounded adjacent
-   stack of additional packages counts as another column even if narrow or side-facing. Different
-   submitted-brand SKUs and package formats may jointly form four columns; evaluate multiple photos
-   independently, letting any one photo prove four but never summing partial counts or counting
-   unrelated neighboring brands. A flush run of side faces beside three front boxes remains three
-   without seams, offsets, or another independent package face. Apply accepted visual regression
-   calibrations only when the contract store and ordered routed-photo SHA-256 values match exactly;
-   any content or route change disables calibration. Revalidate the
-   complete photo evidence after applying the focused result;
-   poster/material quantity regressions use a separate registry and require the complete ordered
-   field-photo basename and SHA-256 sequence to match exactly. They may replace only declared aggregate
-   material-unit and contributing-photo counts; any byte, name, membership, or order change disables
-   them. User-verified difficult visual-document amounts use a third registry and require the complete
-   ordered contract, invoice/receipt, and settlement basename plus SHA-256 sequence to match exactly;
-   it may replace only the three declared amount fields. Any byte, name, membership, or order change
-   disables it. No calibration registry may enter a model prompt or customer page;
-3. standalone sales Excel → contract sales attachment, row by row across customer name, business
-   date, product code, product name, barcode, quantity, retail price, and total amount. Preserve each
-   source's unit for display, but never use unit to pair rows, pass/fail a row, set confidence, or ask
-   for resubmission.
-
-The standalone sales Excel is never reconciled to the product knowledge base. Field photos are never
-reconciled to the standalone sales Excel, and Excel may not help identify a photographed product. The
-attachment and standalone Excel have no authoritative store column, so they must never be assigned to
-a photographed store or presented as proof that a particular store sold a product. Store/date/
-display/promotion evidence comes from the contract and field photos. Amount is automatic only for an
-explicit per-store or per-stack unit basis; a total-only or unclear contract is never divided
-automatically.
-
-Never approve an amount only because totals match. Preserve source archive hashes, raw paths, Excel rows, contract or settlement lines, visible limitations, and per-item/per-store evidence.
-
-For `poster_material`, close the chain `signed contract → invoice/receipt → stamped settlement →
-watermarked finished-product photos`. Contract-referenced attachments are mandatory. A generic
-ticket line such as `物料制作` does not satisfy itemized expense evidence when the contract lists
-multiple materials. Photo evidence must visibly cover activity-period date, shooting time, location,
-finished content, dimensions, placement, and the contracted unit/store quantity; never extrapolate
-from samples. The customer-facing subinterface lists only grouped blocking errors, affected source
-filenames, recognized facts, impact, confidence, and exact resubmission action. Passing controls and
-unrelated files stay out of that list.
-
-For `other_expense`, first compare every visible fee description with the established categories:
-赠品、陈列堆头、人员激励、海报/物料制作、维护费用、补差、额外搭赠、POS达标激励 and 进场费.
-The ZIP marker `其他` is routing only. A recognizable existing type must be reclassified; a genuinely
-new type must have independent special approval naming the new type, approver, approval statement,
-date, and approval mark. Then require a signed promotional contract, company-template settlement with
-customer seal, and type-specific support. This special channel never produces an automatic approved
-amount: preserve the settlement claim, keep the suggested amount at zero, and return an exact
-classification/approval/resubmission action or `待人工核定`.
-
-For `maintenance_fee`, keep the chain `dealer-stamped POS visual → POS electronic spreadsheet →
-signed promotional contract → company-template dealer-stamped settlement → fee-specific support`.
-The archive marker routes an otherwise distinguishable package but never proves fee nature. The
-contract supplies activity scope, period, eligible POS scope, calculation method, rate, and ceiling;
-deterministic code reads the electronic POS sheet, requires row/total correspondence with the stamped
-POS data, and supports the settlement claim only when the contractual recalculation matches to RMB
-0.01. Missing roles, another visible fee nature (including personnel incentive or direct-operation),
-or an unreproducible amount blocks the full claim. `other_expense` remains a separate scenario.
-
-For `giveaway_promotion`, keep the chain `dealer-executed extra-giveaway contract → dealer-stamped
-settlement → system sales/delivery statement → store receipts → activity photos`. Keep the normal
-shipment amount separate from the extra-gift claim. Deterministic code must check dealer and store
-identities, contract period, eligible purchased and gift products, explicit buy/gift ratio,
-zero-value gift rows on each receipt, system shipment total, gift quantities and explicit unit value,
-contract budget, stamped claim, and exact duplicate images. Product names may be uniquely fuzzy and
-specification-compatible; comparable product codes and 69 codes remain strict. A receipt cannot
-replace the required activity photo. Missing roles or any failed control holds the full gift claim.
-
-For `price_difference_support`, keep the chain `signed promotional contract → dealer-stamped POS
-visual ↔ POS electronic spreadsheet → company-template dealer-stamped settlement → every-store
-activity-price photos`. Treat original price, activity price, and the contract support unit amount as
-three distinct facts; never derive the reimbursement unit from the retail price reduction. Every POS
-or contract store needs its own in-period photo with visible date, address, shooting time, and activity
-price. Calculate eligible POS quantity × contract support unit, capped by contract quantity and budget;
-any missing role, incomplete store coverage, or failed reconciliation holds the full claim.
-
-For `pos_target_incentive`, the incentive recipient is the dealer. Keep the chain `signed contract →
-approved strategic/special-channel eligibility and target tiers → dealer-stamped POS visual ↔ POS
-electronic spreadsheet → full-reduction activity proof → dealer-stamped company-template settlement`.
-The settlement cannot establish missing contract rates. Deterministic code selects the highest reached
-contract tier, calculates eligible POS × rate, applies the contract cap, and compares the claim. Missing
-contract or activity proof holds the full claim even when POS and settlement arithmetic appear correct.
-
-For `entry_fee`, keep the chain `both-party signed entry contract → contract product/barcode and store
-scope → watermarked shelf photos → system deduction proof`. The contract is the authority for the fee
-per product barcode and total. A product row's store count is a coverage requirement and must not be
-multiplied into a barcode fee unless the contract explicitly states per-store charging. Photos must be
-matched from their own visible watermarks, not folder names; every contract product must be visibly
-shelved across the required contract stores when the contract limits support to actual shelving.
-Missing system deduction proof, incomplete store/product coverage, or a failed contract calculation
-holds the full claim.
-
-## Output contract
-
-Every Agent executing an audit must invoke the repository-bundled runner and no other production
-entrypoint:
+唯一正式核销 runner 是：
 
 ```powershell
 py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--model <audit-model>] [--reasoning-effort <level>] [--scenario <scenario>]
 ```
 
-An Agent must not call internal report/render functions as an alternative workflow, handwrite a run
-result page, copy a prior page, patch the persistent root page during a run, or rebuild the frontend
-from a description or screenshot. The bundled runner is responsible for extraction, deterministic
-business logic, verification, append-only event logging, DOM-data checkpoints, and atomic snapshot
-publication.
+`input/` 必须包含 1 至 10 个 ZIP。正常业务绑定仍按每个支持场景最多一包、各材料模板的格式与数量约束执行。
 
-The repository contains exactly one customer-facing HTML entrypoint:
+用户于 2026-09-11 明确重申按 ZIP 名称分类：名称含唯一已登记类型标记时，锁定对应 Skill 和材料清单；材料数量、格式及 AI 候选只影响该类的材料检查，绝不能切到另一类或生成“核销类型待确认”。结构不满足正常绑定时继续该类 AI 材料诊断。名称没有唯一标记时，直接按名称分类规则退回该包，不调用 AI，不按材料结构或候选类型猜测；仍生成明确退回原因并经原回调返回。材料中的其他费用表述是可见事实，是否符合所选场景由该场景的业务规则核验。API `1.38` 的 `scenario_classification_policy=zip_name` 声明此规则。
+
+ZIP 文件名含 `物料` 时使用海报/物料制作类型；未命中具体已登记类型但含 `费用` 时，自动使用 `maintenance_fee`。具体类型优先，例如 `物料制作费用.zip` 为物料制作，`其他费用.zip` 为其他费用，`自采赠品物料.zip` 为客户自采赠品物料。多个具体类型冲突仍按名称分类退回；普通核销、材料诊断及 OSS 共用同一分类函数。
+
+核销方式已由 ZIP 名称唯一确定时，客户漏交、多交、业务文件误命名或同类多包引发的 `MaterialInputError` 不得使正式 runner 在 AI 前停止：
+安全盘点全部来源后，继续使用隔离的 AI 材料诊断，读取图片/PDF 中的实际标题、单据编号、页码和用途。
+确定性代码结合来源清单生成缺失材料、完全重复文件、单例材料冲突和无法识别项，并在结果页面、持久中文摘要与 OSS 回调中保留准确文件名和原因。
+不能只按名称相似就宣称重复；不同页或不同用途必须区分。无法确认的材料标为无法确认，不得伪造缺失事实。
+材料诊断属于已完成分析但待补正的结果，不是第 11 个业务场景；未知类型只生成独立的名称分类退回结果，不产生 AI 证据或代入某类材料清单，不得虚构核销通过、独立通过项或支持金额。
+不安全归档、传输失败、模型访问/执行错误及不合法证据仍失败关闭；它们不能转成成功业务诊断。
+维护费用材料包若标记与 POS/结算结构无歧义，可以继续正常核销，使缺失必需角色成为面向客户的阻断问题。
+带标记的全视觉额外搭赠包同样可根据可见内容分类通用相机文件名，并把缺失角色转为阻断报告问题；单例材料冲突转入上述材料诊断。
+带标记的价格补差包接受 0 或 1 份 POS Excel，使电子表缺失成为阻断问题；单例角色歧义转入材料诊断。
+带标记的 POS 达标激励包也允许单例角色缺失，以保留合同/活动证明缺口的可报告性。
+带标记的进场费包要求唯一合同及一个可安全解压的上架照片 RAR；系统扣费证明缺失仍是阻断问题。
+带标记的客户自采赠品物料包要求一份旧式活动核销 `.xls`，提取其中每张 DISPIMG 图片供视觉核验，
+且绝不把该工作簿当作 POS 电子表格。`--scenario` 可从已提交类型中选择一个，仅生成该场景正式结果。
+
+用户于 2026-09-10 选定常规正式核销默认配置为 `gpt-6-astra` + `medium`，工作台标签为 `gpt6astra_medium`。input 使用该默认值，OSS 子进程显式传入相同模型和档位；档案元数据使用同一默认常量。后续 Agent 不得自行切换到 high、max 或 ultra；仅在用户明确指定其他配置或授权档位对照测试时使用显式覆盖。该默认选择不代表其他场景已完成与堆头相同的模型对比。
+
+未经身份验证的 `POST /api/intake/oss` 是内网传输适配器，不是另一条核销管线。
+生产请求契约严格为 `verifyCode`、正整数 `analyzeId` 和临时预签名 HTTPS `downloadUrl`；
+稳定内部业务身份是不变的 `verifyCode:analyzeId` 二元组。同一二元组与对象路径只在最新 attempt 活动时合并提交。
+该 attempt 进入 `completed` 或 `failed` 后重复提交，必须创建新 attempt、job ID、隔离的 `input-oss/<job_id>/` 目录、
+正式运行和 worktree。最新回调有意覆盖该二元组对应的上游业务结果；此前每个回执、已验证 ZIP 和 worktree 都保留为不可变核销历史。
+同一二元组改用另一对象路径仍属于冲突。
+API `1.25` 起外部参数统一为 `analyzeId`，拒绝请求中的旧 `fileId`（包括新旧字段混传）。
+内部指纹仍保留历史字段编码以兼容既有任务；旧回执仅在公开投影时将 `fileId` 映射为 `analyzeId`，不得为更名重写历史或重发回调。
+
+提交与任务状态轮询都不要求 Authorization 头，因此 listener 必须留在可信私网，绝不能直接暴露到公网。
+签名 URL 只保存在下载阶段内存中；单个下载 worker 按接收顺序尽快把原始归档验证并持久化到
+`input-oss/<job_id>/`，随后单个核销 worker 严格串行消费已下载任务。后续 ZIP 的下载不得等待前一任务的正式核销或回调结束；
+预签名 URL 在本地 ZIP 验证持久化后必须从运行队列中丢弃。默认模式在子进程中调用 bundled
+`skills/orchestrate-offline-audit/scripts/run.py`，以该 job 目录作为 `--input-dir`，
+并要求配置完整 `/api/v1/ai/analyze/callback` URL。正式运行及其 worktree 快照持久完成后，
+在该 worktree 写入 `ai-analysis-summary.md`，再严格只 POST `verifyCode`、`analyzeId` 及作为 `result` 的确定性中文 Markdown。
+文件与回调结果包含相同的面向业务 Markdown AI 摘要：每个场景一个章节、每种不同错误一个项目，
+仅列具体错误原因，包含定位所需的业务文件 basename、缺失字段、必要差值或无法确认的直接原因。
+仅合并完全相同的原因，不按类型合并不同对象，不截断；不重复错误标题或附加汇总数量、过程叙述、置信度、结论、影响和建议。
+材料诊断须保留全部缺失材料名称及每组重复/角色冲突涉及的全部原始业务文件 basename；原始路径只保存在内部证据。
+
+回调传输默认 HTTPS；只有明确配置 `--oss-allow-http-callback` 或
+`OFFLINE_AUDIT_OSS_ALLOW_HTTP_CALLBACK=1` 才允许可信内网 HTTP，公网暴露绝不能使用。
+回调 `Idempotency-Key` 必须包含业务二元组及准确三字段结果正文摘要，使结果变化时可覆盖上游值，
+同一结果的投递重试仍保持幂等。回调重试只能重试投递，绝不能再次下载或重跑 AI；
+回调失败保留已完成 worktree，并单独记为 `callback_failed`。
+明确配置 `--oss-no-callback` 或 `OFFLINE_AUDIT_OSS_NO_CALLBACK=1` 时仍执行正式运行，但跳过回调并记为 `not_required`。
+明确配置 `--oss-receive-only` 或 `OFFLINE_AUDIT_OSS_RECEIVE_ONLY=1` 时，下载、验证并持久化 ZIP，
+随后在不调用核销 runner 或回调的情况下完成；不得默默选择任一非默认模式。
+
+每次核销都保持相同的安全归档路由、AI/确定性信任边界、worktree 布局及禁止覆盖规则。
+绝不能把 OSS 对象复制进共享仓库 `input/`，不能把不同任务展平到一个目录，不能持久化其签名 URL 或回调令牌，
+不能接受任意/非白名单下载主机，不能在回调返回 `downloadUrl`，也不能在 HTTP handler 中实现业务分析。
+OSS 下载必须使用独立直连 opener，显式禁用环境变量和 Windows 系统代理，仅对该下载连接生效；
+不得修改进程/用户代理配置或模型调用。回调同样使用自己独立的直连 opener；HTTPS/TLS、准确白名单及重定向逐跳校验保持生效。
+连接失败按异常类型/错误码生成固定安全中文分类，不保存签名 URL、异常原文或凭据；失败下载不自动重试。
+任务回执只位于隐藏的 `worktrees/.intake/jobs/`；可见目录仍只列正式 worktree。
+成功或失败后，已验证 OSS ZIP 仍留在 `input-oss`；删除不完整或传输无效的下载，解压来源及其他运行中间物保持临时。
+
+用户于 2026-09-10 要求修复本地复跑报告未回调。直接 `input` 运行没有上游业务身份，不得根据文件名猜测 `verifyCode` / `analyzeId` 或自动向业务系统发送测试报告。
+对用户明确要求交付的已完成报告，使用 `skills/orchestrate-offline-audit/scripts/deliver_callback.py`，显式绑定准确业务二元组和 workspace；先核对预览，再执行 `--apply`。
+只读取并校验该 worktree 已保存摘要、manifest 和 snapshot 的身份、状态及哈希，不重跑 AI、不重新下载、不修改历史业务档案。
+补发回执独立保存在 `worktrees/.intake/callback-deliveries/`；同一目标及相同结果成功后不再重复投递，失败重试只发送原结果。
+禁止保存回调 URL、令牌或任意响应正文。API `1.38` 通过 `oss_intake.callback_transport=direct` 报告发送使用独立直连。
+
+用户明确要求摘要格式迁移时，`backfill_analysis_summaries.py --apply` 只可确定性重写现有已完成 worktree 的
+`ai-analysis-summary.md` 及匹配的 manifest/snapshot 摘要元数据。文字必须来自已保存快照；以原子方式更新哈希；
+所有业务证据和决定保持不变；绝不能自动重发历史回调。
+
+用户于 2026-09-11 明确授权按最新规则整理全部已完成 worktree。复用 `backfill_analysis_summaries.py --refresh-archives` 先预览，执行时以 `--backup-dir` 指定新的备份目录并加 `--apply`。允许更新摘要、对应摘要元数据、规范静态 HTML 和 manifest 的 `customer_projection` 派生显示数量；写入前备份全部将变更文件。原始 `snapshot.view`、业务 `error_count`、结果、证据、日志、检查点与回调回执保持不变，不调用 AI、不恢复已删除记录。客户数量按规则版本与快照 SHA 校验，重复执行保持幂等。
+
+
+核销类型是开始业务核验的前提。ZIP 名称未注明类型或包含多个具体类型时，该包核销失败，不调用 AI；运行 manifest、snapshot、正式收据及 OSS job 均为 `failed`，失败代码为 `classification_failed`，不发布 `run.completed`。CLI 以退出码 2 返回已保存的失败收据，OSS 仍按原三字段契约回传 `核销失败：核销方式无法确认` 及全部具体原因；回传成功只表示送达，不能把核销改成完成。回传失败单独记为 `callback_failed`，原核销失败与原因继续保留。混合批次中已知类型照常检查并保留结果，只要仍有无法分类的包，整次记录为失败。类型已确定且业务核验执行完成后，材料缺失、金额差异等才作为完成结果中的失败检查项展示，与正确检查项并列。旧档案若曾把分类退回标成 completed，工作台只读投影为失败，不重写历史证据或自动重发回调。
+
+## 新场景接入
+
+用户提供一个代表性 ZIP 加业务要求并请求创建新核销场景时，使用
+`skills/create-offline-audit-scenario/SKILL.md`。这是开发工作流，不是正式核销运行。
+先判断请求是新的可复用证据/决策链，还是现有 10 个已登记场景的另一个案件。
+如果材料角色、权威图、确定性控制、金额规则和输出对象相同，应复用或更新现有场景；
+绝不能按客户、月份、活动编号或 ZIP 文件名分别创建 Skill。
+
+只有场景 Skill 包、安全 ZIP 分类器与角色绑定器、视觉提取适配器、来源覆盖校验、确定性处理器、结果 Schema、
+六列中间渲染器、规范 HTML 子界面、CLI 选项、文档及正/反测试全部集成并验证后，新场景才真正激活。
+此前必须明确保持未登记；不得把未知场景通过人员、堆头或海报回退路径路由。
+每次接入后，正式入口仍是 `orchestrate-offline-audit/scripts/run.py`。
+
+## 信任边界
+
+提取与判断必须分离。AI 或视觉步骤只能把可见事实提取到 schema 校验通过的 JSON：
+
+- 人员激励：结算单图片和转账/红包截图；
+- 堆头陈列：合同 PDF 和现场照片；现场照片步骤还可接收按数据库关联从私有 OSS 下载、经过哈希校验的
+  商品参考视图，只用于检索及比较商品身份；
+- 海报/物料：已签促销合同图片、发票或收据图片、结算单图片及每张带水印完工现场照片；POS 销售和无关证据排除在视觉步骤外；
+- 其他费用：每份确定性绑定的促销合同、结算单、支持协议/文档、活动/POS 证明、发票/收据和特殊审批候选；模型只提取可见事实，不决定分类、不批准新类型，也不计算批准金额；
+- 维护费用：每份确定性绑定的盖章 POS 视觉材料、已签促销合同、结算单、费用专属支持及活动照片；POS 表格排除在视觉范围外，由确定性 Python 读取并将行/总计与盖章 POS 事实比较；
+- 进场费：已签进场合同/产品推广协议、每张安全解压的上架照片及每份明确系统扣费证明；文件夹/门店提示只用于路由，绝不能建立可见门店、地点、日期、时间、商品或活动事实。
+
+商品参考视图不是现场证据。它们可以解析目录商品名称、商品编码和 69 码，但绝不能证明门店、日期、陈列、促销、价格、
+照片唯一性或核销决定，也绝不能作为提交照片文件返回。
+
+绝不能向模型提供销售 Excel，也不能让模型访问仓库输入、旧结果、缓存、历史或验收工作簿。
+AI 不得计算金额、选择 Excel 商品名称或作出核销决定。
+
+确定性 Python 必须安全解压并路由 ZIP、读取 Excel 单元格、保留原始来源名称和行、聚合数量、映射商品、
+计算差异和支持金额、检测重复图片、验证结果，并把带版本运行快照发布到 `worktrees/`。
+持久根 `offline-activity-audit.html` 是唯一带版本前端源码，由可信本地工作台服务提供；
+每个终态 worktree 还获得由它派生的自包含静态档案。
+临时工作簿或组装后的旧式投影，只能存在于运行范围系统临时目录，供确定性渲染和验证；二者都不是交付文件。
+
+所有场景及每次商品到商品比较，都不得要求商品名称逐字相等。完全相等只是得分为 1 的特例；
+唯一且规格相容的模糊名称即可。可比业务来源同时提供 69 码和商品编码字段时，两个标识都保持严格并必须完全一致；
+一致后，不同写法的商品名称展示为模糊相容，绝不能单独生成 `商品名称：不匹配` 错误。
+名称缺失或不可读，但严格标识及独立交易事实能唯一定位该行时，只记录为不可用辅助文字；
+不得影响状态、置信度、问题数量或补交。包装短码（如 `SP-4`）仅当数据库名称或准确编码中也有该文字时，
+可支持模糊名称字段，但绝不能替代或改写业务文件的严格商品编码字段。
+
+一组完全一致的商品编码加 69 码映射多个知识库变体时，可用唯一模糊相容来源名称消歧。
+密集合同 PDF 销售附件中每条已检测行，都必须在正式视觉运行中执行第二次原始分辨率单元格读取，
+只读取该行印刷的商品编码、商品名称和 69 码。确定性预处理必须移除大块扫描空白，生成四种方向，
+并提供两个无损横向阅读方向及重叠行带。红章穿过的行带还要提供同像素黑色印刷裁剪，抑制高饱和印章颜色并放大三个商品单元格；
+视觉模型选择文字正向视图，并跨两种视图确认被印章覆盖的字符。
+第一次提取中的数量、价格和金额只可用于定位行，绝不能提供或推断这三个单元格；销售 Excel 或目录数据绝不能传入该步骤。
+保持完全相同的页/行顺序；每个非空重读 69 码必须通过 EAN-13 校验；密集行肉眼可见有值但仍返回编码、名称或 69 码缺失时必须重试。
+只应用非空第二次读取，确定性匹配前重新校验完整合同证据。绝不能把 OCR 遗漏变成商品编码不一致。
+合同首轮同样必须切分：全页核心提取省略门店和销售明细数组，随后独立逐页盘点全部表格与物理行数。
+Windows 原生调用必须显式选择只读沙箱后端并禁用登录 Shell；Python 私有临时目录仅向当前用户 SID 追加模型材料子树的读取/执行权限，不能开放父目录或 Excel 来源。
+正式提取前用隔离探针验证模型材料可读且写入被拒绝。原图或技能读取受策略/权限阻断时属于执行配置失败，必须停止，不能转成业务“无法确认”或用于模型能力比较。
+两份清单一致后按页/表/物理行每块最多 8 行转录；失败只缩小失败块，完整原页始终可回看。
+程序拼接连续行号，拒绝漏行、重叠、错序和来源漂移；相同交易保留各自物理行。印刷全文总计只能来自原图，不能拼算页小计。
+
+对于 `personnel_incentive`，每个聚合销售 Excel SKU 都必须先通过同一份已验证仓库商品知识库对账，才可支持激励金额。
+人员 Excel 没有商品编码字段：有效 EAN-13/69 码必须与目录完全一致；原始商品名称只需在该完全同条码候选集中获得唯一、强模糊相容匹配。
+同码歧义、无效/未登记 69 码或名称不相容都会使商品门槛失败。保留诊断映射，但受影响 SKU 的支持奖励上限为零。
+目录身份来自编码；商品参考图片不传给人员视觉步骤，也不是结算或转账证据。
+
+人员结算行没有可见条码时，在“一行一个条码”约束下，若准确数量只出现在一个仍未使用、已通过知识库的 Excel SKU 中，
+则可作中置信度确定性路由。结算商品名称 OCR 只是模糊辅助证据；简称、错字或损坏名称不能否定该唯一路由。
+数量重复时，名称仍必须唯一消歧；否则该行保持未解决。
+
+对于 `promotional_display`，合同 PDF 是业务核销权威文件。分别核验六项必核控制：签约主体、活动预算、执行期间、
+活动内容、核销/结算方式和印章。水印可见性只作信息事实；绝不能影响状态、置信度、金额或补交。
+已验证仓库商品知识库只对商品身份有权威性。确定性代码必须将核心合同每个具体商品及印刷合同销售附件每一行与该台账对账。
+已提供的有效 EAN-13 必须等于目录 69 码；来源内部业务商品编码必须保留，并在合同附件和销售 Excel 间严格比较。
+商品到知识库对账中，同一来源编码必须与数据库 `product_code` 完全一致；当前表没有编码别名，旧 JSON 别名不参与核销；
+不得用历史编码别名替代数据库的准确商品编码。商品编码与 69 码必须共同识别同一商品。
+商品名称只作模糊辅助证据，绝不要求完全相等。已登记包装别名不能让严格合同、附件、结算单或销售文件商品编码通过，
+但可在描述字段中作为模糊名称锚点。合同商品无法唯一映射、严格标识冲突、69 码无效或缺少唯一匹配所需身份时，合同门槛失败。
+原始合同值保持不可变，绝不能暗中规范化为通过。
+
+核心合同商品条件与印刷销售附件在语义上必须隔离。只有明确核心条款可以填充 `requires_specific_products` 并成为合同 SKU 条件。
+`contract.sales_attachment` 是保留页码和行号的附加销售表抄录；它绝不能创建核心商品或促销要求，
+但每个印刷行仍是必须与知识库对账的合同侧商品身份。存在印刷附件总计时照实抄录，绝不能由模型算术重建。
+没有逐行附件时，独立销售 Excel 没有合同逐行基准：将对账标记为无法核验，要求完整合同附件，
+阻断自动核销；不得用照片或知识库替代。
+
+商品名称不要求逐字相等；合同商品身份及合同附件到 Excel 的名称比较都可用唯一模糊相容。
+业务文件中已提供的商品编码和 69 码仍保持严格。现场照片无须显示完整商品名称或 69 码。
+先从照片提取有用文字，再只用该文字从完整且已验证知识库检索小候选集，将可见文字对应到目录控制文字，
+并把包装与已登记参考视图比较。数据库名称或准确编码中实际存在的唯一可见文字，或部分名称、规格、变体及组合文字唯一收敛的组合，
+都可建立文字对应；`3+2`、`420g` 和 `量贩装` 可以共同检索已登记 `3+2` 组合装。
+完全结果要求与至少一个已登记多视图参考整体相容，而不是像素相同：核心布局、色块、组合结构及可识别特征一致且无冲突时，
+角度、距离、光线、货架遮挡和包装姿态可以不同。照片身份固定后再单独检查合同归属。
+模糊照片身份保持未解决；合同措辞、销售 Excel 或其他业务来源都不能把它升级为完全命中。
+
+人员输出中，唯一模糊商品名称匹配是可接受的中置信度匹配，其本身不是补交原因。
+69 码准确、知识项唯一、数量及奖励一致时，内部记录中置信度，页面展示 `无需重新提交`；
+只有映射本身仍为低置信度、未匹配或歧义时，才要求更清晰结算行。
+
+堆头链以合同为主导且有方向：
+
+1. 合同核心及合同销售附件 → 商品知识库，各自只用于商品身份；
+2. 现场照片可见文字 → 完整已验证商品知识库中的有界候选 → 已登记参考图片比较；随后独立把已识别照片商品与合同范围比较，并将其余照片事实与合同条款比较。完整步骤之后，只使用提交照片及不可变门店/照片路由进行聚焦陈列标准复核，只替换 `display_observation`：三个正面包装加第三个包装暴露侧面仍是三列；边界独立的相邻额外包装堆叠即使狭窄或侧向也另算一列。同品牌不同 SKU 和包装形式可共同形成四列；多张照片独立评估，任一张可证明四列，但不得累加部分数量或计入无关相邻品牌。三个正面箱旁无接缝、错位或独立包装正面的一排侧面仍算三列。只有合同门店及有序路由照片 SHA-256 完全一致时才应用获批视觉回归校准；内容或路由变化都会禁用。应用聚焦结果后重新校验完整照片证据。海报/物料数量回归使用独立登记表，要求完整有序现场照片 basename 与 SHA-256 序列完全一致；它只可替换声明的物料总单元数和参与照片数，任何字节、名称、成员或顺序变化都禁用。用户验证的困难视觉文档金额使用第三个登记表，要求完整有序合同、发票/收据、结算单 basename 加 SHA-256 序列完全一致；它只可替换三个声明金额字段，任何字节、名称、成员或顺序变化都会禁用。任何校准登记表都不得进入模型提示词或客户页面；
+3. 独立销售 Excel → 合同销售附件，逐行比较客户名称、业务日期、商品编码、商品名称、条码、数量、零售价及总金额。保留双方单位用于展示，但单位绝不能用于配对行、判定通过/失败、设置置信度或要求补交。
+
+独立销售 Excel 绝不与商品知识库对账。现场照片绝不与独立销售 Excel 对账，Excel 也不能帮助识别照片商品。
+附件及独立 Excel 都没有权威门店列，因此不得分配到照片门店或展示为某门店销售商品的证明。
+门店/日期/陈列/促销证据来自合同和现场照片。只有合同明确每店或每堆单位口径时金额才可自动计算；
+只有总额或口径不清的合同绝不自动相除。
+
+绝不能只因总额相等批准金额。保留来源归档哈希、原始路径、Excel 行、合同或结算行、可见限制及逐项/逐店证据。
+
+对于 `poster_material`，闭环 `已签合同 → 发票/收据 → 盖章结算单 → 带水印完工照片`。
+合同引用的附件必需。合同列出多个物料时，票据中的 `物料制作` 等笼统行不满足逐项费用证据。
+照片必须可见覆盖活动期间日期、拍摄时间、地点、完工内容、尺寸、摆放位置及合同单元/门店数量；不得从样本外推。
+面向客户的子界面只列分组阻断错误；错误原因仅写具体问题，处理方式仅写对应操作，涉及文件区域仅列业务文件 basename；
+通过控制和无关文件不进入该列表。
+
+对于 `other_expense`，先把每条可见费用说明与已有类别比较：赠品、陈列堆头、人员激励、海报/物料制作、维护费用、
+补差、额外搭赠、POS达标激励及进场费。ZIP 标记 `其他` 只用于路由。
+能识别为已有类型的必须重新分类；真正的新类型必须有独立特殊审批，注明新类型、审批人、审批结论、日期及审批标记。
+随后要求已签促销合同、公司模板且客户盖章的结算单和类型专属支持。
+该特殊渠道绝不产生自动批准金额：保留结算申报、建议金额为零，并返回准确分类/审批/补交操作或 `待人工核定`。
+
+对于 `maintenance_fee`，保持 `经销商盖章 POS 视觉材料 → POS 电子表格 → 已签促销合同 → 公司模板经销商盖章结算单 → 费用专属支持`。
+归档标记只路由可区分材料包，绝不能证明费用性质。合同提供活动范围、期间、合格 POS 范围、计算方法、比例及上限；
+确定性代码读取电子 POS 表，要求各行/总计与盖章 POS 数据对应，且合同复算精确到人民币 0.01 与结算申报相等时才支持。
+角色缺失、可见费用性质属于其他类型（包括人员激励或直营），或金额无法复算，都会阻断全部申报。
+`other_expense` 保持独立场景。
+
+对于 `giveaway_promotion`，保持 `经销商签署额外搭赠合同 → 经销商盖章结算单 → 系统销售/出库单 → 门店收货凭证 → 活动照片`。
+普通出货金额与额外赠品申报必须分离。确定性代码检查经销商和门店身份、合同期间、合格购买/赠品商品、明确买赠比例、
+每张收货凭证中的零金额赠品行、系统出货总额、赠品数量及明确单位价值、合同预算、盖章申报及完全重复图片。
+商品名称可以唯一模糊且规格相容；可比商品编码和 69 码仍严格。收货凭证不能替代必需活动照片。
+角色缺失或任一控制失败都会暂缓全部赠品申报。
+
+对于 `price_difference_support`，保持 `已签促销合同 → 经销商盖章 POS 视觉材料 ↔ POS 电子表格 → 公司模板经销商盖章结算单 → 全门店活动价照片`。
+原价、活动价和合同补差单位金额是三个独立事实；绝不能从零售降价推导核销单位。
+每个 POS 或合同门店都需要自己的活动期间内照片，照片可见日期、地址、拍摄时间和活动价。
+按合格 POS 数量 × 合同补差单位计算，并受合同数量及预算限制；任何角色缺失、门店覆盖不完整或对账失败都会暂缓全部申报。
+
+对于 `pos_target_incentive`，激励收款对象是经销商。保持 `已签合同 → 获批战略/特殊渠道资格及目标阶梯 → 经销商盖章 POS 视觉材料 ↔ POS 电子表格 → 满减活动证明 → 经销商盖章公司模板结算单`。
+结算单不能建立合同中缺失的比例。确定性代码选择达到的最高合同阶梯，计算合格 POS × 比例，应用合同上限，再比较申报。
+合同或活动证明缺失时，即使 POS 和结算算术看似正确，也暂缓全部申报。
+
+对于 `entry_fee`，保持 `双方签署进场合同 → 合同商品/条码及门店范围 → 带水印上架照片 → 系统扣费证明`。
+合同是逐商品条码费用及总额的权威来源。商品行的门店数量是覆盖要求；除非合同明确按门店收费，否则不得乘入条码费。
+照片必须根据自身可见水印匹配，不能根据文件夹名；合同按实际进场限制支持时，每个合同商品必须在全部要求门店可见上架。
+系统扣费证明缺失、门店/商品覆盖不完整或合同计算失败，都会暂缓全部申报。
+
+## 输出契约
+
+每个执行核销的 Agent 都必须调用仓库 bundled runner，不得使用其他生产入口：
+
+```powershell
+py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> [--model <audit-model>] [--reasoning-effort <level>] [--scenario <scenario>]
+```
+
+Agent 不得调用内部报告/渲染函数作为替代工作流，不得手写运行结果页面、复制旧页面、运行期间修改持久根页面，
+也不得根据说明或截图重建前端。bundled runner 负责提取、确定性业务逻辑、验证、只追加事件日志、DOM 数据检查点及原子快照发布。
+
+仓库严格只有一个带版本的客户 HTML 源码和局域网入口：
 
 `offline-activity-audit.html`
 
-It is a persistent, versioned two-level system shell and is never regenerated or filled on disk by an
-ordinary audit run. The trusted local service serves it at `http://127.0.0.1:8080/` and on the
-machine's approved LAN address while exposing read-only result APIs, the narrow same-origin
-manual-review marker mutation, and the separately authenticated OSS intake endpoint. It must not use a CDN,
-downloaded font, third-party script, or remote business-data dependency.
+它是持久、带版本的两级系统外壳，普通核销运行绝不在磁盘上重新生成或填充它。
+可信本地服务在 `http://127.0.0.1:8080/` 及机器获批局域网地址提供页面，并暴露只读结果 API、
+狭义同源人工核验和已确认运行删除变更，以及未经身份验证的内网 OSS 接收端点。
+不得使用 CDN、下载字体、第三方脚本或远程业务数据依赖。
 
-Each formal run publishes one persistent run directory instead of another HTML:
+每次正式运行发布一个持久运行目录：
 
-`worktrees/<YYYYMMDD_HHMM_SS>-<audit-model>_<reasoning-effort>/`
+`worktrees/<压缩包名（去除 .zip）>-<YYYYMMDD_HHMM_SS>/`
 
-The directory contains `manifest.json`, an atomic `snapshot.json`, append-only
-`logs/events.jsonl`, observable `logs/run.log`, schema-validated files under `analysis/`, and replayable
-data checkpoints under `dom/checkpoints/`. It must not contain a generated customer HTML or a
-published workbook. `producer-model` remains required provenance, while the path suffix records the
-actual audit model and primary reasoning effort. `run-id` must begin with a valid `YYYYMMDD` business
-date; append the local task-start time as `_HHMM_SS`. Compact safe model labels by removing separators
-such as the hyphens in `gpt-5.6-sol`, so examples include
-`20260902_1755_32-gpt5.6sol_xhigh/` and `20260902_1755_32-qwen3.8_max/`. Never use `-1.1`,
-`-1.2`, or another revision suffix for new worktrees and never overwrite an existing exact name.
-Existing legacy HTML files and old-name directories retain their historical IDs and remain read-only
-compatibility inputs for the workbench catalog.
+新目录按本次实际核销压缩包命名，保留中文和可用标点；文件系统不允许的字符替换为下划线，过长名称只在目录部分截短，完整源文件名保存在 manifest 的 `source_archives`。一次多包核销使用首个包名及包数；指定单一场景时由既有安全分类器选择其对应包。时间后缀使用上海时区的运行预留时间，同名同秒重复核销追加 `-02`、`-03` 等唯一后缀，禁止覆盖。
+模型及推理强度保存在元数据并显示为小标签，例如 `gpt6astra_max`，不再写入新的资料目录名。`run-id` 的业务日期仍保留为业务元数据，不用于展示分析日期。旧目录、旧 ID 和既有静态档案不批量改名或重写；目录 API 从已保存材料分类与启动事件只读补全压缩包标题、来源和分析日期。无可用材料名称的初始化失败仍保留旧格式安全目录作为回退。
 
-The fixed page has a one-to-many, two-level information architecture. `/` is the level-one audit
-management system with overview, complete run ledger, and technical archives. The overview contains
-aggregate metrics and recent run records only; it must not render a runtime chain, stage nodes, or an
-observable event stream.
-Every catalog entry expands through `/?run=<workspace-id>` into its own level-two record. A completed
-record must use the approved original error-desk interface and show all of that run's grouped customer
-errors in one continuously stacked list. It must not classify errors into scenario queues or require a
-second click to enter a scenario; every error card carries one small Chinese audit-type label;
-a running or failed record gets a status/diagnostic level-two page and must not impersonate a completed
-business result. Level-two pages return to the level-one ledger and may switch directly to another run.
-Counts inside the completed error desk represent grouped customer actions, not internal failed fields.
-Passing records and passing contract facts remain hidden from the default error overview, but each
-completed record also has a sibling `正确检查项` ledger. It may expose only independently passed
-subchecks projected from the same deterministic result, grouped by audit type and labeled with a
-Chinese category, check title, subject, concise basis, source basenames, and confidence. A passed
-subcheck never changes the record conclusion or suppresses a blocking error. Contract baselines,
-audit-process narration, and informational watermark policy remain outside both customer result
-views. Explicit technical archives may expose schema-validated evidence, deterministic
-result objects, verification receipts, observable events, and DOM-data checkpoints; they must never
-expose model-private reasoning or treat an AI narrative as decision authority.
+目录包含自包含 `offline-activity-audit.html`、逐场景错误摘要 `ai-analysis-summary.md`、`manifest.json`、原子 `snapshot.json`、只追加事件、可观察日志、结构化 `analysis/` 和 `dom/checkpoints/`；不得发布临时工作簿。
 
-A temporary workbook and assembled legacy projection may be created from empty state inside a
-run-scoped system temporary directory solely to shape and verify the customer view payload. They must
-never be exposed to the model or published, and must be deleted before the run finishes. A failed run
-keeps its manifest, safe logs, analysis already validated, and failure checkpoint for diagnosis, but
-must not claim a completed business result.
+固定页面是一对多两级信息架构。`/` 是一级核销管理系统，包含概览、记录范围一致、包含全部 worktree 的核销台账和技术档案。
+概览包含汇总指标、运行中的记录、未创建 worktree 的失败投递和最近终态运行记录，不得渲染运行链、阶段节点或可观察事件流。
+每个已完成台账项通过 `/?run=<workspace-id>` 展开为自己的二级记录。
+已完成记录必须使用获批原始错误工作台界面，在一条连续堆叠列表中展示该运行的全部分组客户错误。
+不得把错误分类为场景队列或要求再次点击进入场景；每张错误卡只带一个小型中文核销类型标签。
+运行中和失败记录在台账、技术档案中保留真实状态；打开后进入状态/诊断二级页面。最近记录只展示已完成和失败记录，运行中的记录在概览独立显示。
+已完成错误工作台中的数量是分组客户操作数，不是内部失败字段数。
 
-- personnel shows only failed product and settlement/payment rows;
-- promotional display groups all contract-attachment knowledge failures into one expandable card,
-  creates a separate sales card only for blocking strict-field differences, and then shows only stores
-  with their own photo/date/location/display/product error. Never repeat upstream failures per store;
-- poster/material shows only grouped blocking errors and preserves every affected photo basename and
-  visible date/time/location, finished content, placement, and dimension limitation.
-- entry fee shows only grouped contract-authority, fee-calculation, store/product shelf-photo,
-  system-deduction, and source-integrity errors.
+通过记录及通过合同事实在默认错误总览中隐藏，但每条已完成记录还有同级 `正确检查项` 台账。
+它只可展示从同一确定性结果投影的独立通过子检查，按核销类型分组，并标有中文类别、检查标题、对象、简明依据、来源 basename 及置信度。
+通过子检查绝不能改变记录结论或压制阻断错误。合同基准、核销过程叙述及信息性水印政策都不进入两个客户结果视图。
+明确技术档案可以展示 schema 校验证据、确定性结果对象、验证回执、可观察事件及 DOM 数据检查点；
+绝不能暴露模型私有推理，也不能把 AI 叙述视为决策权威。
 
-For promotional display, render evidence in this fixed order: contract core six controls; contract
-core/attachment products → knowledge base; page- and line-preserving contract sales attachment;
-photo-visible text → full validated knowledge base → retrieved reference images, followed separately by
-resolved photo product → contract scope; standalone sales Excel → contract attachment;
-amount and final action. Product code and valid 69 code are strict where supplied; only product names
-may be uniquely fuzzy. Every attachment and Excel row is kept in source order with PDF page,
-attachment line, Excel row, all nine source fields, and the eight actually checked field results;
-unit remains visible as a source fact but is never described as matched or mismatched. If the contract has
-no sales attachment, render the missing-baseline control as unverifiable and request a complete
-contract PDF; do not use the knowledge base or photos as a fallback. Never use an attachment row to
-create a core contract product or promotion condition. Never attach an attachment/Excel row to a
-store: neither source has a store-authoritative column. Store performance remains grounded in the
-contract and field photos.
+临时工作簿和组装后的旧式投影可以从空状态创建在运行范围系统临时目录中，只用于整形并验证客户视图载荷。
+它们不得暴露给模型或发布，并必须在运行结束前删除。
+失败运行保留 manifest、安全日志、已验证分析及失败检查点供诊断，但不得声称业务结果已完成。
 
-Every product or relationship uses one overall `置信度：高/中/低`. In customer-facing output, show
-product code and 69 code as exact match/not matched, and product name as fuzzy matched/unverifiable;
-when strict comparable identifiers agree, never emit a separate product-name mismatch error;
-when every required field passes, say `全部对应`. Never use vague `可以对应` wording or expose
-similarity scores. Every blocking item must name the exact problem file basename(s), the exact
-comparison/baseline file basename(s) when applicable, the observed value or missing field in each
-source, and the causal reason the relationship cannot pass. Then tell the reader exactly which PDF
-page, attachment line, Excel row/field, settlement line, transfer screenshot, or visible photo content
-must be resubmitted. Never emit `A ↔ B 无法确认`, `Excel门店与收款人无法逐一确认`, or another
-source-free shorthand. Never require the reader to consult audit JSON or expose candidate sets, hashes, product
-IDs, convergence, RAG terminology, or model reasoning.
+- 人员激励只展示失败商品和结算/付款行；
+- 促销堆头把所有合同附件知识库失败合并为一张可展开卡；只有严格字段阻断差异才创建独立销售卡；随后只展示自身有照片/日期/地点/陈列/商品错误的门店。绝不能逐门店重复上游错误；
+- 海报/物料只展示分组阻断错误，仅保留每张受影响照片 basename 及具体未通过事实；
+- 进场费只展示分组合同权威、费用计算、门店/商品上架照片、系统扣费及来源完整性错误。
 
-When a field-store name fully corresponds to the visible watermark location, pass the location
-directly without a map call or a location-confidence issue. For every legible name difference, preserve
-the contract store, visible watermark location, and affected photo basenames, then run the configured
-fixed Baidu Maps MCP resolver through `map_search_places`; persist returned coordinates as `BD09LL`.
-Read `BAIDU_MAPS_API_KEY` from the current process first and, on Windows, from the current user's
-environment configuration second so routine runs need no separate interactive terminal. The OS user
-configuration is the only allowed persistent secret location; never copy the AK into a repository file,
-command-line argument, worktree, result, log, or displayed authenticated URL.
-A selected same POI, a verified mall/store parent-child relationship, or two selected
-POIs no more than 100 metres apart is `compatible` with high location confidence. Search results do
-not need to be independently unique: preserve any credibly unique side, and require every unresolved
-side's selected candidate to meet the internal 0.60 name-relevance threshold; when both sides are
-unresolved, both selected candidates must meet it. Accept the best such pair when it forms one of those
-passing spatial relationships. A distant pair, the 100-to-300-metre gray zone, no credible
-candidate pair, an unavailable MCP, or missing comparable coordinates is `location_unverified` with
-low location confidence: hold automatic settlement and show
-`门店地点低置信度`, never an automatic wrong-watermark finding. Preserve a distant pair's measured
-distance and request either authoritative same/nearby evidence or corrected-location content. Keep
-legacy `mismatch` readable but do not emit it for new determinations. If MCP is unavailable or
-inconclusive, an entry in the schema-validated verified location registry may supply the relationship;
-its publisher, checked date, address facts, and basis must remain in the result and six-column ledger.
-A conflict between MCP and the registry is low-confidence and always goes to manual review. Filenames
-never prove or override a location, and a truly missing/unreadable watermark remains a separate
-evidence gap.
+促销堆头在内部按固定顺序保存证据（客户原因区只显示具体错误，文件区只列 basename）：合同核心六项；合同核心/附件商品 → 知识库；保留页/行的合同销售附件；
+照片可见文字 → 完整已验证知识库 → 已检索参考图片，再单独将已识别照片商品 → 合同范围；
+独立销售 Excel → 合同附件；金额和最终操作。商品编码和有效 69 码在提供时严格比较；只有商品名称允许唯一模糊。
+每条附件及 Excel 行按来源顺序保留，包含 PDF 页、附件行、Excel 行、全部九个来源字段及实际检查的八字段结果；
+单位保留为内部来源事实，但绝不能称为匹配或不匹配。合同没有销售附件时，原因写明缺少附件；要求完整合同 PDF 仅写在处理方式；
+不得回退使用知识库或照片。附件行绝不能创建核心合同商品或促销条件。
+附件/Excel 行绝不能附加到门店：两类来源都没有权威门店列。门店执行仍以合同和现场照片为依据。
 
-The canonical customer interface is the root `offline-activity-audit.html`, currently Audit System
-`2.7.1`. Its level-one system, approved original level-two audit desk, copy, layout,
-customer/technical separation, run-history behavior, relative API contract, responsive behavior, and
-controls remain unchanged during an ordinary audit. It reads only the trusted service's `/api/config`,
-`/api/runs`, run `snapshot`, `log`, `events`, approved `analysis`, and `checkpoints` resources. The
-trusted server injects the selected run payload into the fixed HTML response for `/?run=<workspace-id>`
-without modifying the file on disk. Direct `file://` opening redirects to the loopback service; LAN
-clients use the same relative endpoints. Future audit runs must never rewrite this file.
+每个商品或关系只使用一个总体 `置信度：高/中/低`。面向客户输出中，商品编码与 69 码展示为完全匹配/未匹配，
+商品名称展示为模糊匹配/无法核验；可比严格标识一致后，绝不能单独输出商品名称不一致；
+所有必需字段通过时写 `全部对应`，绝不能使用含糊的 `可以对应` 或暴露相似度分数。
+每个阻断项必须写明准确问题文件 basename、适用时准确比较/基准文件 basename、各来源观察值或缺失字段，
+以及具体未通过原因。需补交哪一 PDF 页、附件行、Excel 行/字段、结算行、转账截图或可见照片内容仅写在处理方式。
+绝不能输出 `A ↔ B 无法确认`、`Excel门店与收款人无法逐一确认` 或其他无来源简写。
+不得要求读者查看核销 JSON，也不得暴露候选集、哈希、收敛过程、RAG 术语或模型推理。
+已保存匹配商品/参考 ID 只可保留在内部参考证据或技术档案，不进入客户涉及业务文件区域。
 
-The older bundle under `skills/orchestrate-offline-audit/assets/` remains a deterministic, run-scoped
-view-payload compiler and verifier. `audit_core.html_report` may assemble it only in system temporary
-space to prove the six-column projection, extract the verified `audit-data` payload, and then delete the
-temporary HTML. It is not the customer entrypoint and must never be published into `worktrees/`.
+现场门店名与可见水印地点完全对应时，地点直接通过，无须地图调用或地点置信度问题。
+每个可辨认名称差异都要保留合同门店、可见水印地点及受影响照片 basename，再通过 `map_search_places`
+运行已配置的固定百度地图 MCP 解析器；返回坐标按 `BD09LL` 持久化。
+先从当前进程读取 `BAIDU_MAPS_API_KEY`，Windows 中其次读取当前用户环境配置，使日常运行无须单独交互终端。
+OS 用户配置是唯一允许的持久秘密位置；绝不能把 AK 复制到仓库文件、命令行参数、worktree、结果、日志或显示的认证 URL。
 
-Future ordinary feature/fix tasks must not restyle or extend the root system or its approved original
-record view. They may change only when the user explicitly requests a frontend redesign or system
-behavior change. That same change must update the system version, workbench API contract, affected
-tests, PC browser verification at 1440×960, this output contract, the orchestration Skill, and
-README; never weaken verification to accept a changed page.
+选中同一 POI、已验证商场/门店父子关系或两个选中 POI 相距不超过 100 米时，为 `compatible` 且地点置信度高。
+搜索结果不必独立唯一：保留可信唯一方，每个未解决方的选定候选必须达到内部 0.60 名称相关性阈值；
+双方都未解决时，双方候选都必须达到。最佳合格候选对构成任一通过空间关系时接受。
+远距离候选对、100 至 300 米灰区、无可信候选对、MCP 不可用或缺少可比坐标时，为低地点置信度 `location_unverified`：
+暂缓自动结算并显示 `门店地点低置信度`，绝不能自动判定水印错误。
+远距离候选对保留实测距离，并要求权威同址/邻近证据或地点正确内容。
+旧 `mismatch` 保持可读取，但新判定不得输出。MCP 不可用或结论不明确时，schema 校验通过的地点登记项可以提供关系；
+发布方、检查日期、地址事实及依据必须留在结果和六列台账中。MCP 与登记表冲突时置信度低，始终人工核验。
+文件名绝不能证明或覆盖地点；真正缺失/不可读的水印保持为独立证据缺口。
 
-Audit System `2.7.1` freezes the persistent audit-ledger standard: a level-one management center with
-system overview, full audit ledger, and technical archive. The overview contains only aggregate metrics
-and recent run records. It does not show a runtime chain, stage nodes, or observable events, and its
-silent probe reads only `/api/runs`; visible overview content updates when the run-catalog signature
-changes. The system-overview `核销完成` metric shows the top-level input ZIP count from the newest
-completed run, not the cumulative number of completed run records. The level-one aggregate metric and
-completed-run count label present `error_count` as `待人工核验` only while a completed record is not
-manually reviewed; reviewed records contribute zero to that metric while the underlying count and
-level-two disposition content remain unchanged. The canonical
-six-task main-flow checklist comes from
-`audit_core.workbench_store.main_flow_task_list`, is persisted in every new manifest, and is exposed by
-the read-only workbench context and `/api/config` for technical contracts and running-record refresh;
-the frontend must not maintain a differently ordered stage list. Multi-scenario execution is stage-
-batched: every analysis event precedes every evidence validation event, every evidence event precedes
-every deterministic decision event, and verification comes last, so the run-level stage index never
-regresses. A running level-two record may probe silently, but visible content updates only when the
-selected workspace, terminal status, or stage progress index changes. Events within the same stage
-never reload that record, and a running level-two record never reloads on a fixed timer. A full-page
-reload always opens system overview; the ledger state saved before opening a level-two record is
-consumed only once when returning. Module actions never cross-nest: overview summaries have no record
-buttons, ledger rows only open the record, and technical-archive cards only open logs and checkpoints.
-The system also has one approved original audit-desk level-two page per completed run and a truthful
-diagnostic level-two page for incomplete runs. The record view retains its dark rail and cold-gray grid
-canvas. The rail has exactly two sibling result views: the default red-accented error overview retains
-its four grouped-error metrics and stacked error cards; the green-accented correct-check ledger groups
-all independently passed subchecks by audit type and then by Chinese business category. Each pass entry
-shows the checked subject, concise deterministic basis, available source basenames, and confidence.
-Whole-record caveats and filter-behavior explanations remain internal rules and are not rendered as
-auxiliary customer-interface copy. Both result views offer aligned client-side combined filters. Audit
-type always lists every type present in its view and is never narrowed by another condition. The error
-overview additionally filters by `错误原因分类`, confidence, and free text; its categories use actionable
-fine-grained labels such as `陈列标准`, `活动日期`, `门店地点低置信度`, `金额复算`, and
-`POS销售明细`, never broad umbrella labels. The pass ledger filters by Chinese check category,
-confidence, and free text. Error-reason/check category and confidence are linked
-facets: omit zero-result options under the other current conditions and show a live result count beside
-every remaining option. Both views report the overall live match count and reset without mutating the
-snapshot. All grouped errors remain directly below the error summary modules. Each card header carries
-only its `核销类型 · <业务类型>` and confidence badges. One or more category-value-only chips appear
-inside the error-reason field without an `错误原因分类` prefix and use the exact same `eo-chip` styling as
-`陈列标准`; there is no separate light category-chip treatment.
-When a view has exactly one audit type, its enabled audit-type select contains only that concrete type
-and omits the `全部核销方式` option; multi-type views retain the all option. Card audit-type values and
-facet audit-type values must use the same canonical business labels. Every error-reason category must
-belong to at least one card with a concrete audit type, and the client rejects orphan type labels.
-Both sibling views use the same judgment-confidence presentation. An explicit AI `confidence_score`
-in `[0,1]` takes precedence and is bucketed as high at `>=0.85`, medium at `>=0.60`, otherwise low.
-Without an explicit score, every level receives a bounded score from the concrete judgment context
-(specific numeric/location evidence, corroboration, ambiguity, and missing material), rather than a
-constant `0.5` or an automatic high-confidence `1`. Only an explicit fully-certain judgment may use
-`1`. Cards always render both level and score, including `置信度 高：1`; confidence filter options
-contain only high/medium/low and never numeric scores. This is confidence that the item-level judgment
-is accurate, not error severity or an internal retrieval/name-relevance score.
-There are no scenario queues, scenario-entry buttons, or per-type subpages in either sibling view.
-The workbench API contract is `1.7`: a completed snapshot's `view.pass_check_log` uses schema `1.0`
-with `total`, type/scope counts, and ordered `groups[].items[]`; the server reconstructs this projection
-from immutable `analysis/results/<scenario>.json` for older archives without rewriting their worktrees.
-Error-reason classification is a deterministic client projection from the same immutable error rows and
-does not add or mutate an API business field. Completed ledger records expose a mutable
-`manual_reviewed` annotation through `POST /api/runs/<workspace-id>/manual-review`; store it atomically
-under `worktrees/.reviews/`, never rewrite the business manifest/snapshot, and exclude reviewed records'
-error counts from the level-one pending-manual-review metric. Unchecking restores the pending count.
-Formal frontend delivery is PC-only: verify at 1440×960
-and keep desktop widths of 1280px or greater usable. Narrow-screen CSS is best-effort fallback, not a
-mobile configuration or acceptance promise.
-Customer output must translate engineering enums and keys into business-readable Chinese; technical
-JSON stays inside explicitly labeled technical views.
+规范、带版本客户界面源码是根目录 `offline-activity-audit.html`，当前为 Audit System `2.11.25`。
+普通核销中，其一级系统、获批原始二级核销台、文案、布局、客户/技术隔离、运行历史行为、相对 API 契约、响应式行为和控件保持不变。
+它只读取可信服务的 `/api/config`、`/api/runs`、运行 `snapshot`、`log`、`events`、批准的 `analysis` 及 `checkpoints` 资源。
+可信服务在 `/?run=<workspace-id>` 的固定 HTML 响应中注入选定运行载荷，不修改磁盘文件。
+每次运行进入终态后，持久 runner 必须从准确根源码原子派生
+`worktrees/<workspace-id>/offline-activity-audit.html`，只嵌入该运行视图、批准分析资源、检查点及可观察日志。
+该运行档案只读且自包含。不带查询打开时，展示原始一级概览、台账和技术档案，范围只限嵌入运行；
+嵌入的已完成或失败运行在最近记录、台账和技术档案中均为一条记录；通过同一本地 HTML 的 `?run=<workspace-id>` 打开结果或诊断。返回保持本地，无需 HTTP。
+核验注释显示为禁用只读控件，并隐藏删除。失败档案不嵌入样例业务行。
+直接以 `file://` 打开根源码仍重定向到服务。未来核销运行绝不能重写根文件或创建第二套前端实现。
 
-Legacy HTML files already under `worktrees/` are read-only compatibility results and may be projected by
-the trusted server without modification. Legacy or acceptance workbooks remain test-only and must never
-be read, copied, or used by runtime code or model prompts.
+`skills/orchestrate-offline-audit/assets/` 下旧 bundle 保持为确定性、运行范围内的视图载荷编译器和校验器。
+`audit_core.html_report` 只可在系统临时空间组装它，用于证明六列投影、提取已验证 `audit-data` 载荷，随后删除临时 HTML。
+它不是客户入口，绝不能发布到 `worktrees/`。
 
-## Change verification
+未来普通功能/修复任务不得重新设计或扩展根系统及其获批原始记录视图。
+只有用户明确要求前端重设计或系统行为变更时才可改变；同一变更必须更新系统版本、工作台 API 契约、受影响测试、
+1440×960 的 PC 浏览器验证、本输出契约、编排 Skill 和 README；绝不能放松验证以接受变化页面。
 
-Run at least:
+台账与技术档案共用 `/api/runs` 中全部 worktree 记录的顺序、搜索条件和可见窗口，包含运行中、失败、已完成状态；二级记录切换器使用同一集合。概览的总记录数、顶部及侧栏计数统计同一全量集合，搜索不改变总数。概览“运行中的记录”合并活动 OSS attempt 与未关联活动 attempt 的运行中 worktree，按 `run_id` 去重，并用“OSS 上传”或“input 导入”标签标明来源。“最近核销记录”只展示 `completed` 和 `failed` 终态记录；没有五条上限，按每批 100 条显式继续显示。三个列表共享搜索和可见窗口状态，台账与技术档案始终保持成员及顺序相同。无 worktree 的失败投递单独显示在“投递失败”区。新建、完成、失败、人工核验和删除通过同一目录修订刷新；陈旧响应不得恢复已删除记录。API `1.38` 的 `refresh_policy` 声明这些规则，历史静态 HTML 不自动重写。 记录标题使用去掉 .zip 的压缩包名称，完整文件名仍可搜索；模型及强度以 `gpt6astra_max` 等小标签与来源、场景标签并列。新 API 直接提供只读标签；旧 API `1.19` 仅对当前窗口及活动记录按最多四并发读取已有 `002-intake` 小型检查点，缓存名称，避免下载完整业务快照。
+
+所有运行卡、技术档案及二级记录标题的日期采用 AI 首次开始分析时间 `analysis_started_at`，统一按 `Asia/Shanghai` 显示；旧档案缺失此字段时回退到 `created_at`，绝不使用材料业务日期替代。新运行将首个 `scenario.started` 事件时间保存为分析开始时间，后续场景不得覆盖。来源优先使用明确的来源标记或关联 OSS 任务，历史内置 OSS 运行可按保留的 `YYYYMMDD-oss-<12位十六进制 job 前缀>` 身份识别，其余直接输入显示为 input 导入。状态文字始终保留：运行中用琥珀色，失败用红色，完成用绿色；技术档案卡的色条、状态徽标和抽屉状态使用相同规则。
+
+Audit System `2.11.25` 冻结持久核销台账标准：一级管理中心包含系统概览、记录范围一致、包含全部 worktree 的核销台账和技术档案。
+概览包含汇总指标、运行中的记录、未创建 worktree 的失败投递及最近终态运行记录，不显示运行链、阶段节点或可观察事件；API `1.38` 静默探测读取 `/api/runs` 与 `/api/intake/jobs?completed=0`；升级期间连接 API `1.19` 时允许读取完整任务列表并仅在客户端排除 `completed`；
+运行目录签名变化时更新可见概览。系统概览 `核销完成` 指标显示最新已完成运行的顶层输入 ZIP 数量，
+不是累计完成运行记录数。一级汇总指标和已完成运行数量标签，只在已完成记录尚未人工核验时把 `error_count` 展示为 `待人工核验`；
+已核验记录对该指标贡献为零，但底层数量和二级处置内容不变。
+
+规范系统概览创建指标、活动记录及首批 100 条终态运行摘要；台账与技术档案使用全部 worktree 的相同集合及顺序。三个列表只在对应页签活动时创建卡片，每窗 100 条，共享搜索和已显示数量。
+台账搜索覆盖全部记录，不提供状态筛选；明确控件显示后续窗口。非活动页签的卡片 DOM 应释放；再次进入时根据当前目录修订和可见窗口重建。
+人工核验控件、列表语义和游走页签键盘行为保持完整。
+规范六任务主流程清单来自 `audit_core.workbench_store.main_flow_task_list`，保存在每个新 manifest，
+并通过只读工作台上下文和 `/api/config` 暴露，服务于技术契约和运行中记录刷新；前端不得维护顺序不同的阶段清单。
+多场景执行按阶段批处理：全部分析事件在证据校验事件前，全部证据事件在确定性决策事件前，验证最后执行，
+因此运行级阶段索引绝不后退。运行中二级记录可以静默探测，但只有选定 workspace、终态或阶段进度索引变化时更新可见内容。
+同阶段事件绝不重载记录，运行中二级记录绝不按固定计时器重载。
+整页重载总是打开系统概览；打开二级记录前保存的台账状态只在返回时消费一次。
+模块操作保持清楚：概览的普通终态摘要无记录按钮，活动卡提供查看已创建运行，OSS 卡保留确认删除；台账所有行提供打开记录，只有完成行提供人工核验，永久删除继续遵守终态和 OSS 所有权限制；技术档案卡只打开日志和检查点。
+
+台账搜索保留程序化名称。三个一级视图和两个二级结果视图使用标准 tablist/tab/tabpanel 语义、
+一个游走 Tab 停靠点、方向键/Home/End 导航和程序化选中状态；可见状态提示为礼貌 live region。
+打开技术档案时焦点进入模态对话框；关闭前焦点锁定其中；四个页签使用同一标准键盘契约；关闭后焦点恢复到调用控件。
+正确检查台账只在第一次进入时创建卡片 DOM，随后缓存结构节点引用。
+屏外卡使用 `content-visibility: auto` 及稳定固有尺寸估计，保留明确无障碍 article 名称，打印时恢复完整渲染；
+筛选绝不能在每次条件变化时重读卡片文字或重建固定核销类型选项。
+
+系统为每个已完成运行提供一个获批原始核销工作台二级页面，为未完成运行提供真实诊断二级页面。
+记录视图保留深色侧栏和冷灰网格画布。侧栏严格有两个同级结果视图：默认红色强调错误总览从筛选面板开始，
+随后展示堆叠错误卡；绿色强调正确检查台账也从筛选面板开始，
+把所有独立通过子检查先按核销类型、再按中文业务类别分组。每项通过展示检查对象、简明确定性依据及可用来源 basename。
+用户于 2026-09-11 明确删除两个视图的顶部摘要模块，包括英文标题、中文总览标题、说明及类型/总数统计；侧栏计数、筛选控件与结果列表保留。API `1.38` 声明 `result_summary_display=hidden`。
+用户随后删除错误列表的 `REJECTED ERROR RESULTS / 核销错误结果` 和正确检查列表的 `VERIFIED PASS RESULTS / 按核销类型归档` 整行标题，包括正确检查标题旁的重复统计。列表直接接在筛选面板下，不留空标题栏；API `1.38` 声明 `result_list_heading_display=hidden`。
+用户进一步删除两个筛选区顶部的中英文标题、当前命中数量及“重置筛选”按钮。筛选面板直接从核销方式和原因/检查分类两列控件开始，使用程序化名称保留无障碍区域语义；无匹配结果中的“清除全部筛选”继续可用。API `1.38` 声明 `filter_header_display=hidden`。
+用户同时删除两个结果视图的关键词搜索；仅保留核销方式与原因/检查分类，不再创建搜索输入框或按文字过滤卡片。API `1.38` 以 `result_filters=[audit_type, category]` 声明这两个筛选维度。
+整条记录限制及筛选行为说明只作为内部规则，不渲染为辅助客户界面文案。
+
+两个结果视图提供对齐的客户端组合筛选。核销类型始终列出该视图中的全部类型，绝不被另一条件收窄。
+错误总览还按 `错误原因分类`筛选；类别使用 `陈列标准`、`活动日期`、`门店地点低置信度`、
+`金额复算`、`POS销售明细` 等可执行细分标签，不使用宽泛总类。
+通过台账按中文检查类别筛选。错误原因/检查类别随核销类型联动：
+其他当前条件下为零结果的选项应省略，每个剩余选项旁显示实时数量。两个视图都不显示总体命中数量或顶部重置按钮；可直接修改筛选条件，零命中时保留“清除全部筛选”，且不改变快照。全部分组错误直接位于错误筛选面板下。错误结果区不展示额外标题栏、排列方式或核销类型标注的提示文案。错误总览不展示视图及去重规则说明，错误筛选面板不展示可选方式、原因和置信度档数的统计提示；筛选项保留，不显示总体命中数量。
+每个错误卡头只含 `核销类型 · <业务类型>`，不显示置信度徽标。错误原因字段中一个或多个标签只显示类别值，
+不带 `错误原因分类` 前缀，并与 `陈列标准` 使用完全相同的 `eo-chip` 样式；不得另设浅色类别标签。
+
+视图只有一个核销类型时，已启用的核销类型选择框只含该具体类型，省略 `全部核销方式`；多类型视图保留全部选项。
+卡片核销类型值与分面核销类型值必须使用相同规范业务标签。每个错误原因类别必须属于至少一张含具体核销类型的卡；
+客户端拒绝孤立类型标签。两个同级视图保留同一内部判定置信度口径；客户筛选不再使用置信度。
+明确 AI `confidence_score` 在 `[0,1]` 时优先使用：`>=0.85` 为高、`>=0.60` 为中，否则为低。
+没有明确分数时，根据具体判定上下文（明确数值/地点证据、交叉印证、歧义及缺失材料），在各档内给每项有界分数；
+不得固定为 `0.5` 或自动让高置信度等于 `1`。只有明确完全确定的判定可以使用 `1`。
+用户于 2026-09-11 要求隐藏 `置信度 中：0.64` 这类标记：错误卡和正确检查卡不再渲染置信度等级及分数，无障碍名称同样不附加该标记。内部证据和计算保留。用户随后要求删除置信度筛选，两个视图均只保留核销方式和原因/检查分类两列，不再按置信度限制结果，也不展示可选置信度档数。API `1.38` 声明 `confidence_badge_display=hidden`。
+该分数表示逐项判定准确性的信心，不是错误严重度或内部检索/名称相关性分数。
+每篇错误卡 article 都有明确无障碍名称，包含序号、核销类型、标题和原因类别；
+每篇正确检查 article 也保留相应无障碍名称。两个同级视图都没有场景队列、场景入口按钮或按类型子页面。
+
+工作台 API 契约为 `1.38`：可信内网中的 OSS 接收、任务列表和单任务状态路由无需 Authorization 头；
+`/api/config.material_problem_policy=analyze_and_report` 声明客户材料问题继续 AI 诊断并输出可回调的待补正报告。
+OSS 配置还报告这一免认证契约、是否要求回调、是否仅接收、是否明确启用可信内网 HTTP 回调、
+`callback_result_format=scenario_error_facts_markdown`、`terminal_replay_policy=new_attempt`，以及
+`pipeline=download_then_serial_audit` 的单下载 worker、单核销 worker 两级流水线。
+接收响应暴露 `attempt`、可选 `supersedes_job_id` 和 `rerun`，但绝不暴露内部身份哈希。
+一级页面通过 `completed=0` 列表读取 OSS 活动或失败任务，活动任务与直接 input 运行合并进“运行中的记录”。`accepted/downloading/downloaded` 显示排队中，`running/callback` 显示运行中；有 worktree 的失败运行进入最近记录，未创建 worktree 的失败任务显示在独立“投递失败”区。完成 attempt 不在活动区重复出现。台账和技术档案保留全部 worktree 及真实状态。
+排队、运行和失败 OSS attempt 可从同源工作台使用确认令牌调用 `DELETE /api/intake/jobs/<job_id>`：排队项必须从后续 worker 阶段跳过，运行项必须先终止其专属正式 runner 并阻止尚未发出的回调，再仅删除该 job 的收据、输入目录和唯一关联未完成 worktree；失败项删除其收据、输入目录和唯一关联运行 worktree（如有）。已经发出的回调不可撤回；任意所有权歧义、链接、文件锁或无法确认进程停止时必须拒绝删除。
+每个已完成 worktree 包含 `ai-analysis-summary.md`，manifest 记录其大小和 SHA-256，
+回调 `result` 使用相同的逐场景 Markdown，仅列具体错误原因，不附建议、影响、结论或重复标题。
+
+已完成快照的 `view.pass_check_log` 使用 schema `1.1`，包含 `total`、类型/范围数量及有序 `groups[].items[]`；
+对于没有该投影的旧档案，服务从不可变 `analysis/results/<scenario>.json`、已保存
+`analysis/evidence/<scenario>.json` 及 `analysis/input-cases.json` 重建，不重写业务产物。
+每个通过项有 `evidence` schema `1.0`；错误行/分组堆头卡有 `card_evidence`。
+内部证据包含完整原始文件名称/数量、各来源角色/位置/独立事实、配对值/比较、派生图片数量、独立知识/地图参考、证据缺口及文件计数完整性。客户“涉及的业务文件”区域只投影该项关联的原始业务文件 basename，不显示这些证据明细或数量。
+不得按文件名关键词选文件，不得使用无关全案件兜底，也不得在 8 个文件处截断。
+工作簿提取图片在父文件下计数，但保留每张图片名称和行位置。绝不能虚构页码、列字母或把组级观察归因到单张照片。
+Excel 期间范围只验证已填范围，不验证实际交易日期；显示空值排除。
+转账金额检查包含销售数量、结算比例和截图，但不批准身份。照片与合同检查包含双方来源。相等的比较值保留在内部证据，不混入错误原因或文件区域。
+文件区域不展开字段或配对行明细，只列文件名；按原始来源标识去重，不将不同来源的同名文件合并。
+已保存匹配商品/参考图片 ID 和选定地图 POI 只可作为范围内参考证据，绝不能成为提交现场证明或候选/调试转储。
+
+用户明确要求时，可通过 `render_static_run_archive` 刷新现有终态 worktree HTML，而不重跑核销。
+只替换该运行规范 HTML；验证全部 manifest/snapshot/result/evidence/log/checkpoint 字节保持不变。
+这不授权无关清理。离线测试本地一级 → 记录 → 一级导航。
+
+错误原因分类是从同一不可变错误行产生的确定性客户端投影，不新增或修改 API 业务字段。
+已完成台账记录通过 `POST /api/runs/<workspace-id>/manual-review` 暴露可变 `manual_reviewed` 注释；
+将其原子存储在 `worktrees/.reviews/`，绝不重写业务 manifest/snapshot；已核验记录的错误数不计入一级待人工核验指标。
+取消选中恢复待处理数量。
+
+永久删除是实时台账中的独立明确用户操作，绝不属于普通核销清理。
+`DELETE /api/runs/<workspace-id>` 要求同源 JSON 严格只包含 `confirm_workspace_id`、本地 Host/Origin，
+并在 `X-Offline-Audit-Delete-Token` 中携带当前 `/api/config.run_deletion.confirmation_token`。
+要求 manifest 为 completed/failed 终态且关联 OSS 任务已终态；删除文件前拒绝活动回调、不安全 ID、链接/junction/挂载、
+歧义所有权、受保护/共享 Git 分支及锁定 Git worktree。
+确认对话框注明运行、不可逆性及范围，初始聚焦取消；失败时不得声称成功。
+删除完整自有目录（包括嵌套 `.git`、日志、分析、检查点、快照、manifest 和静态 HTML）、同 ID 旧 HTML 与核验标记、
+唯一关联接收回执和配置的逐任务来源目录，以及已登记 Git worktree 管理信息和其专属本地分支、分支配置及 reflog。
+清除全部派生服务缓存并从实时目录移除记录；删除前的陈旧客户端探测不得重新插入。
+权限/锁定失败返回 409；删除其他子文件供重试时保留主 manifest。
+成功删除不留墓碑或备份。绝不能删除共享 `input/`、其他运行、主仓库、共享 Git 对象/历史、远程引用或独立复制档案；
+这是有界永久应用删除，不是对每个副本的取证级安全擦除。
+删除终态接收回执也删除该任务幂等记录，使明确重交可创建新任务。
+静态档案保持只读，无破坏性控件。删除验证只能使用隔离夹具（包括真实链接 Git worktree），绝不能为测试删除真实核销历史。
+
+正式前端交付只验收 PC：在 1440×960 验证，并保证 1280px 及以上桌面宽度可用。
+窄屏 CSS 只是尽力回退，不属于移动配置或验收承诺。
+
+可信服务使用 HTTP/1.1 持久连接、可承受突发的 accept 队列、协商 gzip 表示及表示专属 ETag。
+GET 资源是私有内容且必须重新验证；未变化请求可以返回 304。
+预期浏览器或局域网客户端 keep-alive 重置是正常传输波动，不得输出 traceback；其他 handler 异常保留标准 traceback 路径。
+一级目录客户端必须保留协商 ETag，在后续探测中明确发送，并把原始 304 直接消费，不得重新解析浏览器缓存 JSON 正文或重算客户端签名。
+服务每次目录读取仍必须检查来源文件系统签名，但复用未变化的运行摘要、序列化目录文档及其 ETag；
+每次读取都必须发起或加入一代在该请求到达后开始的完整校验。
+扫描开始后到达的请求必须加入下一代；重叠读取可以共享后续扫描。
+不得使用 TTL 或跳过请求到达后的新鲜度检查；条件匹配必须在正文压缩前返回。
+
+一级 HTML 响应在传输前用空数据槽替换未使用的嵌入业务载荷并跳过两个记录渲染器；
+记录响应和静态档案响应保留完整已验证运行载荷。
+每个运行快照端点每次读取同样检查 manifest、snapshot、event、确定性结果、已保存证据、输入案件及人工核验签名，
+但复用未变化的序列化 JSON 文档和 ETag。
+快照文档缓存同时受条目数和总字节数限制，合并并发 miss，并必须在下一读取暴露来源变化而不改变表示字节。
+批准分析文件、DOM 检查点及可观察日志使用相同私有重验证契约：每个请求检查文件系统签名及分析允许名单；
+在按数量和字节设界的缓存中复用未变字节与 ETag；合并并发读取；在 gzip 工作前返回 304。
+来源变化必须在下一请求可见，包括旧回退后才出现的日志。
+
+静态档案把业务视图与技术资源包保存在不同内联 JSON 槽：初始渲染只解析业务视图；
+批准分析/检查点/日志包在第一次技术资源请求时懒解析。二级技术摘要必须使用已注入轻量上下文渲染，
+不能重新获取或解析该包。分析、检查点及日志查看器各自保持有界滚动区，使大资源不能撑开整个抽屉；每个查看器可键盘聚焦。
+超过 32,768 个字符的内容先显示明确标注的预览，并提供在抽屉内展示完整文字的操作。
+
+目录轮询对 worktree 根目录和核验标记目录各枚举一次，绝不能逐运行探测缺失核验路径；
+按文件系统签名复用未变化的 worktree manifest、核验注释及旧 HTML 摘要。
+保留每个轻量实时运行摘要，同时把完整 manifest 文档限制在最近 64 个缓存条目。
+签名变化必须在下一读取刷新；缓存绝不能延迟运行中状态或人工核验更新。
+服务最多保留 8 个已完整注入的系统/记录 HTML 文档。
+缓存键必须覆盖根外壳及选定运行的 manifest、snapshot、events、确定性结果文件和核验注释；
+任何签名变化在下一请求重建，同一文档的并发缓存 miss 合并。
+
+客户输出必须把工程枚举和值翻译成业务可读中文；技术 JSON 只保留在明确标注的技术视图。
+
+`worktrees/` 下已有旧 HTML 是只读兼容结果，可信服务可以投影但不得修改。
+旧式或验收工作簿仍只用于测试，运行时代码或模型提示词绝不能读取、复制或使用。
+
+## 变更验证
+
+至少运行：
 
 ```powershell
 py -3 -B -m unittest discover -s tests -v
 py -3 -B -m compileall -q audit_core skills
 ```
 
-Also validate all JSON files and Skill frontmatter, run the bundled formal command against retained real
-ZIP inputs when the execution path changes, verify that no per-run HTML or workbook is published, every
-temporary workbook/page/source tree is removed, and the worktree contains an atomic manifest/snapshot,
-append-only events, safe observable log, analysis index, and DOM-data checkpoints. Start the trusted
-service on loopback and `0.0.0.0`, exercise the relative APIs and SSE, verify OSS intake authentication,
-three-field idempotency, allowlisted URL and response-integrity validation, status polling, per-job
-`input-oss` persistence without overwrite, partial-download cleanup, exact callback payload, callback
-failure retention, and delegation to the bundled
-runner, and verify the fixed workbench at
-1440×960 desktop with zero console/page errors before finishing with `git diff --check` and
-`git status --short`.
+还要校验全部 JSON 和 Skill frontmatter。执行路径变化时，使用保留的真实 ZIP 输入运行 bundled 正式命令；
+确认每次运行严格只发布一个自包含的规范外壳静态页面，不发布工作簿或临时组装页面；
+每个临时工作簿/页面/来源目录已删除；worktree 包含原子 manifest/snapshot、只追加事件、安全可观察日志、分析索引及 DOM 数据检查点。
+在 loopback 和 `0.0.0.0` 启动可信服务，操作相对 API 和 SSE；验证 OSS 接收身份验证、三字段幂等、白名单 URL 与响应完整性校验、
+状态轮询、逐任务 `input-oss` 持久化且不覆盖、不完整下载清理、准确回调载荷、明确无回调完成、仅接收完成且不调用 runner、
+回调失败保留，以及委托 bundled runner。以 1440×960 桌面验证服务记录及其生成静态档案，要求控制台/页面零错误并直接视觉比较；
+最后运行 `git diff --check` 和 `git status --short`。
 
-When a user designates an approved reference HTML, use it only for explicit workbench redesign
-acceptance. Runtime code, model prompts, evidence extraction, and run snapshots must never read or copy
-it. Compare the root fixed page after the local service loads a source-derived test snapshot; do not
-compare or patch a generated per-run page.
+用户指定获批参考 HTML 时，只可用于明确的工作台重设计验收。运行时代码、模型提示词、证据提取及运行快照绝不能读取或复制它。
+本地服务加载源码派生测试快照后比较根固定页面，再将生成运行档案与服务记录比较；绝不能手工修补生成页面。
+
+2026-09-11 统一客户文案规范：十类核销及材料诊断遵循 `skills/orchestrate-offline-audit/references/error-reasons.md`。错误原因只讲具体错误；建议和补正操作只放“处理方式”；“涉及的业务文件”只列原始业务文件 basename，不附路径、角色、数量、定位、参考依据或证据说明。完整证据保存在内部，按 ZIP 名称分类及原业务判定不变。API `1.38` 声明 `error_text_policy=reason_and_action_separate`、`business_file_display=filenames_only`。
+
+客户原因中的工程字段和内部参考编号必须转为业务语言。例如合同编码未登记应写清合同页/行、商品名称和实际合同编码，不展示 `product_code_aliases` 或知识库内部主编号。实际合同编码即使含 CP 前缀也保留。系统未完成原图读取或复核必须如实归为系统核验未完成；有访问阻断证据时写“系统无法读取现场原图，陈列列数和堆头面积尚未核验”，处理为恢复读取后重新核验，不能改成客户照片不清或要求补拍。
+
+ZIP 名称分类无法唯一确定时，`unclassified_archive_policy=fail_before_ai_and_callback_reason` 直接退回该包，不调用模型；无法分类属于核销失败，仍落盘明确原因并走原 OSS 三字段回调；回传成功不能将核销状态改成完成。独立结果记录在 `analysis/classification-rejection/result.json`，不伪造 AI 证据、通过项或支持金额。
+
+旧材料诊断的客户投影必须遵循唯一 ZIP 名分类：名称唯一明确且与已保存场景一致时，不再将旧 `scenario_unconfirmed` 当作客户错误；仅在内存副本排除该条，原始结果和证据保留。缺件、不可读、实际金额差异及角色关系问题继续显示。分类错误按明确诊断代码归为费用类型，不因正文含金额词而归到金额复算。

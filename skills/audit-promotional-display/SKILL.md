@@ -1,165 +1,276 @@
 ---
 name: audit-promotional-display
-description: Audit promotional or stack-display claims from a contract PDF, distributor sales Excel, field photos, and the maintained multimodal product knowledge base. Use when contract terms, sales identities, photo products, internal correspondence, display evidence, promotion, photo reuse, and supported amount must close into one human-readable six-column worksheet while full evidence remains in JSON.
+description: 使用合同 PDF、经销商销售 Excel、现场照片、数据库商品主账及按需参考图，核销促销陈列或堆头申报。适用于需要对合同、商品、现场执行及金额作确定性闭环，并保留完整结构化证据的任务。
 ---
 
-# Audit Promotional Display
+# 促销陈列核销
 
-Create one audit row per contract merchant/store. A filename, total sales amount, generic brand scope, or similar package never proves that a store performed the contracted activity.
+生成客户错误原因和处理方式前，必须读取并执行[统一文案规范](../orchestrate-offline-audit/references/error-reasons.md)。
+错误原因只写具体错误事实，建议只写处理方式；涉及的业务文件区域只列相关实际文件 basename；回调只保留原因。核销类型由 ZIP 名称的唯一已登记标记确定，AI 不得改类。ZIP 名称无法唯一分类时由编排器直接打回，不调用本 Skill 或 AI；已知类型的错件、缺件及内部文件误命名仍继续审核或材料诊断。
 
-## Required reading
+每个合同商户/门店创建一条核销记录。文件名、销售总额、通用品牌范围或相似材料包，绝不能
+证明某门店执行了合同活动。
 
-Read these files completely before extracting or judging:
+## 必读内容
+
+提取或判断前，必须完整读取以下文件：
 
 - [audit-rules.md](references/audit-rules.md)
 - [evidence.schema.json](references/evidence.schema.json)
-- [contract-product-cells.schema.json](references/contract-product-cells.schema.json) for the mandatory focused second pass over dense attachment product cells
-- the shared [product-rag.md](../../shared/canban-product-multimodal-knowledge-base/references/product-rag.md) for field-photo product identity
+- [contract-product-cells.schema.json](references/contract-product-cells.schema.json)，用于密集附件商品
+  单元格的必做第二轮聚焦提取
+- [数据库知识规则](../../shared/product-database/audit-knowledge.md)，用于商品主账及按需图片检索
 
-The runtime validates the project-level shared
-[product-rag.json](../../shared/canban-product-multimodal-knowledge-base/references/product-rag.json),
-uses only text visible in each submitted field photo to retrieve a small candidate set from the full
-validated catalog, and supplies those candidates' registered multi-view images. This Skill is a
-consumer of that identity ledger; it does not own a private catalog or product-image copy.
+运行时通过 `audit_core.product_database.load_product_catalog` 读取 MySQL `product_catalog.products`。
+本文的“商品知识库/目录”均指本次数据库快照。只使用同一现场照片可见文字从数据库检索少量候选，
+再按数据库 `image_manifest_key` 从私有 OSS 按需读取多视图清单与图片，并核对准确编码加69码和完整性。
+三个身份字段仍为名称、编码、69码；图片集字段只负责关联图片，未登记的别名不得参与匹配。
+图片只存在于任务临时空间，成功/异常退出清理；OSS 故障不能回退旧本地图或写成客户照片问题。
 
-## Trust boundary
+## 信任边界
 
-Vision AI may read:
+视觉 AI 可以读取：
 
-- every contract PDF page at original resolution;
-- submitted field photos;
-- bounded repository-owned product-reference images during the final photo pass.
+- 原始分辨率的每一页合同 PDF；
+- 已提交现场照片；
+- 最终照片阶段中从私有 OSS 下载并通过完整性校验的少量商品参考图片。
 
-Vision AI must not read the sales Excel, prior outputs, caches, acceptance workbooks, or unrelated repository files. It extracts visible facts only and must not calculate a supported amount or make the final pass decision.
+视觉 AI 不得读取销售 Excel、历史输出、缓存、验收工作簿或无关仓库文件。它只能提取可见事实，
+不得计算支持金额或作出最终通过决定。
 
-Product-reference images establish product identity only. They cannot establish the submitted store, date, location, display, promotion, price, photo originality, or amount, and they must never be returned as submitted `photo_files`.
+商品参考图片只能确立商品身份。它们不能确立已提交门店、日期、地点、陈列、促销、价格、照片
+原创性或金额，也绝不能作为已提交的 `photo_files` 返回。
 
-## Visual extraction
+## 视觉提取
 
-Return evidence schema version `2.5`.
+返回证据 schema 版本 `2.5`。
 
-For the contract, extract only explicit core terms:
+### 有界上下文与独立复核
 
-- contracting parties and the customer/distributor party;
-- activity budget, execution period, activity content, the exact visible reimbursement/settlement method, display standard, and claimed amount;
-- fee basis: `per_store`, `per_stack`, `total_only`, or `unclear`;
-- total stack count and each listed store's stack count only when explicit;
-- watermark visibility for informational trace only, and seal visibility as a mandatory control;
-- every merchant/store in printed order;
-- specific product and promotion requirements only when the core terms actually impose them.
+正式 runner 的堆头执行由 `audit_core/display_pipeline.py` 分块调度，仍属于同一正式入口。
+编排者完整阅读本 Skill 和上述必读文件；被委派的视觉子任务只读取复制到其隔离目录的
+[visual-extraction.md](references/visual-extraction.md)、该块提示和 schema，不递归读取整个项目。
+合同首轮先执行不含门店/销售逐行数组的全页核心提取，再逐页独立盘点明细表和物理行数；两份清单不一致时停止并复读。
+门店和销售明细均按 PDF 页/表/物理行切成最多 8 行的首轮块，容量或提取失败时只二分失败块。
+块保留完整同页原图作为非均匀行高、合并单元格及近似裁剪的回看来源；来源外补值、漏行、重叠和错序均拒绝。
+按页/表/物理行拼接后由程序生成连续全局行号；同值交易不得去重。印刷全文总计由全页核心读取，不能加总页小计或选择最后一个金额。
+合同附件二次复读仍按 PDF 页分组，每块最多 8 行；所有全局页号、行号必须完整合并。
+照片路由和商品文字预检每块最多 3 张；正式照片及独立陈列复核按门店分块，同店全部照片保持一组，
+不跨照片累加实体列。每店独立从完整目录检索候选，不让其他门店消耗其候选额度。
+最多两个独立视觉块并行，但主流程阶段仍单调递增。漏行、漏图、未知来源、门店改写或照片顺序漂移
+都属于提取失败；未能唯一归属的照片不能悄悄丢弃后发布通过结果。仅重试失败块，并提供本块校验反馈。
 
-A brand scope, whole series, broad category, activity wording, or appended product/sales table is not a specific core-contract SKU condition. If the core contract does not contain a checkable product code, sufficiently specific product name, or complete valid 69 code, set core-product knowledge to not applicable. Attachment rows still retain their own contract-side product identities and are reconciled separately.
+校准表只供确定性程序在独立复核结束后按精确有序 SHA-256 应用，绝不能复制到模型目录或写入提示。
+正式运行在 `analysis/model-observations/` 保存校准前后可见事实，在 `analysis/model-metrics.jsonl`
+只记录档位、块大小、耗时、尝试状态与已提供的数字用量；不保存内部思考、原始事件或敏感错误回包。
+效果评测以校准前观察对比已确认标签；没有标签的字段只评价覆盖与一致性，不宣称识别准确率。
+原图或视觉技能无法读取时必须报告执行失败；不能将文件访问被拒绝转换成陈列“无法确认”后计为成功。Windows 运行前验证材料可读及只读边界，并仅修复当前用户对隔离模型材料目录的读取权限。
 
-Treat a printed sales-detail attachment as a separate transcription source under
-`contract.sales_attachment`, never as a contract product or promotion requirement:
+对于合同，只提取明确的核心条款：
 
-- without a row-level attachment, return `present=false`, empty `source_pages` and `records`, and null totals;
-- with an attachment, return `present=true`, list distinct PDF page numbers in ascending order, and transcribe every row in printed order with consecutive `line_no` values starting at 1;
-- for each row preserve `source_page`, customer name, business date, product code, product name, 69 code, unit, quantity, retail price, and row total amount;
-- use null for any illegible business value, but always provide integer `line_no` and `source_page` values;
-- before returning a null product name from a dense attachment table, crop or zoom that exact cell and inspect it again at original resolution. If the same row's product code, 69 code, quantity, price, or amount is legible, a null name requires an explicit second visual pass; do not treat the first OCR miss as a blank PDF cell;
-- return a 69 code only when it is a complete valid EAN-13; all returned numeric values must be visibly printed and non-negative;
-- copy `total_quantity` and `total_amount` only when the attachment prints those grand totals. Never sum detail rows, multiply quantity by price, infer a missing total, or turn a printed total line into another detail record.
+- 签约方及客户/经销商一方；
+- 活动预算、执行期间、活动内容、准确可见的报销/结算方式、陈列标准和申报金额；
+- 费用依据：`per_store`、`per_stack`、`total_only` 或 `unclear`；
+- 只有明确写出时才提取堆头总数和每家所列门店的堆头数；
+- 水印可见性只用于信息追溯，印章可见性作为必核控制；
+- 按印刷顺序排列的每个商户/门店；
+- 只有核心条款确实提出时才提取具体商品和促销要求。
 
-Preserve attachment limitations in `extraction_notes`. Do not fill an attachment field from the separate distributor sales Excel or another file.
+品牌范围、全系列、宽泛品类、活动表述或附加商品/销售表，都不是具体核心合同 SKU 条件。核心
+合同不包含可核验产品编码、足够具体商品名称或完整有效 69 码时，将核心商品知识设置为不适用。
+附件行仍保留各自的合同侧商品身份，并单独核对。
 
-After the full contract pass, if `contract.sales_attachment.records` is nonempty, run one focused
-second visual pass against the original-resolution PDF pages using
-`contract-product-cells.schema.json`. Return every attachment row in the same line/page order and
-independently re-read only its product-code, product-name, and 69-code cells. First-pass quantity,
-price, and amount may locate the row but may not infer any target value; the sales Excel remains
-absent. Before this pass, deterministically crop broad scan whitespace, derive all four orientations,
-and attach the two landscape reading-direction alternatives plus overlapping row bands. When a red
-seal crosses the table, also attach a same-pixel black-print view that suppresses saturated seal color,
-crops the product-code/name/69-code columns, and enlarges the print. The model must choose the orientation with
-upright print, trace each row horizontally from its same-PDF locator, confirm all three target cells in the
-matching band, and compare seal-covered print across the color and black-print bands. Orientation and
-color-separated alternatives are duplicate views of one source page, not additional evidence or rows.
-For a dense row whose transaction
-numerics are legible, a missing code, name, or 69 code in this focused pass is an extraction failure and must be
-retried. Every nonempty 69 code must be a valid EAN-13. Apply only nonempty focused readings, retain genuine nulls as limitations, and validate the
-full contract evidence again before auditing.
+将印刷销售明细附件作为 `contract.sales_attachment` 下的独立转录来源，绝不能把它当作合同商品
+或促销要求：
 
-For every contract store, return exactly one photo review, including an empty review when no photo can be assigned. Preserve submitted basenames exactly. Extract:
+- 没有逐行附件时，返回 `present=false`、空的 `source_pages` 和 `records`，合计使用 null；
+- 存在附件时，返回 `present=true`，按升序列出不同 PDF 页码，并按印刷顺序转录每一行，
+  `line_no` 从 1 开始连续编号；
+- 每行保留 `source_page`、客户名称、业务日期、产品编码、商品名称、69 码、单位、数量、零售价
+  和行合计金额；
+- 无法辨认的业务值使用 null，但始终提供整数 `line_no` 和 `source_page`；
+- 从密集附件表返回 null 商品名称前，裁剪或放大准确单元格，并以原始分辨率再次检查。同一行的
+  产品编码、69 码、数量、价格或金额清晰可读时，null 名称必须经过明确第二轮视觉提取；不要把
+  第一轮 OCR 遗漏当作 PDF 空白单元格；
+- 只有完整有效 EAN-13 才返回 69 码；所有返回数值都必须是可见印刷且非负的内容；
+- 只有附件印刷了总计时才抄录 `total_quantity` 和 `total_amount`。绝不能汇总明细行、用数量乘
+  价格、推断缺失合计或把印刷合计行转换成另一条明细记录。
 
-- useful visible text, complete date, location, and their visual basis;
-- whether the photo proves `1平米堆头`, `4纵陈列`, both, neither, or is unclear;
-- a reliable vertical-facing count and corresponding left-to-right basis;
-- explicit promotion signals separately from ordinary prices;
-- risks and useful supplemental material.
+附件局限保留在 `extraction_notes` 中。不得使用单独的经销商销售 Excel 或其他文件填补附件字段。
 
-After the complete photo/product pass, run a mandatory focused display-standard pass with
-[display-standard-review.schema.json](references/display-standard-review.schema.json). Give it only the submitted field photos and the already
-validated store/photo routing; do not give it product-reference images, Excel, contract product text,
-or the earlier display conclusion. It must preserve the route and independently replace only
-`display_observation`. This focused pass distinguishes an independent edge stack from the exposed side
-panel of an already-counted package. Different submitted-brand SKUs, bundles, or package formats may
-jointly form the four columns; four copies of one SKU are not required, while visibly unrelated brands
-do not count. Evaluate multiple photos independently: any one routed photo may prove four columns, but
-never sum partial counts across photos. A flush run of narrow side faces beside three front boxes stays
-three unless seams, offsets, or an independent package face proves another stack. The complete photo
-evidence is then revalidated.
+完整合同提取结束后，如果 `contract.sales_attachment.records` 非空，则使用
+`contract-product-cells.schema.json` 对原始分辨率 PDF 页面执行一次聚焦第二轮视觉提取。按相同
+行/页顺序返回每个附件行，并且只独立复读其产品编码、商品名称和 69 码单元格。第一轮数量、
+价格和金额可以定位行，但不能推断任何目标值；销售 Excel 仍不提供。本轮前，由确定性程序裁掉
+大范围扫描空白、生成四个方向，并附加两个横向阅读方向备选视图及重叠行带。红章覆盖表格时，
+还要附加一个来自相同像素的黑字视图，用于抑制饱和印章颜色、裁出产品编码/名称/69 码列并放大
+印字。模型必须选择印刷文字正向的视图，从同一 PDF 定位信息沿水平方向追踪每一行，在匹配行带
+中确认全部三个目标单元格，并对照彩色和黑字行带核实被印章覆盖的印字。方向和颜色分离备选都
+是同一来源页的重复视图，不是新增证据或行。对于交易数值清晰可读的密集行，本轮仍缺少编码、
+名称或 69 码即属于提取失败，必须重试。每个非空 69 码都必须是有效 EAN-13。只应用非空聚焦
+读数，将确实为 null 的内容保留为局限，并在核销前再次验证完整合同证据。
 
-After the focused model result, load
-[display-standard-calibrations.json](references/display-standard-calibrations.json). A calibration is
-user-accepted regression knowledge, not filename inference: apply it only when the immutable contract
-store name and every routed photo's ordered SHA-256 match the registry exactly. Any byte change, added
-or removed photo, reordered route, or different store disables the calibration and leaves the fresh
-visual result in force. Record applied calibration IDs in extraction notes and revalidate the replaced
-observation. Never use a calibration for a merely similar image.
+每家合同门店恰好返回一条照片复核；无法分配照片时也返回空复核。原样保留已提交 basename。
+提取：
 
-When the contract store and a legible watermark location fully correspond, pass the location directly without a map call or a confidence issue. Whenever the two visible names differ, retain both values and invoke the fixed Baidu Maps Streamable HTTP MCP resolver through `map_search_places`; read its server-side AK from `BAIDU_MAPS_API_KEY` in the current process or, on Windows, the current user's environment configuration, never from a repository file or command-line argument, never expose the authenticated URL, and store returned coordinates as `BD09LL`. This user-level configuration lets routine audits run directly without another interactive terminal. A selected same POI, a verified mall/store parent-child relation, or selected POIs within 100 metres has location `confidence=high`, becomes `compatible`, and passes. Search results do not have to be independently unique: preserve any credibly unique side, require every unresolved side's selected candidate to meet the internal 0.60 name-relevance threshold, and require both sides to meet it when neither side is credibly unique; select the best pair only when it has one of those passing spatial relationships. A distant result, the 100-to-300-metre gray zone, no credible candidate pair, unavailable resolver, or missing comparable coordinates has `confidence=low`, becomes `location_unverified`, holds automatic settlement, and is shown as `门店地点低置信度` rather than an automatic wrong-watermark finding. For a uniquely resolved distant pair, preserve the distance and request either authoritative same/nearby evidence or a corrected-location photo. Keep internal relevance scores out of customer-facing output. Keep legacy `mismatch` readable but do not emit it for new determinations. If MCP is unavailable or inconclusive, the schema-validated [location-resolution-registry.json](references/location-resolution-registry.json) may provide a verified relationship; preserve its source labels, checked dates, address facts, and basis in the audit result and ledger. MCP/registry disagreement is low confidence and always goes to manual review. Use missing/unreadable-watermark wording only when no reliable location is visible, and never use a filename as location proof.
+- 有用可见文字、完整日期、地点及其视觉依据；
+- 照片是否证明 `1平米堆头`、`4纵陈列`、两者、均不满足，或无法确认；
+- 可靠的纵向排面数量及对应的从左到右依据；
+- 与普通价格分开的明确促销信号；
+- 风险和有用补充材料。
 
-Resolve field-product identity independently from the contract and sales files, in this order:
+完整照片/商品提取后，使用
+[display-standard-review.schema.json](references/display-standard-review.schema.json) 执行必做的
+陈列标准聚焦复核。只向其提供已提交现场照片和已验证门店/照片路由；不要提供商品参考图片、
+Excel、合同商品文字或先前陈列结论。它必须保留路由，并且只独立替换 `display_observation`。
+该聚焦复核区分独立边缘堆叠与已计数包装露出的侧面。不同申报品牌 SKU、组合装或包装形式可以
+共同构成四列；不要求同一 SKU 有四份，而明显无关品牌不能计数。多张照片要独立判断：任何一张
+已路由照片都可证明四列，但绝不能跨照片相加部分计数。三个正面包装盒旁边齐平的一排窄侧面仍
+是三列，除非接缝、错位或独立包装面证明另有一叠。随后再次验证完整照片证据。
 
-1. transcribe useful packaging text, including partial name, specification, flavor/variant, bundle notation, product code, and complete barcode when visible;
-2. use only that same-photo text to retrieve a small candidate set from the full validated knowledge base;
-3. correspond the visible text to catalog-controlled names, aliases, specifications, variants, and packaging text, then compare those candidates' reference views with the submitted packaging;
-4. return only a uniquely supported exact identity, a fuzzy identity, or no identity.
+有原图访问阻断证据时，客户原因写“系统无法读取现场原图，陈列列数和堆头面积尚未核验”，
+处理方式写“恢复原图读取后重新核验”。仅明确复核未完成、没有访问阻断证据时，原因写
+“现场照片复核未完成，尚未确认陈列列数和堆头面积”，处理方式写重新复核已提交的现场原图。
+不能把未复核推断为照片不清或陈列不合格，也不能据此要求
+客户补拍。只有实际复核确认原件存在不清、遮挡或范围缺口时，才报告该材料问题并提出相应处理方式。
+这一区分不改变模型执行失败的状态边界或陈列标准的“或”条件。
 
-The field photo does not need to show a complete product name or a 69 code. A visible registered short code that belongs to one catalog product, such as `SP-1`, or another unique combination of partial name/specification/variant/bundle text may establish the text correspondence even when spacing, case, or the hyphen differs. A combination such as `3+2`, `420g`, and `量贩装` retrieves the registered `3+2` bundle. An exact result requires the field packaging to be broadly visually compatible with at least one registered multi-view reference, not pixel-identical: ordinary differences in angle, distance, lighting, shelf occlusion, or package pose are acceptable when the main color blocks, layout, bundle structure, and recognizable packaging features are alike and no visible feature conflicts. A short code shared by several products, such as the current `SP-4`, stays fuzzy until other visible text and packaging jointly disambiguate it. Product names use fuzzy compatibility throughout the audit and never require character-for-character equality. A supplied 69 code must exactly equal the valid catalog EAN-13. Source-local business product codes are preserved and compared strictly between the contract attachment and standalone sales Excel. For contract product → knowledge base, that business code must also exactly equal the selected catalog product's `product_code` or one of its `product_code_aliases`; do not require it to equal an unrelated `CP-...` main code when an exact alias exists, but fail when neither the main code nor an alias contains it. Product code and 69 code must jointly hit the same catalog product. Once those strict identifiers agree, differing product-name text is fuzzy-compatible auxiliary evidence and never becomes a separate mismatch error. If a product name is illegible or absent but strict identifiers and the independent transaction fields uniquely locate the row, record the name as unavailable auxiliary evidence and do not fail, recount, or request resubmission for that name. If the same strict code-plus-69 pair maps to multiple catalog variants, re-read the contract name cell and use a unique fuzzy-compatible name to choose among them; a visible name that the first OCR pass missed is an extraction defect, not a substitute for the strict code check. A packaging/code alias may be a fuzzy-name anchor when written in the product-description field, but never fills or rewrites a strict product-code field.
+得到聚焦模型结果后，加载
+[display-standard-calibrations.json](references/display-standard-calibrations.json)。校准是用户已
+接受的回归知识，不是文件名推断：只有不可变合同门店名称及每张已路由照片的有序 SHA-256 与
+登记表严格匹配时才应用。任何字节变化、照片增删、路由重排或门店不同都会使校准失效，继续
+使用新的视觉结果。在提取说明中记录已应用校准 ID，并重新验证替换后的观察。绝不能将校准用于
+仅仅相似的图片。
 
-## Deterministic audit order
+合同门店与清晰可读的水印地点完全对应时，无需调用地图，也不生成地点置信度问题，直接通过。
+两个可见名称不同时，保留双方值，并通过 `map_search_places` 调用固定的百度地图 Streamable
+HTTP MCP 解析器；服务端 AK 从当前进程的 `BAIDU_MAPS_API_KEY` 读取，在 Windows 上还可从当前
+用户环境配置读取，绝不能从仓库文件或命令行参数读取，绝不暴露带认证的 URL，返回坐标保存为
+`BD09LL`。该用户级配置允许日常核销直接运行，无需另开交互终端。选中同一 POI、已验证商场/
+门店父子关系，或选中 POI 距离不超过 100 米时，地点 `confidence=high`、关系为 `compatible`，
+并通过。搜索结果不要求双方各自唯一：保留任何可信唯一的一方；每个未解决一方的选中候选都
+必须达到内部 0.60 名称相关度阈值；双方都不具备可信唯一性时，两边都必须达到阈值。只有候选对
+形成上述通过空间关系之一时，才选择最佳候选对。距离较远、100 至 300 米灰区、没有可信候选
+对、解析器不可用或缺少可比坐标时，设置 `confidence=low` 和 `location_unverified`，暂缓自动
+结算；客户原因只写对应门店、照片地点及无法确认地点关系的具体事实，不写置信度，也不得自动判断为水印错误。对于唯一解析但相距较远的候选对，
+保留距离，同址/近邻证据或照片更正建议只写处理方式。内部相关度分数不得进入面向客户的输出。
+保留旧 `mismatch` 的读取兼容性，但新判断不得生成该值。MCP 不可用或结果不确定时，经过 schema
+验证的 [location-resolution-registry.json](references/location-resolution-registry.json) 可以提供
+已验证关系；在核销结果和台账中保留其来源标签、核验日期、地址事实及依据。MCP 与登记表冲突
+时为低置信度，并始终交由人工复核。只有看不到可靠地点时才使用水印缺失/不可读表述，绝不能
+把文件名作为地点证明。
 
-Python owns the decision in this exact order:
+按以下顺序，在不使用合同和销售文件的情况下独立解析现场商品身份：
 
-1. Treat the contract PDF as the main audit file. Audit exactly six mandatory visible controls separately: contracting party, activity budget, execution period, activity content, reimbursement/settlement method, and seal. Preserve watermark visibility only as informational extraction; it never affects status, confidence, amount, or resubmission.
-2. Preserve the contract sales attachment by PDF page and printed line. Reconcile any concrete core-contract products and every attachment-row product to the validated knowledge base. Core products and attachment products remain semantically separate; an attachment row never creates a core product or promotion condition.
-3. Resolve field-photo products independently: photo-visible text retrieves candidates from the full validated knowledge base, then candidate reference images are used only for packaging comparison. Separately compare the resolved product with contract product scope, and compare each photo to the contract merchant/location, period/date, activity/display/promotion requirements, and photo-reuse controls. A fuzzy photo identity remains unresolved; neither contract product wording nor sales Excel may select or upgrade it.
-4. Read sales Excel cells directly and preserve Excel row, customer name, business date, product code, product name, 69 code, unit, quantity, retail price, and total amount. Check each row's own `quantity × retail price = total amount` and the printed totals deterministically.
-5. Reconcile contract attachment → standalone sales Excel directly, contract row first, across eight displayed fields: customer name, business date, product code, product name, 69 code, quantity, retail price, and total amount. Preserve PDF page, attachment line, Excel row, and both sources' nine raw values. Product codes, 69 codes, and numeric fields are strict. Product name is a fuzzy auxiliary field: exact equality is only the score-1 special case, and a different, absent, or illegible name never owns pass/fail, problem counts, confidence, or resubmission once the row is uniquely located by strict identifiers and independent transaction facts. Unit remains visible but never participates in pairing, field results, pass/fail, confidence, problem counts, amounts, or resubmission. Do not rewrite the contract from Excel values.
-6. Never reconcile standalone sales Excel to the knowledge base. Never reconcile field photos to standalone sales Excel, and never use Excel to select or upgrade a photo identity. If the contract has no row-level sales attachment, mark the row-level comparison unverifiable, list every unmatched Excel row, require the complete contract attachment, and block automatic reimbursement.
-7. Calculate amount only from an explicit unit basis after all three independent gates pass: contract core/product identity, photo → knowledge base followed by photo product → contract scope, and Excel → contract attachment:
-   - `per_store`: unit fee × passed stores;
-   - `per_stack`: unit fee × explicit passed stack count;
-   - `total_only` or `unclear`: never divide the total automatically; require manual confirmation;
-   - cap the recommendation by the claim and by the explicit activity budget when present.
-8. Validate the structured result before writing a workbook. Write values only, never formulas.
+1. 转录有用包装文字，包括部分名称、规格、香型/款式、组合装标记、产品编码，以及可见时的
+   完整条码；
+2. 只使用同一照片文字，从完整且已验证的知识库中检索少量候选；
+3. 将可见文字与数据库名称、准确编码及69码建立对应；规格、款式仅取名称中已有文字，再把候选参考视图与已提交
+   包装进行比较；
+4. 只返回具有唯一证据支持的精确身份、模糊身份或无身份。
 
-## Display and promotion
+现场照片不需要显示完整商品名称或 69 码。数据库名称或准确编码中实际存在的唯一可见文字，
+或部分名称/规格/款式/组合装文字的其他唯一组合，即使空格、大小写或连字符不同也可以建立文字
+对应。`3+2`、`420g` 和 `量贩装` 之类的组合可以检索已登记 `3+2` 组合装。精确结果要求现场
+包装与至少一个已登记多视图参考图片在整体视觉上相容，而非像素完全一致：当主要色块、版式、
+组合装结构和可识别包装特征相似且没有可见冲突特征时，允许拍摄角度、距离、光照、货架遮挡或
+包装姿态存在正常差异。被多个数据库商品共享的文字，在其他可见文字和包装共同消除
+歧义前保持模糊。整个核销中商品名称均采用模糊相容，不要求逐字相同。已提供 69 码必须与有效
+目录 EAN-13 严格相等。来源本地业务产品编码保持原值，并在合同附件与独立销售 Excel 之间严格
+比较。对于合同商品 → 知识库，该业务编码必须与数据库 `product_code` 严格相等。
+当前表没有编码别名，不能用旧 JSON 的别名使合同编码通过。
+产品编码和 69 码必须共同命中同一数据库商品。严格标识符一致后，
+不同商品名称文字只是模糊相容辅助证据，绝不能产生单独的不匹配错误。商品名称不可读或缺失，
+但严格标识符和独立交易字段可唯一定位行时，将名称记录为不可用辅助证据，不得因该名称判失败、
+重新计数或要求补交。同一严格编码加 69 码组合映射到多个目录款式时，重新读取合同名称单元格，
+并用唯一模糊相容名称选择；第一轮 OCR 遗漏可见名称属于提取缺陷，不能替代严格编码检查。包装/
+短码写在来源商品描述字段中时只作可见文字；仅当数据库名称或准确编码中也有该文字时才作模糊锚点，绝不能填充或改写严格产品编码字段。
 
-The display standard is an OR condition: clearly proving either `1平米堆头` or `4纵陈列` passes this control. `陈列符合` without a visible basis is insufficient. Four vertical facings must be simultaneously visible and countable left to right across the same physical display. Different submitted-brand SKUs, bundles, and package formats may jointly form four columns; do not require four copies of one SKU and do not count visibly unrelated neighboring brands. For multiple routed photos, evaluate each photo independently: any one photo may prove four columns, but partial counts cannot be added across photos. A narrow, angled edge stack counts only when separately bounded additional packages form their own repeated physical column beyond the adjacent front column. The exposed side panel of an already-counted front-facing box is part of that same package and never becomes another facing, even when that side panel repeats across shelf levels. A flush run of narrow side faces beside three front boxes remains three unless package seams, offsets, or another independent face proves a separate stack. Vertically stacked boxes, repeated shelf levels, a separate background shelf, and fully hidden columns cannot be added. One square metre needs visible scale, dimensions, or a complete-footprint basis.
+上述字段名、内部主编码和匹配过程只供内部判断。客户原因保留合同页/行、商品名称及实际合同编码，
+写“合同商品编码××未在商品资料中登记”；不输出“知识库主编码 CP...”或 `product_code_aliases` 等
+工程说明。处理方式用核对或登记商品编码等业务操作，不能要求客户编辑内部字段；实际印在合同上的
+编码原值必须保留。
 
-Photo reuse is a separate anti-fraud control and never proves display compliance.
+## 确定性核销顺序
 
-Promotion exists only with an explicit special price, old/new price, discount, gift, multi-buy, `1+1`, `3+2`, or value-pack signal. A normal price tag alone is not promotion. Promotion is mandatory only when the contract explicitly requires it.
+Python 严格按照以下顺序负责决定：
 
-## Human-readable worksheet
+1. 将合同 PDF 视为主核销文件。分别核验且仅核验六项必备可见控制：签约方、活动预算、执行
+   期间、活动内容、报销/结算方式和印章。水印可见性只作为信息提取保留，绝不影响状态、置信度、
+   金额或补交。
+2. 按 PDF 页和印刷行保留合同销售附件。将任何具体核心合同商品和每个附件行商品与已验证知识库
+   核对。核心商品与附件商品在语义上保持分离；附件行绝不能创建核心商品或促销条件。
+3. 独立解析现场照片商品：照片可见文字从完整且已验证的知识库检索候选，候选参考图片只用于
+   包装比较。分别将解析商品与合同商品范围比较，并将每张照片与合同商户/地点、期间/日期、
+   活动/陈列/促销要求及照片复用控制比较。模糊照片身份仍未解决；合同商品表述和销售 Excel
+   均不得选择或升级该身份。
+4. 直接读取销售 Excel 单元格并保留 Excel 行、客户名称、业务日期、产品编码、商品名称、69 码、
+   单位、数量、零售价和总金额。确定性检查每行自身的 `数量 × 零售价 = 总金额` 及印刷合计。
+5. 以合同行为先，直接核对合同附件 → 独立销售 Excel 的八个展示字段：客户名称、业务日期、
+   产品编码、商品名称、69 码、数量、零售价和总金额。保留 PDF 页、附件行、Excel 行及双方九个
+   原始值。产品编码、69 码和数值字段保持严格。商品名称是模糊辅助字段：严格相等只是得分为 1
+   的特殊情况；一旦严格标识符和独立交易事实唯一定位行，名称不同、缺失或不可读绝不能决定
+   通过/不通过、问题数量、置信度或补交。单位保持可见，但绝不参与配对、字段结果、通过/不通过、
+   置信度、问题数量、金额或补交。不得使用 Excel 值改写合同。
+6. 绝不能将独立销售 Excel 与知识库核对。绝不能将现场照片与独立销售 Excel 核对，也绝不能
+   使用 Excel 选择或升级照片身份。合同没有逐行销售附件时，将逐行比较标记为无法核验，列出
+   每条未匹配 Excel 行，要求提供完整合同附件，并阻断自动报销。
+7. 只有以下三个独立门禁均通过后，才按明确单位依据计算金额：合同核心/商品身份；照片 → 知识库
+   后再执行照片商品 → 合同范围；Excel → 合同附件：
+   - `per_store`：单位费用 × 通过门店数；
+   - `per_stack`：单位费用 × 明确通过的堆头数量；
+   - `total_only` 或 `unclear`：绝不能自动拆分总额，要求人工确认；
+   - 建议金额不得超过申报金额，存在明确活动预算时也不得超过该预算。
+8. 写入工作簿投影前验证结构化结果。只写数值，绝不能使用公式。
 
-Keep a six-column management view, with contract-wide sections before the store rows and the total row after the last store:
+## 陈列与促销
 
-- A — contract source and baseline: show the six core controls individually, contract core/attachment product-to-knowledge results, then each contract attachment record with PDF page, attachment line, and all nine raw fields. Watermark visibility may appear only as a clearly non-audited informational note.
-- B — field-photo evidence: show every submitted basename, useful visible text, date, location, display conclusion and short visual basis, visible vertical count, cross-store reuse result, independently resolved catalog product, promotion result, and one plain product confidence label. Attachment/Excel detail rows explicitly state that photos do not participate.
-- C — code-read sales information: show Excel internal arithmetic, then for each contract attachment row the unique Excel row and all nine raw fields. If no contract row exists, show the Excel row as unmatched rather than using another source as its baseline.
-- D — directional comparisons: contract core status; each contract attachment product → knowledge base with canonical product and three identity-field results; photo-visible text → knowledge-base text plus packaging → reference images; resolved photo product → contract scope; contract → field photo; contract attachment → sales Excel with eight displayed field results. Unit remains visible only in the two source columns. Product code and 69 code use exact-match wording; product name uses fuzzy-compatible or auxiliary-unavailable wording and never `不匹配`; a fully passing relationship says `全部对应`. Do not render photo-to-Excel or standalone-Excel-to-knowledge comparisons.
-- E — short fee basis, unit count × unit fee, and supported amount.
-- F — `通过` or `暂不能核销`, followed by `要重新提交什么`. Group requests by source file so the reader sees at most one concrete request for sales Excel, one for the contract, and one for field photos. Name the affected Excel rows/fields or the exact photo content that must be visible.
+陈列标准是“或”条件：清楚证明 `1平米堆头` 或 `4纵陈列` 中任意一项即可通过。没有可见依据
+的 `陈列符合` 不足以成立。四个纵向排面必须在同一个实体陈列上同时可见，并能从左到右计数。
+不同申报品牌 SKU、组合装和包装形式可以共同组成四列；不要求同一 SKU 出现四份，也不能计入
+明显无关的相邻品牌。存在多张已路由照片时逐张独立判断：任何一张照片都可证明四列，但不能
+跨照片相加部分计数。倾斜的窄边堆叠只有在相邻正面列之外形成边界独立、重复的实体包装列时才
+计数。已经计数的正面包装盒露出的侧面仍是同一包装的一部分，绝不能成为另一个排面，即使该
+侧面在多个货架层级重复出现也一样。三个正面包装盒旁边齐平的一排窄侧面仍是三列，除非包装
+接缝、错位或另一个独立包装面证明存在单独堆叠。不能叠加竖直堆放的包装盒、重复货架层级、
+独立背景货架或完全隐藏的列。一平方米需要可见比例、尺寸或完整占地依据。
 
-Render contract-attachment records in their own contract-wide detail rows because they are the main row-level baseline; do not duplicate them inside each store. Show the knowledge-base product and product-code/name/69-code result on every attachment detail row, not only as a count in the overview. Do not render catalog candidate sets, hashes, long model reasoning, or a secondary unavailable file. Never tell the reader to consult JSON or an internal result: the delivered output is the reader's complete handoff. Preserve internal structured evidence for program validation without making it a reading prerequisite.
+照片复用是独立防舞弊控制，绝不能证明陈列合规。
 
-An error-focused HTML view displays only blocking errors and their source/baseline filenames, concrete differences, and resubmission actions. Keep recognized contract facts available to the audit logic, but hide the passing contract baseline, passing controls, audit process, and informational watermark policy from this view. Contract extraction must still drive every downstream comparison; hiding recognized facts is presentation only and never means the contract was not read.
+只有明确出现特价、新旧价格、折扣、赠品、多件优惠、`1+1`、`3+2` 或量贩装信号时，促销才
+成立。仅有普通价签不是促销。只有合同明确要求时，促销才属于必核项。
 
-Formal runs occur only through:
+## 内部六列结果与客户文案
+
+内部六列工作簿投影保留完整证据及决定，用于校验和技术审计；下列通过状态、过程、置信度、费用依据与补交字段不能整体拼入客户错误原因。合同全局区位于门店行之前，合计行位于最后一家门店之后：
+
+- A — 合同来源与基准：分别展示六项核心控制、合同核心/附件商品到知识库结果，再展示每条合同
+  附件记录及其 PDF 页、附件行和全部九个原始字段。水印可见性只能作为明确标注为不参与核销
+  的信息说明出现。
+- B — 现场照片证据：展示每个已提交 basename、有用可见文字、日期、地点、陈列结论和简短视觉
+  依据、可见纵向数量、跨门店复用结果、独立解析的目录商品、促销结果和一个朴素商品置信度标签。
+  附件/Excel 明细行应明确说明照片不参与。
+- C — 程序读取销售信息：展示 Excel 内部算术，再为每条合同附件行展示唯一 Excel 行及全部九个
+  原始字段。不存在合同行时，将 Excel 行展示为未匹配，不得使用其他来源作为其基准。
+- D — 定向比较：合同核心状态；每个合同附件商品 → 知识库及规范商品和三个身份字段结果；照片
+  可见文字 → 知识库文字，再由包装 → 参考图片；解析后的照片商品 → 合同范围；合同 → 现场照片；
+  合同附件 → 销售 Excel 及八个展示字段结果。单位只在两个来源列中保持可见。产品编码和 69 码
+  使用严格匹配表述；商品名称使用模糊相容或辅助信息不可用表述，绝不能使用 `不匹配`；完全通过
+  的关系写 `全部对应`。不得展示照片到 Excel 或独立 Excel 到知识库的比较。
+- E — 简短费用依据、单位数量 × 单位费用及支持金额。
+- F — 保留 `通过` 或 `暂不能核销` 的内部结论及对应处理操作。材料确有缺口时，按来源文件合并
+  具体请求，列出受影响 Excel 行/字段或照片必须清楚显示的内容；仅系统尚未完成复核时，操作为
+  重新复核已提交原图，不能写成客户补拍或补交请求。
+
+合同附件记录是主要逐行基准，应在独立合同全局明细行中展示，不得在每家门店内重复。每条附件
+明细行都要展示知识库商品及产品编码/名称/69 码结果，不能只在概览中展示数量。不得展示目录
+候选集、哈希、冗长模型推理或不可用的次要文件。客户不需要查阅 JSON 才能理解具体错误及对应处理方式；完整结构化证据仍供内部验证。
+
+错误聚焦 HTML 视图的错误原因只展示必要来源/基准文件名、缺失字段和具体差异；对应操作只写独立处理方式。已识别合同事实
+仍供核销逻辑使用，但该视图隐藏通过的合同基准、通过项、核销过程和信息性水印规则。合同提取
+仍必须驱动所有下游比较；隐藏已识别事实只是展示行为，绝不代表未读取合同。
+
+正式运行只能通过：
 
 ```powershell
 py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model>

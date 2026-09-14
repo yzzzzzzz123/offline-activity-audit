@@ -1,4 +1,4 @@
 interface:
-  display_name: "Personnel Incentive Audit"
-  short_description: "Extract visual facts and deterministically reconcile incentives"
-  default_prompt: "Use $audit-personnel-incentive to extract settlement and transfer facts, then let deterministic code reconcile the sales Excel and generate the personnel worksheet."
+  display_name: "人员激励核销"
+  short_description: "提取视觉事实并由确定性程序核对人员激励"
+  default_prompt: "使用 $audit-personnel-incentive 提取结算与转账事实，再由确定性程序使用商品数据库核对销售 Excel 并生成人员激励结果；不读取商品图片库。"

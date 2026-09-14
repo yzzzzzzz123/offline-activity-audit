@@ -1,69 +1,101 @@
 ---
 name: audit-poster-material
-description: Audit poster, lightbox, counter-display, printed-prop, and other material-production reimbursement packages from a signed promotional contract, invoice or receipt, stamped settlement form, and watermarked finished-product photos. Use when evidence must be checked against contract item, quantity, unit price, amount, activity period, location, production result, dimensions, placement, referenced attachments, and seals, while the customer-facing result must list only blocking errors and exact resubmission actions.
+description: 使用已签署促销合同、发票或收据、盖章结算单和带水印完工照片，核销海报、灯箱、柜台陈列、印刷道具及其他物料制作报销材料包。适用于需要核对合同项目、数量、单价、金额、活动期间、地点、制作结果、尺寸、摆放位置、合同引用附件和印章，并分别输出具体错误原因及处理方式的任务。
 ---
 
-# Audit Poster Material
+# 海报/物料制作核销
 
-Build the evidence chain `signed contract -> invoice/receipt -> stamped settlement -> watermarked finished-product photos`. Matching totals alone never proves that every contracted material was produced or displayed.
+涉及商品知识时，先读取[数据库知识规则](../../shared/product-database/audit-knowledge.md)，统一通过
+`audit_core.product_database.load_product_catalog` 查询数据库；需要参考图片时，只按数据库的 `image_manifest_key` 从私有 OSS 取图；不存在本地图库入口或回退。
+沿用本场景原有业务证据链，数据源调整不额外增加商品主账检查条件。
 
-## Required reading
+生成客户错误原因和处理方式前，必须读取并执行[统一文案规范](../orchestrate-offline-audit/references/error-reasons.md)。
+错误原因只写具体错误事实，建议只写处理方式；涉及的业务文件区域只列相关实际文件 basename；回调只保留原因。核销类型由 ZIP 名称的唯一已登记标记确定，AI 不得改类。ZIP 名称无法唯一分类时由编排器直接打回，不调用本 Skill 或 AI；已知类型的错件、缺件及内部文件误命名仍继续审核或材料诊断。
 
-Read [audit-rules.md](references/audit-rules.md) and [evidence.schema.json](references/evidence.schema.json) completely before extracting or judging. Runtime code also validates [field-photo-quantity-calibrations.json](references/field-photo-quantity-calibrations.json) and [document-fact-calibrations.json](references/document-fact-calibrations.json); neither registry is model evidence, and neither may be included in a prompt.
+建立证据链 `已签署合同 -> 发票/收据 -> 盖章结算单 -> 带水印完工照片`。仅金额合计一致，绝不能
+证明每项合同物料都已制作或陈列。
 
-## Scope
+## 必读内容
 
-Use this Skill for poster and display-prop production costs, including lightboxes, counter displays, shelf cards, backboards, standees, printed posters, and comparable finished materials.
+提取或判断前，必须完整读取 [audit-rules.md](references/audit-rules.md) 和
+[evidence.schema.json](references/evidence.schema.json)。运行代码还会验证
+[field-photo-quantity-calibrations.json](references/field-photo-quantity-calibrations.json) 和
+[document-fact-calibrations.json](references/document-fact-calibrations.json)；这两个登记表都不是
+模型证据，也不得包含在提示词中。
 
-When one ZIP mixes other activity evidence, audit only this material-production category. Preserve excluded filenames for traceability, but do not turn POS sales, product identity, personnel incentives, transfers, or unrelated activities into poster-material errors.
+## 适用范围
 
-## Trust boundary
+本 Skill 用于海报和陈列道具制作费用，包括灯箱、柜台陈列、货架卡、背板、立牌、印刷海报及
+类似完工物料。
 
-Vision AI receives only the contract image, invoice or receipt image, settlement image, and submitted finished-product photos. It extracts visible facts into the schema and must not:
+一个 ZIP 混入其他活动证据时，只核销该物料制作类别。为追溯保留被排除文件名，但不要把 POS
+销售、商品身份、人员激励、转账或无关活动变成海报物料错误。
 
-- calculate an approved amount or make a reimbursement decision;
-- infer a missing contract attachment, company template, dimension, address, date, quantity, seal, or line item;
-- multiply one sample photo into unsubmitted stores or units;
-- use an amount match to repair missing production evidence.
+## 信任边界
 
-Deterministic code owns archive safety, source-role binding, date and amount comparisons, entity-name normalization, quantity coverage, issue grouping, and the final decision.
+视觉 AI 只能接收合同图片、发票或收据图片、结算单图片和已提交完工照片。它把可见事实提取到
+schema 中，并且不得：
 
-For a visual quantity boundary that the user has explicitly accepted as part of the permanent delivery standard, deterministic code may reuse the accepted aggregate only through the transparent photo calibration registry. A calibration must match the complete ordered sequence of source basenames and original-file SHA-256 values exactly. A byte change, added/removed photo, renamed photo, or changed order disables it. The registry may override only its declared material quantity and photo-coverage facts; it cannot rewrite OCR text, dates, locations, dimensions, documents, amounts, or any other case.
+- 计算核准金额或作出报销决定；
+- 推断缺失的合同附件、公司模板、尺寸、地址、日期、数量、印章或明细项目；
+- 把一张样本照片扩展为未提交的门店或单元；
+- 使用金额一致来修补缺失的制作证据。
 
-The same narrow rule applies separately to user-verified monetary facts on difficult visual documents. The document calibration must match the complete ordered contract, invoice/receipt, and settlement basename plus original-file SHA-256 sequence exactly before it may replace only the three declared amount fields. A changed byte, filename, document membership, or order disables it; it cannot repair a party, date, line item, seal, attachment, photo, or unrelated case. Never expose either calibration ID or hashes in customer-facing HTML.
+确定性代码负责压缩包安全、来源角色绑定、日期和金额比较、实体名称规范化、数量覆盖、问题分组
+及最终决定。
 
-## Mandatory controls
+对于用户已明确接受并纳入永久交付标准的视觉数量边界，确定性代码只能通过透明照片校准登记表
+复用已接受的汇总。校准必须与来源 basename 和原始文件 SHA-256 的完整有序序列严格匹配。
+任何字节变化、增删照片、照片改名或顺序变化都会使其失效。登记表只能覆盖它声明的物料数量
+和照片覆盖事实；不能改写 OCR 文字、日期、地点、尺寸、文档、金额或其他案例。
 
-Audit all four evidence families independently:
+同一狭义规则单独适用于用户已验证的困难视觉文档金额事实。文档校准只有与合同、发票/收据、
+结算单 basename 及原始文件 SHA-256 的完整有序序列严格匹配后，才可以只替换三个已声明金额
+字段。字节、文件名、文档成员或顺序发生变化都会使其失效；它不能修补相关方、日期、明细项、
+印章、附件、照片或无关案例。绝不能在面向客户的 HTML 中暴露任一校准 ID 或哈希。
 
-1. **Invoice or receipt**: the billed/paying title must correspond to the contract company; issue date, total amount, and material-production description must be legible. When the contract contains multiple material items, a generic phrase such as `物料制作` is insufficient unless the ticket or an attached detail lists each item, quantity, unit price, and subtotal.
-2. **Finished-product photos**: every relied-on photo must visibly show date, shooting time, and a location capable of identifying the store or address. The date must fall inside the contract activity period. The submitted set must jointly show the finished content, physical placement, and dimensions or a reliable scale. Count only units and locations actually evidenced; never extrapolate from samples.
-3. **Settlement form**: require the recognizable company settlement form, customer/project, activity period, itemized quantity and unit price, total amount, settlement date, and customer seal. Do not claim template identity from layout alone when the required form cannot be recognized.
-4. **Promotional contract**: require a visible signed or sealed contract with party, period, contracted items, quantities, prices, and amount. If the signed page refers to a store list, quotation, design, specification, or other attachment, that referenced attachment is part of the contract evidence and must be present.
+## 必核控制
 
-Then reconcile the evidence directionally:
+独立核验以下四类证据：
 
-- contract party and items -> invoice/receipt;
-- contract period, items, quantities, locations, content, dimensions, and placement -> photos;
-- contract party, period, items, quantities, prices, and amount -> settlement;
-- invoice/receipt amount and item scope <-> settlement and contract.
+1. **发票或收据**：受票/付款抬头必须与合同公司对应；开具日期、总金额和物料制作说明必须
+   清晰可读。合同包含多个物料项目时，只有 `物料制作` 之类的笼统表述不足以成立，除非票据
+   或附加明细列出每个项目、数量、单价和小计。
+2. **完工照片**：每张采用的照片都必须清楚显示日期、拍摄时间及能够识别门店或地址的地点。
+   日期必须位于合同活动期内。已提交照片集合必须共同展示完工内容、实际摆放位置，以及尺寸
+   或可靠比例。只计数实际有证据的单元和地点，绝不能从样本外推。
+3. **结算单**：必须识别出公司结算单、客户/项目、活动期间、分项数量和单价、总金额、结算
+   日期及客户印章。无法识别必要表单时，不得仅根据版式声称模板身份成立。
+4. **促销合同**：必须有可见的已签字或盖章合同，包含相关方、期间、合同项目、数量、价格和
+   金额。已签署页面指向门店清单、报价、设计、规格或其他附件时，该引用附件属于合同证据，
+   必须提供。
 
-Names may be normalized and conservatively fuzzy when the correspondence is unique and identifiers do not conflict. Amounts, dates, quantities, and explicit codes remain exact.
+随后按方向核对证据：
 
-## Decision and output
+- 合同相关方和项目 -> 发票/收据；
+- 合同期间、项目、数量、地点、内容、尺寸和摆放位置 -> 照片；
+- 合同相关方、期间、项目、数量、价格和金额 -> 结算单；
+- 发票/收据金额和项目范围 <-> 结算单及合同。
 
-Every failed mandatory control blocks automatic reimbursement until corrected. Calculate support only after every applicable document, quantity, timing, watermark, dimension, placement, and seal control passes.
+对应关系唯一且标识符不冲突时，名称可以规范化并进行保守模糊匹配。金额、日期、数量和明确
+编码保持严格一致。
 
-The customer-facing HTML is error-only:
+## 决定与输出
 
-- omit passing controls and unrelated files;
-- group repeated defects by source family, not by every photo;
-- show source filename(s), observed fact, expected fact, reimbursement impact, confidence, and one concrete resubmission action;
-- name every affected photo when a defect is file-specific;
-- never expose similarity scores, model reasoning, hashes, candidate sets, JSON, or internal engineering terms;
-- if there are no blocking errors, show one plain statement that no reimbursement-blocking error was found.
+任何必核控制失败都会阻断自动报销，直至补正。只有所有适用的文档、数量、时间、水印、尺寸、
+摆放位置和印章控制均通过后，才能计算支持金额。
 
-Formal runs occur only through the parent command. Use `--scenario poster_material` when the input folder also contains other audit packages and this run must publish only the poster/material result:
+面向客户的 HTML 只展示错误：
+
+- 省略通过项和无关文件；
+- 按来源类别合并重复缺陷，不为每张照片单独重复；
+- 错误原因仅展示必要来源文件名、缺失或不可读字段、实际与应有差异；对应操作只展示在处理方式；
+- 缺陷与具体文件相关时，列出每张受影响照片；
+- 绝不暴露相似度分数、模型推理、哈希、候选集、JSON 或内部工程术语；
+- 没有阻断错误时不生成错误条目，不以通过事实或通用结论填充原因。
+
+正式运行只能通过父级命令。输入目录还包含其他核销材料包，而本次运行只需发布海报/物料结果
+时，使用 `--scenario poster_material`：
 
 ```powershell
 py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model> --scenario poster_material

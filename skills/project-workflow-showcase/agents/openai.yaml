@@ -1,0 +1,4 @@
+interface:
+  display_name: "项目工作流技术展示"
+  short_description: "读取真实项目源码，生成可追溯的单文件技术展示 HTML"
+  default_prompt: "使用 $project-workflow-showcase 检查这个代码仓库，并创建一份有源码依据、自包含的项目工作流技术展示 HTML。"

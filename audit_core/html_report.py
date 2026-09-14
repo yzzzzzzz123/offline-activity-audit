@@ -453,16 +453,10 @@ def verify_html_report(
         'id="eoErrorList"',
         'id="eoErrorType"',
         'id="eoErrorCategory"',
-        'id="eoErrorConfidence"',
-        'id="eoErrorKeyword"',
-        'id="eoErrorVisible"',
-        'id="eoErrorFacetSummary"',
         'id="eoErrorFilterEmpty"',
         'id="eoPassList"',
         'id="eoPassType"',
         'id="eoPassCategory"',
-        'id="eoPassConfidence"',
-        'id="eoPassKeyword"',
         'id="eoPassFacetSummary"',
         'id="eoPassFilterEmpty"',
         'class="eo-tab"',
@@ -472,7 +466,7 @@ def verify_html_report(
         'data-pass-confidence-score=',
         'data-eo-view="passed"',
         "核销类型 ·",
-        "正确检查项日志",
+        "筛选正确检查项",
     )
     missing_controls = [control for control in required_controls if control not in html]
     if missing_controls:

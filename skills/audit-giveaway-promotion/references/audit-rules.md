@@ -1,105 +1,88 @@
-# Extra-giveaway audit rules
+# 额外搭赠核销规则
 
-## Scope and audit object
+## 范围与核销对象
 
-`giveaway_promotion` audits one extra-giveaway reimbursement package. It reimburses the separately
-agreed value of promotional gift goods supplied in addition to normal sales. It is not the normal
-shipment value and is independent from maintenance fees, special-approval other expenses, personnel
-incentives, display fees, material production, or direct-operation fees.
+`giveaway_promotion` 核销一个额外搭赠报销材料包。报销对象是在正常销售之外另行约定提供的促销
+赠品价值，而不是正常发货金额；它独立于维护费用、特殊审批其他费用、人员激励、陈列费用、物料
+制作或直营费用。
 
-The customer-facing object is one grouped blocking issue. The archive marker helps route the package
-but never proves fee nature or eligibility.
+面向客户的对象是一个分组阻断问题。压缩包标记有助于路由材料包，但绝不能证明费用性质或资格。
 
-## Required evidence
+## 必备证据
 
-All roles below are blocking:
+以下所有角色均为阻断项：
 
-1. **Signed promotional contract**: exactly one visible contract executed by the dealer. It states
-   the dealer, activity period, eligible purchased products, gift products, buy/gift ratio, gift
-   quantity or calculable plan, gift unit value, activity budget, and reimbursement evidence.
-2. **Stamped settlement**: exactly one company-form settlement bearing the dealer seal. It separates
-   normal shipment value from the extra-gift claim and itemizes gift quantity, unit value,
-   calculation, period, and claimed amount.
-3. **System sales/delivery statement**: exactly one visible system or dealer sales/delivery statement
-   with source rows and a normal-shipment total. The representative shape may be image-only; no
-   spreadsheet is invented as a requirement.
-4. **Store receipts**: one or more activity-period receipts. Each useful receipt shows at least one
-   eligible paid product and one zero-value gift line. Paid and gift quantities must obey the contract
-   ratio within that receipt; partial ratios are not added across unrelated receipts.
-5. **Activity photos**: one or more photos showing the store or location, participating products, and
-   the extra-giveaway execution during the contract period. A receipt is not an activity photo.
+1. **已签署促销合同**：恰好一份由经销商签署的可见合同。合同写明经销商、活动期间、符合条件
+   的购买商品、赠品、购赠比例、赠品数量或可计算计划、赠品单位价值、活动预算和报销证据。
+2. **盖章结算单**：恰好一份带经销商印章的公司表单结算单。结算单将正常发货金额与额外赠品
+   申报分开，并分项列示赠品数量、单位价值、计算、期间和申报金额。
+3. **系统销售/发货明细**：恰好一份可见的系统或经销商销售/发货明细，包含来源行和正常发货
+   合计。代表性材料可能只有图片；不得凭空把电子表格设为必备要求。
+4. **门店小票**：一张或多张活动期内小票。每张有效小票至少显示一种符合条件的付费商品和一条
+   零价值赠品行。付费数量与赠品数量必须在该小票内部满足合同比例；不得跨无关小票相加局部比例。
+5. **活动照片**：一张或多张合同期内照片，展示门店或地点、参与商品和额外搭赠执行。小票不是
+   活动照片。
 
-Supporting documents are allowed but cannot replace a required authority role. Missing roles become
-formal grouped issues. More than one contract, settlement, or sales/delivery statement is ambiguous
-and stops evidence acceptance.
+允许提供支持文件，但它们不能替代必需权威角色。缺失角色形成正式分组问题。合同、结算单或
+销售/发货明细超过一份会产生歧义，并停止证据接收。
 
-## Visible-fact extraction
+## 可见事实提取
 
-Return one `documents` item for every supplied visual source. Preserve the neutral intake
-`role=visual_document` and classify `document_type` only from the visible title and content, never from
-the camera-export filename. Do not copy values across files.
+每个已提供视觉来源返回一条 `documents` 记录。保留中性接入角色 `role=visual_document`，并且只
+根据可见标题和内容判断 `document_type`，绝不能根据相机导出文件名判断。不得跨文件复制数值。
 
-For every document preserve parties, dealer, store, title, date/period, visible seals, gift wording,
-shipment amount, extra-gift amount, quantity, unit, unit value, formula, product rows, receipt number,
-and limitations. Use `null`, `unclear`, or an explicit limitation where the image does not prove a
-fact.
+对每份文件保留相关方、经销商、门店、标题、日期/期间、可见印章、赠品表述、发货金额、额外
+赠品金额、数量、单位、单位价值、公式、商品行、小票号和局限。图片不能证明某项事实时，使用
+`null`、`unclear` 或明确局限。
 
-Classify product rows independently:
+独立分类商品行：
 
-- `eligible_sale`: a paid product eligible to trigger a gift;
-- `gift`: an extra or zero-value gift product;
-- `shipment`: a normal system sales/delivery row when its gift status is not printed;
-- `summary`: a printed total, which is not a detail row;
-- `other`: another visible product row.
+- `eligible_sale`：符合触发赠品条件的付费商品；
+- `gift`：额外或零价值赠品；
+- `shipment`：没有印刷赠品状态的普通系统销售/发货行；
+- `summary`：印刷合计，不属于明细行；
+- `other`：其他可见商品行。
 
-A dealer seal is visible only when the seal itself can be seen. A company name printed as text is not
-a seal. A contract is executed only when a visible signature or seal is present. A store receipt gift
-line must retain its printed amount, including `0.00`; do not infer zero from words such as `送`.
+只有印章本身确实可见时，才能认定经销商印章可见。印刷的公司名称文字不是印章。只有存在可见
+签字或印章时，才能认定合同已签署。门店小票赠品行必须保留其印刷金额，包括 `0.00`；不得根据
+`送` 等文字推断金额为零。
 
-## Deterministic controls
+## 确定性控制
 
-- `required_materials`: all five required evidence families are present; singleton roles are unique.
-- `fee_nature`: the contract and settlement visibly describe extra giveaway or gift support. Normal
-  shipment, maintenance, personnel incentive, display, or another fee cannot be relabeled by the ZIP.
-- `promotional_contract`: dealer execution, period, product scopes, ratio, gift plan, unit value,
-  budget, and evidence requirements are visible.
-- `settlement`: company structure, dealer seal, period, separate shipment and gift amounts, gift
-  detail, calculation, and claim are visible.
-- `sales_delivery_statement`: the statement identifies its dealer/store context, contains detail
-  rows and a printed normal-shipment total, and carries a visible dealer/system confirmation mark when
-  the document is not an independently verifiable system export.
-- `party_alignment`: the dealer identity uniquely corresponds across contract, settlement, and
-  sales/delivery statement. Store identities in the sales statement and submitted receipts must also
-  be uniquely compatible when printed.
-- `period_alignment`: settlement, receipts, sales/delivery date where applicable, and activity photos
-  fall within the signed contract period. A filename or EXIF value is not a visible date.
-- `shipment_reconciliation`: the system sales/delivery total equals the settlement's normal shipment
-  amount to RMB 0.01. It is never treated as the gift claim.
-- `product_correspondence`: sales/delivery and receipt paid products map uniquely to contract eligible
-  products; gift rows map uniquely to contract gift products. Product names may be uniquely fuzzy and
-  specification-compatible. Comparable printed product codes and valid 69 codes are strict.
-- `receipt_execution`: every relied-on receipt has paid and zero-value gift lines and satisfies the
-  explicit buy/gift ratio using its own quantities.
-- `activity_execution`: at least one in-period activity photo visibly proves location, participating
-  product, and extra-giveaway execution.
-- `duplicate_evidence`: identical image bytes cannot prove separate roles or repeated execution.
-- `amount_recalculation`: itemized gift quantity multiplied by the explicit gift unit value, or the
-  sum of complete gift detail rows, equals the contract budget and stamped settlement claim. Never
-  derive a unit value by dividing totals.
+- `required_materials`：五类必备证据全部存在，且单例角色唯一。
+- `fee_nature`：合同和结算单可见内容描述额外搭赠或赠品支持。正常发货、维护费用、人员激励、
+  陈列或其他费用不能由 ZIP 重新命名。
+- `promotional_contract`：经销商签署、期间、商品范围、比例、赠品计划、单位价值、预算和证据
+  要求均可见。
+- `settlement`：公司结构、经销商印章、期间、分开的发货和赠品金额、赠品明细、计算及申报均
+  可见。
+- `sales_delivery_statement`：明细能够识别经销商/门店上下文，包含明细行和印刷正常发货合计；
+  文件不是可独立验证的系统导出时，还必须带有可见经销商/系统确认标记。
+- `party_alignment`：经销商身份在合同、结算单和销售/发货明细之间唯一对应。销售明细和已提交
+  小票印有门店身份时，门店身份也必须唯一相容。
+- `period_alignment`：结算单、小票、适用时的销售/发货日期和活动照片均位于已签署合同期内。
+  文件名或 EXIF 值不是可见日期。
+- `shipment_reconciliation`：系统销售/发货合计与结算单正常发货金额精确到人民币 0.01 元一致。
+  该金额绝不能视为赠品申报。
+- `product_correspondence`：销售/发货及小票中的付费商品唯一映射到合同合格商品；赠品行唯一映射
+  到合同赠品。商品名称可唯一模糊且规格相容。可比的印刷产品编码和有效 69 码保持严格。
+- `receipt_execution`：每张采用的小票都有付费行和零价值赠品行，并以自身数量满足明确购赠比例。
+- `activity_execution`：至少一张活动期内照片可见内容证明地点、参与商品及额外搭赠执行。
+- `duplicate_evidence`：完全相同的图片字节不能证明不同角色或重复执行。
+- `amount_recalculation`：分项赠品数量乘明确赠品单位价值，或完整赠品明细行合计，等于合同预算
+  和盖章结算申报。绝不能通过总额相除推导单位价值。
 
-## Amount and outcome
+## 金额与结论
 
-The claim source is the dealer-stamped settlement's extra-gift amount. The normal shipment amount is
-displayed only as a reconciliation fact. Use `ROUND_HALF_UP` to two decimals.
+申报金额来源是经销商盖章结算单中的额外赠品金额。正常发货金额只作为核对事实展示。使用
+`ROUND_HALF_UP` 保留两位小数。
 
-If every blocking control passes, support the settlement claim only when it equals the signed
-contract budget and deterministic gift-detail recalculation. If any control fails or calculation is
-not reproducible, support `0.00`, hold the entire claim, and return `human_review` with the label
-`资料需补正`. A fully closed claim returns `pass` and `可核销`.
+只有全部阻断控制通过，且结算申报等于已签署合同预算和确定性赠品明细复算时，才支持结算申报。
+任何控制失败或计算无法复现时，支持 `0.00`、暂缓全部申报，并返回 `human_review` 及标签
+`资料需补正`。完全闭环的申报返回 `pass` 和 `可核销`。
 
-## Error grouping
+## 错误分组
 
-Emit one issue per failed control, not one issue per field or receipt line. Every issue names the
-affected business files, states the visible/deterministic cause, explains the reimbursement impact,
-and requests the exact corrected or missing material. Do not expose prompts, schemas, temporary
-paths, model reasoning, hashes, or other implementation terms in customer-facing rows.
+每个失败控制生成一个问题，不要为每个字段或小票行单独生成。每个问题都要列出受影响业务文件、
+说明可见/确定性原因、解释报销影响，并要求准确的更正或缺失材料。面向客户的行不得暴露提示词、
+schema、临时路径、模型推理、哈希或其他实现术语。

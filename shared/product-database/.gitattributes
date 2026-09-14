@@ -1,0 +1,5 @@
+# The Linux container must receive LF scripts even after a Windows checkout.
+*.sh text eol=lf
+*.sql text eol=lf
+*.yaml text eol=lf
+*.py text eol=lf

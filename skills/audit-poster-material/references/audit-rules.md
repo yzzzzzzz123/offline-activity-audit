@@ -1,81 +1,98 @@
-# Poster/material-production deterministic rules
+# 海报/物料制作确定性规则
 
-## Evidence order
+## 证据顺序
 
-Use the signed contract as the business baseline. Audit in this order:
+以已签署合同作为业务基准。按以下顺序核销：
 
-1. signed contract completeness and referenced attachments;
-2. invoice or receipt title, date, item detail, and amount;
-3. stamped settlement form, line items, period, and amount;
-4. finished-product photos: watermark, period, location, content, placement, dimensions, and quantity coverage;
-5. cross-document party, item, date, quantity, unit-price, any explicitly listed subtotal, and total reconciliation;
-6. supported amount and error-only output.
+1. 已签署合同完整性及其引用附件；
+2. 发票或收据抬头、日期、项目明细和金额；
+3. 盖章结算单、明细项目、期间和金额；
+4. 完工照片：水印、期间、地点、内容、摆放位置、尺寸和数量覆盖；
+5. 跨文档核对相关方、项目、日期、数量、单价、任何明确列出的小计及合计；
+6. 支持金额和仅错误输出。
 
-No later source may rewrite an earlier source. A settlement total cannot fill missing invoice detail; a photo cannot create a missing contract store list; one sample photo cannot prove unsubmitted units.
+任何后续来源都不能改写先前来源。结算合计不能填补发票缺失明细；照片不能创建缺失的合同门店
+清单；一张样本照片不能证明未提交单元。
 
-## Contract
+## 合同
 
-- Require a visible customer/distributor party, activity period, material item, quantity, price or amount basis, and customer signature/seal.
-- Preserve each contracted item separately. Normalize only synonymous physical forms such as `台上架` and `台面展示架`; do not merge a lightbox with a counter display.
-- If the contract says `见附件`, the referenced store list, quotation, design/specification, or other attachment is mandatory. A signed cover page does not prove the missing attachment.
-- Contract dates, quantities, unit prices, subtotals, and totals are exact facts.
+- 必须有可见客户/经销商一方、活动期间、物料项目、数量、价格或金额依据及客户签字/印章。
+- 每个合同项目分别保留。只规范化 `台上架` 和 `台面展示架` 之类的同义实体形式；不要把灯箱与
+  柜台陈列合并。
+- 合同写明 `见附件` 时，引用的门店清单、报价、设计/规格或其他附件均为必备资料。已签署封面
+  不能证明缺失附件。
+- 合同日期、数量、单价、小计和合计均为严格事实。
 
-## Invoice or receipt
+## 发票或收据
 
-- Either an invoice or receipt is allowed.
-- The title/payer may omit harmless legal suffixes such as `（个体工商户）` when the remaining name corresponds uniquely to the contract party.
-- Require a legible issue date and total amount.
-- The expense description must identify poster/material production. When the contract has more than one distinct item or unit basis, require an itemized ticket or attached detail containing description, quantity, unit price, and subtotal for each contracted item.
-- A single generic line `物料制作` is not itemized evidence for multiple contracted materials even when its total equals the contract.
-- A user-verified permanent-standard amount regression may replace only contract budget, invoice/receipt total, and settlement total when the complete ordered basename plus original-byte SHA-256 sequence of all three visual documents exactly matches `document-fact-calibrations.json`. Any changed, renamed, added, removed, or reordered document disables this calibration and leaves the new visual extraction in force. The registry cannot rewrite party, date, detail, seal, attachment, photo, or any other field; it is deterministic runtime data, never prompt context or customer-facing evidence.
+- 允许使用发票或收据。
+- 抬头/付款方省略 `（个体工商户）` 之类无实质影响的法律后缀时，只要剩余名称与合同相关方
+  唯一对应即可。
+- 必须有清晰可读的开具日期和总金额。
+- 费用说明必须能识别海报/物料制作。合同存在多个不同项目或单位依据时，要求提供逐项票据或
+  附加明细，包含每个合同项目的说明、数量、单价和小计。
+- 即使合计与合同一致，单独一条笼统的 `物料制作` 也不能作为多个合同物料的分项证据。
+- 用户已验证的永久标准金额回归，只有三份视觉文档的完整有序 basename 加原始字节 SHA-256
+  序列与 `document-fact-calibrations.json` 严格匹配时，才可以仅替换合同预算、发票/收据合计和
+  结算合计。任何文档变化、改名、增删或重排都会使该校准失效，并继续采用新的视觉提取。登记表
+  不能改写相关方、日期、明细、印章、附件、照片或任何其他字段；它是确定性运行数据，绝不是
+  提示词上下文或面向客户的证据。
 
-## Settlement
+## 结算单
 
-- Recognize the company settlement form from its title and required business fields; do not infer a template match from a blank or generic page.
-- Require customer/project, activity period, each material quantity and unit price, total amount, settlement date, and customer seal.
-- Compare quantities, unit prices, any explicitly listed subtotals, and total exactly with the contract. A company settlement template may state quantity and unit price for each item plus one overall total without printing each computed line subtotal; that layout is not a defect by itself. Compare the total exactly with the invoice/receipt.
+- 根据标题和必备业务字段识别公司结算表；不得从空白或通用页面推断模板匹配。
+- 必须有客户/项目、活动期间、每项物料数量和单价、总金额、结算日期及客户印章。
+- 与合同严格比较数量、单价、任何明确列出的小计和合计。公司结算模板可能列出每项数量、单价
+  及一个整体合计，而不印刷每条计算小计；这种版式本身不是缺陷。总额与发票/收据严格比较。
 
-## Finished-product photos
+## 完工照片
 
-For every relied-on photo, independently extract:
+对每张采用的照片，独立提取：
 
-- exact basename;
-- complete visible date and shooting time;
-- visible location text identifying an address, store, or unique branch;
-- material type and count actually visible;
-- finished content and physical display position;
-- visible dimension text, ruler, scale, or another reliable physical-size basis.
+- 准确 basename；
+- 完整可见日期和拍摄时间；
+- 能够识别地址、门店或唯一分店的可见地点文字；
+- 实际可见的物料类型和数量；
+- 完工内容及实际摆放位置；
+- 可见尺寸文字、尺具、比例或其他可靠物理尺寸依据。
 
-Rules:
+规则：
 
-- Date, time, and location must appear in the photo watermark. Filename or EXIF alone does not satisfy the visible-watermark requirement.
-- Every visible date must fall inside the contract activity period.
-- Store/branch wording may be uniquely compatible rather than character-for-character identical. A generic chain name without a branch or address is insufficient when multiple stores exist.
-- Multiple photos may jointly prove content, placement, and dimensions, but the final set must cover all three.
-- Count only independently visible finished units. Do not treat product packs placed on one display as multiple contracted displays.
-- Quantity support cannot exceed the units and unique locations actually evidenced. Do not extrapolate from representative samples unless the contract explicitly authorizes sample acceptance.
-- When a contract claims distribution across a store list, exact store coverage is unverifiable until that referenced list is present.
-- A user-accepted permanent-standard quantity regression may replace only the declared aggregate material count and contributing-photo count when the complete ordered basename plus original-byte SHA-256 sequence exactly matches `field-photo-quantity-calibrations.json`. Any changed, renamed, added, removed, or reordered photo disables the calibration and leaves the new visual extraction in force. This registry is deterministic runtime data, never prompt context or customer-facing evidence.
+- 日期、时间和地点必须出现在照片水印中。只有文件名或 EXIF 不满足可见水印要求。
+- 每个可见日期都必须位于合同活动期间内。
+- 门店/分店表述可以是唯一相容，而不要求逐字相同。存在多家门店时，没有分店或地址的通用
+  连锁名称不足以成立。
+- 多张照片可以共同证明内容、摆放位置和尺寸，但最终集合必须覆盖全部三项。
+- 只计数独立可见的完工单元。不要把一个陈列上的多个商品包装当作多个合同陈列。
+- 数量支持不能超过实际有证据的单元和唯一地点。除非合同明确允许样本验收，不得从代表性样本
+  外推。
+- 合同声称覆盖门店清单时，在提供该引用清单前，准确门店覆盖无法核验。
+- 用户已接受的永久标准数量回归，只有完整有序 basename 加原始字节 SHA-256 序列与
+  `field-photo-quantity-calibrations.json` 严格匹配时，才可以仅替换声明的物料汇总数量和参与
+  照片数量。任何照片变化、改名、增删或重排都会使校准失效，并继续采用新的视觉提取。该登记表
+  是确定性运行数据，绝不是提示词上下文或面向客户的证据。
 
-## Grouping errors
+## 错误分组
 
-Customer output groups defects once per source family:
+缺陷按以下类别分组合并；类别作为分类元数据，不能代替具体错误原因或在原因中重复标题：
 
-- `合同材料不完整` for a missing referenced attachment or missing seal;
-- `票据费用明细不完整` for missing item/quantity/unit-price/subtotal detail;
-- `现场照片执行证据不完整` for watermark, period, location, quantity, content, placement, or dimension gaps;
-- `结算单不合格` for template/field/seal defects;
-- `金额或项目不一致` for exact cross-document conflicts.
+- 缺少引用附件或印章时使用 `合同材料不完整`；
+- 缺少项目/数量/单价/小计明细时使用 `票据费用明细不完整`；
+- 水印、期间、地点、数量、内容、摆放位置或尺寸存在缺口时使用 `现场照片执行证据不完整`；
+- 模板/字段/印章存在缺陷时使用 `结算单不合格`；
+- 跨文档严格冲突时使用 `金额或项目不一致`。
 
-One grouped issue may list several failed subcontrols. Do not create ten identical cards merely because ten photos share the same missing dimension evidence.
+一个分组问题可以列出多个失败子控制。十张照片都缺少相同尺寸证据时，不要创建十张相同卡片。
+客户文案执行[统一错误原因与处理方式规范](../../orchestrate-offline-audit/references/error-reasons.md)：原因只写相关文件的具体缺失、不可读或差异，建议只在处理方式；涉及的业务文件区域只列相关实际 basename，不展开角色、事实、数量、参考、比较及限制。
 
-## Amount
+## 金额
 
-Automatic support requires every mandatory control to pass. When any blocking issue remains:
+自动支持要求全部必核控制通过。仍有任何阻断问题时：
 
-- suggested approved amount is zero;
-- temporarily held amount equals the claim amount;
-- conclusion is `human_review`;
-- resubmission names the exact missing source or visible fact.
+- 建议核准金额为零；
+- 暂缓金额等于申报金额；
+- 结论为 `human_review`；
+- 补交要求列出准确缺失来源或可见事实。
 
-If every control passes, support the lower nonnegative exact amount among the contract cap, settlement claim, and invoice/receipt total. Never infer a unit price by dividing a total.
+全部控制通过时，支持金额取合同上限、结算申报和发票/收据合计中的较小非负准确金额。绝不能
+用总额相除推断单价。

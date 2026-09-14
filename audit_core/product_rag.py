@@ -3,21 +3,11 @@ from __future__ import annotations
 import re
 import unicodedata
 from difflib import SequenceMatcher
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
-from .common import AuditError, load_json, sha256_file, validate_json
+from .common import AuditError
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SHARED_PRODUCT_RAG_DIR = (
-    PROJECT_ROOT / "shared" / "canban-product-multimodal-knowledge-base"
-)
-CATALOG_RELATIVE_PATH = Path("references") / "product-rag.json"
-SCHEMA_RELATIVE_PATH = Path("references") / "product-rag.schema.json"
-PENDING_RELATIVE_PATH = Path("pending-barcode.json")
-PENDING_SCHEMA_RELATIVE_PATH = Path("references") / "product-rag-pending.schema.json"
 FIELD_SHORT_CODE_PATTERN = re.compile(
     r"(?<![0-9A-Za-z])([A-Za-z]{1,4})[\s\-－_]*([0-9]{1,4})(?![0-9A-Za-z])"
 )
@@ -43,26 +33,9 @@ def canonical_product_name(value: Any) -> str:
 
 
 def catalog_product_name_values(product: dict[str, Any]) -> list[str]:
-    """Return the authoritative name and catalog-controlled aliases for matching."""
-
-    values = [str(product.get("product_name") or "")]
-    values.extend(str(value) for value in product.get("aliases") or [])
-    values.extend(str(value) for value in product.get("product_code_aliases") or [])
-    values.append(str(product.get("variant") or ""))
-    values.extend(str(value) for value in product.get("variant_aliases") or [])
-    values.extend(str(value) for value in product.get("specification_aliases") or [])
-    for source in product.get("sources") or []:
-        observed_name = str(source.get("observed_product_name") or "").strip()
-        observed_specification = str(source.get("observed_specification") or "").strip()
-        observed_variant = str(source.get("observed_variant") or "").strip()
-        values.extend(
-            [
-                observed_name,
-                f"{observed_name}{observed_variant}{observed_specification}",
-                f"{observed_name}{observed_specification}{observed_variant}",
-            ]
-        )
-    return list(dict.fromkeys(value for value in values if value))
+    """名称比较只使用数据库商品名称；规格/款式可从该名称解析。"""
+    name = str(product.get("product_name") or "").strip()
+    return [name] if name else []
 
 
 def _fuzzy_product_name_text(value: Any) -> str:
@@ -142,24 +115,8 @@ def catalog_product_name_score(value: Any, product: dict[str, Any]) -> float:
 
 
 def _catalog_full_identity_name_score(value: Any, product: dict[str, Any]) -> float:
-    """Score the complete catalog identity without a generic alias shortcut.
-
-    Several variants may intentionally share a short catalog alias.  When that
-    makes the primary fuzzy score tie, the source text still needs to prefer the
-    variant whose authoritative name, specification, and variant add no
-    conflicting extra identity text.
-    """
-
-    identity_text = " ".join(
-        item
-        for item in (
-            str(product.get("product_name") or "").strip(),
-            str(product.get("variant") or "").strip(),
-            str(product.get("specification") or "").strip(),
-        )
-        if item
-    )
-    return product_name_similarity(value, identity_text)
+    """保持完整数据库名称的模糊相容度，不借用历史别名或观察文本。"""
+    return product_name_similarity(value, product.get("product_name") or "")
 
 
 def _rank_fuzzy_catalog_products(
@@ -229,147 +186,10 @@ def unique_fuzzy_catalog_product(
     return ranked[0][2], ranked[0][0]
 
 
-def _unique_text(values: list[str], label: str) -> None:
-    normalized = [value.strip().casefold() for value in values]
-    if len(normalized) != len(set(normalized)):
-        raise AuditError(f"商品视觉RAG中的{label}存在重复")
-
-
-@lru_cache(maxsize=8)
-def _load_product_rag_cached(knowledge_root_text: str) -> dict[str, Any]:
-    knowledge_root = Path(knowledge_root_text).resolve()
-    asset_root = knowledge_root.parent
-    catalog_path = knowledge_root / CATALOG_RELATIVE_PATH
-    schema_path = knowledge_root / SCHEMA_RELATIVE_PATH
-    catalog = load_json(catalog_path)
-    validate_json(catalog, schema_path)
-
-    products = list(catalog.get("products") or [])
-    _unique_text([str(item["product_id"]) for item in products], "product_id")
-    _unique_text([str(item["product_name"]) for item in products], "产品名称")
-    _unique_text(
-        [
-            str(item["product_code"])
-            for item in products
-            if str(item["product_code"]) != "未标注"
-        ],
-        "已确认产品编码",
-    )
-    _unique_text(
-        [
-            str(source["source_id"])
-            for item in products
-            for source in item.get("sources") or []
-        ],
-        "source_id",
-    )
-    _unique_text(
-        [
-            str(view["view_id"])
-            for item in products
-            for view in item.get("views") or []
-        ],
-        "view_id",
-    )
-
-    for product in products:
-        product_id = str(product["product_id"])
-        barcode = str(product["barcode_69"])
-        if not ean13_is_valid(barcode):
-            raise AuditError(f"商品视觉RAG的69码未通过EAN-13校验：{product_id}={barcode}")
-
-        product_code = str(product["product_code"])
-        product_code_aliases = [
-            str(value) for value in product.get("product_code_aliases") or []
-        ]
-        _unique_text(product_code_aliases, f"{product_id} 产品编码别名")
-        if product_code.strip().casefold() in {
-            value.strip().casefold() for value in product_code_aliases
-        }:
-            raise AuditError(f"商品视觉RAG主产品编码不能重复出现在别名中：{product_id}")
-
-        views = list(product.get("views") or [])
-        if not views and product.get("match_policy") != "candidate_only":
-            raise AuditError(
-                "商品视觉RAG缺少参考图时必须限制为candidate_only："
-                f"{product_id}"
-            )
-        _unique_text([str(item["view_id"]) for item in views], f"{product_id} view_id")
-        sources = list(product.get("sources") or [])
-        _unique_text([str(item["source_id"]) for item in sources], f"{product_id} source_id")
-
-        for view in views:
-            relative = Path(str(view["image_file"]))
-            if relative.is_absolute():
-                raise AuditError(f"商品视觉RAG图片必须使用共享仓库相对路径：{relative}")
-            image_path = (asset_root / relative).resolve()
-            if not image_path.is_relative_to(knowledge_root):
-                raise AuditError(f"商品视觉RAG图片越出共享知识库：{relative}")
-            if not image_path.is_file():
-                raise AuditError(f"商品视觉RAG图片不存在：{relative}")
-            expected_suffix = "" if product_code == "未标注" else f"__{product_code}"
-            if expected_suffix and not image_path.parent.name.endswith(expected_suffix):
-                raise AuditError(
-                    "商品视觉RAG正式目录未体现已确认产品编码："
-                    f"{product_id}={relative}"
-                )
-            actual_hash = sha256_file(image_path)
-            if actual_hash != str(view["sha256"]):
-                raise AuditError(
-                    "商品视觉RAG图片哈希不一致："
-                    f"{relative}，目录={view['sha256']}，实际={actual_hash}"
-                )
-    return catalog
-
-
-def load_product_rag(
-    knowledge_dir: str | Path = SHARED_PRODUCT_RAG_DIR,
-) -> dict[str, Any]:
-    """Load the project-level product identity ledger shared by every scenario."""
-
-    return _load_product_rag_cached(str(Path(knowledge_dir).resolve()))
-
-
-def clear_product_rag_cache() -> None:
-    """Drop cached catalog state after an explicit maintenance update."""
-
-    _load_product_rag_cached.cache_clear()
-
-
-def load_pending_product_rag(
-    knowledge_dir: str | Path = SHARED_PRODUCT_RAG_DIR,
-) -> dict[str, Any]:
-    """Validate quarantined reference images without exposing them to runtime matching."""
-
-    knowledge_root = Path(knowledge_dir).resolve()
-    asset_root = knowledge_root.parent
-    manifest_path = knowledge_root / PENDING_RELATIVE_PATH
-    if not manifest_path.exists():
-        return {"schema_version": "1.0", "pending_products": []}
-    manifest = load_json(manifest_path)
-    validate_json(manifest, knowledge_root / PENDING_SCHEMA_RELATIVE_PATH)
-    products = list(manifest.get("pending_products") or [])
-    _unique_text([str(item["pending_id"]) for item in products], "待补69码 pending_id")
-    for product in products:
-        pending_id = str(product["pending_id"])
-        views = list(product.get("views") or [])
-        _unique_text([str(item["view_id"]) for item in views], f"{pending_id} view_id")
-        for view in views:
-            relative = Path(str(view["image_file"]))
-            if relative.is_absolute():
-                raise AuditError(f"待补69码图片必须使用共享仓库相对路径：{relative}")
-            image_path = (asset_root / relative).resolve()
-            if not image_path.is_relative_to(knowledge_root):
-                raise AuditError(f"待补69码图片越出共享知识库：{relative}")
-            if not image_path.is_file():
-                raise AuditError(f"待补69码图片不存在：{relative}")
-            actual_hash = sha256_file(image_path)
-            if actual_hash != str(view["sha256"]):
-                raise AuditError(
-                    "待补69码图片哈希不一致："
-                    f"{relative}，清单={view['sha256']}，实际={actual_hash}"
-                )
-    return manifest
+def load_product_rag() -> dict[str, Any]:
+    """兼容旧函数名称；内容始终来自本次数据库查询。"""
+    from .product_database import load_product_catalog
+    return load_product_catalog()
 
 
 def product_by_id(catalog: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -379,19 +199,6 @@ def product_by_id(catalog: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
-def product_reference_images(
-    knowledge_dir: str | Path,
-    catalog: dict[str, Any],
-) -> list[tuple[dict[str, Any], dict[str, Any], Path]]:
-    knowledge_root = Path(knowledge_dir).resolve()
-    asset_root = knowledge_root.parent
-    return [
-        (product, view, (asset_root / str(view["image_file"])).resolve())
-        for product in catalog.get("products") or []
-        for view in product.get("views") or []
-    ]
-
-
 def resolve_product_reference_hits(
     raw_hits: list[dict[str, Any]],
     catalog: dict[str, Any],
@@ -399,6 +206,11 @@ def resolve_product_reference_hits(
     """Replace model-returned IDs with immutable catalog identity fields."""
 
     products = product_by_id(catalog)
+    if raw_hits and (catalog.get("data_source") or {}).get("type") == "mysql":
+        from .product_images import attach_product_reference_images
+        requested_ids = {str(hit.get("reference_product_id") or "") for hit in raw_hits}
+        selected = {**catalog, "products": [p for p in products.values() if p["product_id"] in requested_ids]}
+        products = product_by_id(attach_product_reference_images(selected))
     seen: set[str] = set()
     resolved: list[dict[str, Any]] = []
     for raw in raw_hits:
@@ -433,12 +245,10 @@ def resolve_product_reference_hits(
                 "reference_product_id": product_id,
                 "product_name": str(product["product_name"]),
                 "product_code": str(product["product_code"]),
-                "product_code_aliases": [
-                    str(value) for value in product.get("product_code_aliases") or []
-                ],
+                "product_code_aliases": [],
                 "barcode_69": str(product["barcode_69"]),
-                "specification": str(product["specification"]),
-                "variant": product.get("variant"),
+                "specification": "",
+                "variant": None,
                 "confidence": confidence,
                 "matched_view_ids": matched_views,
                 "visible_basis": [str(value) for value in raw.get("visible_basis") or []],
@@ -446,72 +256,6 @@ def resolve_product_reference_hits(
             }
         )
     return resolved
-
-
-def apply_visible_short_code_exact_hits(
-    resolved_hits: list[dict[str, Any]],
-    visible_text: list[str],
-    catalog: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Promote a visually matched candidate when its visible short code is unique.
-
-    Short packaging codes such as ``SP-1`` are deliberately tolerant of spaces,
-    case, and hyphen style. A code contributes to an exact field identity only
-    when it is a registered catalog alias for exactly one product and the model
-    has already matched that product to at least one registered reference view.
-    Shared codes such as the current ``SP-4`` group remain fuzzy until another
-    visible text and packaging feature disambiguates them.
-    """
-
-    visible_codes = {
-        f"{match.group(1).upper()}{match.group(2)}"
-        for value in visible_text
-        for match in FIELD_SHORT_CODE_PATTERN.finditer(str(value))
-    }
-    if not visible_codes:
-        return resolved_hits
-
-    alias_index: dict[str, dict[str, tuple[dict[str, Any], str]]] = {}
-    for product in catalog.get("products") or []:
-        for alias in product.get("product_code_aliases") or []:
-            match = FIELD_SHORT_CODE_PATTERN.fullmatch(str(alias).strip())
-            if match is None:
-                continue
-            canonical = f"{match.group(1).upper()}{match.group(2)}"
-            alias_index.setdefault(canonical, {})[str(product["product_id"])] = (
-                product,
-                str(alias),
-            )
-
-    result = [
-        {
-            **hit,
-            "matched_view_ids": list(hit.get("matched_view_ids") or []),
-            "visible_basis": list(hit.get("visible_basis") or []),
-            "limitations": list(hit.get("limitations") or []),
-        }
-        for hit in resolved_hits
-    ]
-    by_id = {str(hit["reference_product_id"]): hit for hit in result}
-    for canonical in sorted(visible_codes):
-        matches = alias_index.get(canonical) or {}
-        if len(matches) != 1:
-            continue
-        product, display_alias = next(iter(matches.values()))
-        if product.get("match_policy") == "candidate_only":
-            continue
-        product_id = str(product["product_id"])
-        basis = (
-            f"现场照片可见知识库登记短码 {display_alias}，"
-            "且该短码只对应这一种商品"
-        )
-        hit = by_id.get(product_id)
-        if hit is None or not hit.get("matched_view_ids"):
-            continue
-        hit["confidence"] = "exact"
-        if basis not in hit["visible_basis"]:
-            hit["visible_basis"].append(basis)
-    return result
 
 
 def apply_visible_catalog_text_exact_hits(

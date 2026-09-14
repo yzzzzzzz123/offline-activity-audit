@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Material diagnosis observations",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "archives"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "archives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "archive_id",
+          "scenario_candidates",
+          "documents"
+        ],
+        "properties": {
+          "archive_id": {
+            "type": "string"
+          },
+          "scenario_candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "scenario",
+                "confidence",
+                "basis"
+              ],
+              "properties": {
+                "scenario": {
+                  "type": "string",
+                  "enum": [
+                    "personnel_incentive",
+                    "promotional_display",
+                    "poster_material",
+                    "other_expense",
+                    "maintenance_fee",
+                    "giveaway_promotion",
+                    "price_difference_support",
+                    "pos_target_incentive",
+                    "entry_fee",
+                    "self_procured_gift_material"
+                  ]
+                },
+                "confidence": {
+                  "type": "string",
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ]
+                },
+                "basis": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "file_id",
+                "document_type",
+                "confidence",
+                "title",
+                "document_number",
+                "page_number",
+                "total_pages",
+                "visible_facts",
+                "limitations"
+              ],
+              "properties": {
+                "file_id": {
+                  "type": "string"
+                },
+                "document_type": {
+                  "type": "string",
+                  "enum": [
+                    "signed_promotional_contract",
+                    "settlement",
+                    "stamped_pos_data",
+                    "activity_photo",
+                    "invoice_receipt",
+                    "payment_record",
+                    "supporting_document",
+                    "sales_outbound_record",
+                    "store_receipt",
+                    "special_approval",
+                    "system_deduction_proof",
+                    "entry_contract",
+                    "other",
+                    "unknown"
+                  ]
+                },
+                "confidence": {
+                  "type": "string",
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ]
+                },
+                "title": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "document_number": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "page_number": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "total_pages": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "visible_facts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "limitations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

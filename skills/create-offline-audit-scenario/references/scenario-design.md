@@ -1,56 +1,40 @@
-# Scenario design contract
+# 场景设计契约
 
-Create `references/scenario-manifest.json` inside every newly generated scenario Skill and validate it
-against [scenario-manifest.schema.json](scenario-manifest.schema.json). The manifest is the normalized,
-reviewable bridge between the representative ZIP, the user's business prompt, and code. Do not paste
-the raw conversation or confidential document contents into it.
+每个新生成的场景 Skill 内都必须创建 `references/scenario-manifest.json`，并使用
+[scenario-manifest.schema.json](scenario-manifest.schema.json) 校验。该清单是代表性 ZIP、用户业务要求与代码之间
+经过规范化、可审查的桥梁。不得把原始对话或机密文档内容粘贴进去。
 
-## 1. Inspect the representative package
+## 1. 检查代表性材料包
 
-Use `scripts/profile_scenario_zip.py` before extraction. Record only:
+解压前先使用 `scripts/profile_scenario_zip.py`。只记录：
 
-- source ZIP basename, byte size, and SHA-256;
-- sanitized member paths, suffix counts, nested-archive shape, and role candidates;
-- duplicate/case-collision, unsafe-path, encryption, size, and compression findings;
-- representative document types and whether their visible contents support the proposed roles.
+- 源 ZIP basename、字节数和 SHA-256；
+- 已脱敏的成员路径、后缀数量、嵌套归档结构及角色候选；
+- 重复/大小写冲突、不安全路径、加密、大小及压缩率发现；
+- 代表性文档类型，以及其可见内容是否支持拟议角色。
 
-Extract only into a newly created temporary directory. Inspect every materially different source
-family, not just filenames or the first page/photo. Clean up the directory at task end. Never commit
-the production ZIP, extracted customer evidence, or personally identifying facts.
+只能解压到新建的临时目录。检查每种存在实质差异的来源类型，不能只看文件名或第一页/第一张照片。
+任务结束时清理该目录。绝不能提交生产 ZIP、解压后的客户证据或可识别个人身份的事实。
 
-## 2. Normalize the business prompt
+## 2. 规范化业务要求
 
-Resolve the following before code generation:
+生成代码前明确：
 
-1. **Scope and object** — what reimbursement activity is in scope, what is explicitly excluded, and
-   whether one result object represents a product, person, store, document, expense line, photo group,
-   or another business unit.
-2. **Evidence roles** — role ID, accepted file types, minimum/maximum count, nested source, filename
-   hints, required/optional status, unique-binding rule, and excluded-file policy.
-3. **Authority graph** — the business baseline, every allowed directional comparison, and every
-   forbidden cross-link. A matching total never creates a missing identity or execution fact.
-4. **AI stages** — which visual files each stage may see, which schema it returns, whether bounded
-   repository reference images are allowed, how stages merge, and how every supplied source basename
-   is accounted for. Spreadsheets and final decisions stay deterministic.
-5. **Controls** — stable control ID, source/object, expected visible or deterministic fact, exact or
-   unique-fuzzy comparison policy, severity/blocking behavior, confidence, error grouping, and exact
-   resubmission action.
-6. **Amounts and outcomes** — claim source, supported-amount formula, unit basis, caps, rounding,
-   behavior when a control is blocked, and permitted conclusion values. Never infer a unit price by
-   dividing a total unless the user explicitly defines that business rule.
-7. **Output semantics** — Chinese label, sheet name, tab behavior, object count unit, full-result or
-   error-only mode, summary/context rows, required human facts, prohibited engineering text, and
-   mobile behavior.
-8. **Dependencies** — deterministic parsers, shared product ledger, reference-image scope, image
-   fingerprinting, or other project-owned assets. State why each dependency is needed.
+1. **范围与对象**——核销范围内的活动、明确排除的内容，以及一个结果对象代表商品、人员、门店、文档、费用行、照片组或其他业务单元。
+2. **证据角色**——角色 ID、接受的文件类型、最小/最大数量、嵌套来源、文件名提示、必需/可选状态、唯一绑定规则及排除文件政策。
+3. **权威图**——业务基准、每条允许的有方向比较及每条禁止的跨来源关联。总额相等绝不能补出缺失的身份或执行事实。
+4. **AI 阶段**——每阶段可查看的视觉文件、返回 schema、是否允许按数据库关联、从私有 OSS 获取的受控参考图片、阶段合并方式，以及每个提供的来源 basename 如何得到交代。表格和最终判定保持确定性。
+5. **控制**——稳定控制 ID、来源/对象、预期可见或确定性事实、完全或唯一模糊比较政策、严重性/阻断行为、置信度、错误分组及准确补交操作。
+6. **金额与结果**——申报来源、支持金额公式、单位口径、上限、舍入、控制受阻时的行为及允许的结论值。除非用户明确把它定义为业务规则，否则绝不能通过总额相除推断单价。
+7. **输出语义**——中文标签、工作表名称、页签行为、对象计数单位及内部结果字段。执行[统一错误原因与处理方式规范](../../orchestrate-offline-audit/references/error-reasons.md)：客户错误原因仅含具体错误事实，处理方式仅含对应操作，业务文件区域只列实际相关 basename；回调摘要仅含原因。完整来源、比较、结论、影响及置信度保留内部技术证据，不拼接到这三个客户区域。
+8. **依赖项**——确定性解析器、公共商品台账、参考图片范围、图片指纹或其他项目自有资产。说明每项依赖的原因。
 
-If a required authority, evidence role, amount rule, or blocking condition cannot be established from
-the user prompt and visible sample, do not invent it. Ask one concise business question before
-activation.
+如果无法从用户要求及可见样例确定必需权威来源、证据角色、金额规则或阻断条件，不得虚构；
+激活前只问一个简洁的业务问题。
 
-## 3. Generate the scenario Skill
+## 3. 生成场景 Skill
 
-Minimum files:
+最少文件：
 
 ```text
 skills/audit-<scenario>/
@@ -62,23 +46,25 @@ skills/audit-<scenario>/
     `-- scenario-manifest.json
 ```
 
-`SKILL.md` contains the evidence chain, trust boundary, deterministic responsibilities, output
-contract, and parent command. `audit-rules.md` contains the detailed authority, matching, amount,
-decision, grouping, and resubmission rules. The evidence schema contains visible facts only, uses a
-top-level exact `scenario` constant, closes objects with `additionalProperties: false`, and makes
-source basenames explicit enough for post-validation.
+`SKILL.md` 包含证据链、信任边界、确定性职责、输出契约和父命令，并必须包含以下共享规范引用：
 
-Add one schema per additional model stage only when required. For every stage, implement a source-
-coverage validator that rejects invented basenames, duplicate role bindings, and silently ignored
-required sources.
+```markdown
+生成客户文案前，必须读取并执行[统一错误原因与处理方式规范](../orchestrate-offline-audit/references/error-reasons.md)。
+错误原因只写具体错误事实；建议只写处理方式；涉及的业务文件只列相关实际文件 basename；回调摘要只含原因。
+```
 
-Write `agents/openai.yaml` as strict UTF-8, quote all strings, and make `default_prompt` mention the
-new Skill as `$audit-<scenario>`. Re-read every generated text/JSON/YAML file as strict UTF-8 before
-activation.
+`audit-rules.md` 包含详细权威来源、匹配、金额、判定、分组及补交规则。
+证据 schema 只包含可见事实；顶层必须有准确的 `scenario` 常量；所有对象以 `additionalProperties: false` 关闭；
+来源 basename 必须明确到足以执行后置校验。
 
-## 4. Prevent sample overfitting
+只有确实需要时，才为额外模型阶段增加 schema。每个阶段都要实现来源覆盖校验器，拒绝虚构 basename、
+重复角色绑定及被静默忽略的必需来源。
 
-Search generated instructions, handlers, tests, and UI copy for sample-only customer names, archive
-IDs, amounts, dates, product names, item counts, store counts, and filenames. A test fixture may carry
-fixture values; reusable code and default copy must derive them from the case, evidence, or manifest.
-Keep the source ZIP SHA-256 only as provenance, never as a runtime allowlist.
+以严格 UTF-8 写入 `agents/openai.yaml`，全部字符串加引号，并让 `default_prompt` 以 `$audit-<scenario>` 提及新 Skill。
+激活前，以严格 UTF-8 重新读取每个生成的文本/JSON/YAML 文件。
+
+## 4. 防止样例过拟合
+
+在生成的指令、处理器、测试和界面文案中，搜索只属于样例的客户名称、归档 ID、金额、日期、商品名称、
+项目数量、门店数量及文件名。测试夹具可以包含夹具值；可复用代码和默认文案必须从案件、证据或清单中派生这些值。
+源 ZIP SHA-256 只可作为来源信息，绝不能作为运行时允许名单。

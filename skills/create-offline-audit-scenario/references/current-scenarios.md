@@ -1,38 +1,30 @@
-# Current registered scenarios
+# 当前已登记场景
 
-The main runtime currently supports exactly these ten scenarios, in this order. A new scenario must
-remain distinguishable from all ten and must not change their authority chains implicitly.
+主运行时目前严格按以下顺序支持 10 个场景。新场景必须能与全部 10 个场景区分，且不能暗中改变已有场景的权威链。
 
-| Order | Scenario ID | Business label | Skill | Required material shape | Authority chain | Customer object |
+| 顺序 | 场景 ID | 业务名称 | Skill | 必需材料结构 | 权威链 | 客户对象 |
 |---:|---|---|---|---|---|---|
-| 1 | `personnel_incentive` | 人员激励 | `audit-personnel-incentive` | one sales Excel, no PDF, one identifiable settlement image, one or more transfer/payment images | sales Excel → shared product ledger → settlement lines → transfer events → claimed amount | settlement product |
-| 2 | `promotional_display` | 堆头陈列 | `audit-promotional-display` | one contract PDF, one sales Excel, one or more field photos | contract core/attachment → product ledger; photo-visible text → full product ledger → bounded reference views, then resolved photo product → contract scope; Excel → contract attachment | contract store |
-| 3 | `poster_material` | 展示道具（海报/物料制作） | `audit-poster-material` | one signed-contract image, one invoice/receipt image, one settlement image, one nested field-photo ZIP; no sales Excel | signed contract → invoice/receipt → stamped settlement → watermarked finished-product photos | grouped blocking error |
-| 4 | `other_expense` | 其他费用 | `audit-other-expense` | outer marker `其他`; no Excel or nested ZIP; one promotional contract, one settlement, one or more support documents, optional activity/POS and special approval | visible fee substance → exclude established types → special approval for new type → signed contract → stamped settlement → type-specific support | grouped classification/approval/manual-action error |
-| 5 | `maintenance_fee` | 维护费用 | `audit-maintenance-fee` | outer maintenance marker; no nested ZIP; at least one POS/settlement visual; zero or one POS Excel during intake so missing mandatory roles remain auditable | signed promotional contract → eligible POS scope; stamped POS ↔ POS Excel; POS Excel → stamped settlement; fee-specific support → contract period | grouped blocking error |
-| 6 | `giveaway_promotion` | 额外搭赠 | `audit-giveaway-promotion` | outer `额外搭赠`/`搭赠` marker; image/PDF-only with no nested ZIP; generic visual basenames permitted | signed promotional contract → stamped settlement; system sales/delivery statement → settlement shipment amount; contract products/ratio → store receipts; contract → activity photos; gift detail → budget/claim | grouped blocking error |
-| 7 | `price_difference_support` | 价格补差 | `audit-price-difference-support` | outer `补差` marker; one signed promotional contract, one settlement, stamped POS visuals, zero or one POS Excel, and one field-photo RAR | signed contract → activity price/support unit/quantity/budget; stamped POS ↔ POS Excel; every-store photo → contract price/period; POS quantity × contract support unit → claim | grouped blocking error |
-| 8 | `pos_target_incentive` | POS达标激励（经销商） | `audit-pos-target-incentive` | outer POS incentive marker; zero or one contract, settlement and POS Excel; stamped POS and optional activity proof visuals | signed contract → approved channel/dealer/tier/rate/cap; stamped POS ↔ POS Excel; activity proof → full-reduction existence; highest reached tier → claim | grouped blocking error |
-| 9 | `entry_fee` | 进场费/条码费 | `audit-entry-fee` | outer entry-fee marker; one signed entry contract/product-promotion agreement and one safely extracted shelf-photo RAR; optional explicitly named deduction proof visuals | signed contract → product/barcode/store/fee scope; watermarked photos → actual product×store shelving; system deduction proof → actual deduction; contract item fees → claim | grouped blocking error |
-| 10 | `self_procured_gift_material` | 客户自采赠品物料 | `audit-self-procured-gift-material` | outer self-procured-gift marker; one signed promotional contract, one customer-stamped settlement, one purchase invoice/receipt, stamped POS visuals, exactly one legacy activity-return `.xls`, and zero or one independent modern POS spreadsheet | signed contract/gift rule → purchase ticket/payment; stamped POS ↔ modern POS spreadsheet; every extracted return photo → own watermarks/promotion/product/gift material; gift ratio × eligible POS → material sufficiency; contract/ticket/settlement arithmetic → claim | grouped blocking error |
+| 1 | `personnel_incentive` | 人员激励 | `audit-personnel-incentive` | 一份销售 Excel、无 PDF、一张可识别结算单图片、一张或多张转账/付款图片 | 销售 Excel → 公共商品台账 → 结算明细 → 转账事件 → 申报金额 | 结算商品 |
+| 2 | `promotional_display` | 堆头陈列 | `audit-promotional-display` | 一份合同 PDF、一份销售 Excel、一张或多张现场照片 | 合同核心/附件 → 商品台账；照片可见文字 → 完整商品台账 → 有界参考视图，再将已解析照片商品 → 合同范围；Excel → 合同附件 | 合同门店 |
+| 3 | `poster_material` | 展示道具（海报/物料制作） | `audit-poster-material` | 一张已签合同图片、一张发票/收据图片、一张结算单图片、一个嵌套现场照片 ZIP；无销售 Excel | 已签合同 → 发票/收据 → 盖章结算单 → 带水印完工照片 | 分组阻断错误 |
+| 4 | `other_expense` | 其他费用 | `audit-other-expense` | 外层标记 `其他`；无 Excel 或嵌套 ZIP；一份促销合同、一份结算单、一份或多份支持材料；可选活动/POS 及特殊审批 | 可见费用实质 → 排除已有类型 → 新类型特殊审批 → 已签合同 → 盖章结算单 → 类型专属支持 | 分组的分类/审批/人工操作错误 |
+| 5 | `maintenance_fee` | 维护费用 | `audit-maintenance-fee` | 外层维护标记；无嵌套 ZIP；至少一份 POS/结算视觉材料；接收时允许 0 或 1 份 POS Excel，使缺失必需角色仍可进入核销 | 已签促销合同 → 合格 POS 范围；盖章 POS ↔ POS Excel；POS Excel → 盖章结算单；费用专属支持 → 合同期间 | 分组阻断错误 |
+| 6 | `giveaway_promotion` | 额外搭赠 | `audit-giveaway-promotion` | 外层 `额外搭赠`/`搭赠` 标记；仅图片/PDF 且无嵌套 ZIP；允许通用视觉文件名 | 已签促销合同 → 盖章结算单；系统销售/出库单 → 结算发货金额；合同商品/比例 → 门店收货凭证；合同 → 活动照片；赠品明细 → 预算/申报 | 分组阻断错误 |
+| 7 | `price_difference_support` | 价格补差 | `audit-price-difference-support` | 外层 `补差` 标记；一份已签促销合同、一份结算单、盖章 POS 视觉材料、0 或 1 份 POS Excel，以及一个现场照片 RAR | 已签合同 → 活动价/补差单位/数量/预算；盖章 POS ↔ POS Excel；每店照片 → 合同价格/期间；POS 数量 × 合同补差单位 → 申报 | 分组阻断错误 |
+| 8 | `pos_target_incentive` | POS达标激励（经销商） | `audit-pos-target-incentive` | 外层 POS 激励标记；0 或 1 份合同、结算单和 POS Excel；盖章 POS 及可选活动证明视觉材料 | 已签合同 → 已批准渠道/经销商/阶梯/比例/上限；盖章 POS ↔ POS Excel；活动证明 → 满减活动存在；最高达标阶梯 → 申报 | 分组阻断错误 |
+| 9 | `entry_fee` | 进场费/条码费 | `audit-entry-fee` | 外层进场费标记；一份已签进场合同/产品推广协议及一个安全解压的上架照片 RAR；可选明确命名的扣费证明视觉材料 | 已签合同 → 商品/条码/门店/费用范围；带水印照片 → 实际商品×门店进场；系统扣费证明 → 实际扣费；合同项目费用 → 申报 | 分组阻断错误 |
+| 10 | `self_procured_gift_material` | 客户自采赠品物料 | `audit-self-procured-gift-material` | 外层自采赠品标记；一份已签促销合同、一份客户盖章结算单、一份采购发票/收据、盖章 POS 视觉材料、恰好一份旧式活动核销 `.xls`，以及 0 或 1 份独立现代 POS 表格 | 已签合同/赠品规则 → 采购票据/付款；盖章 POS ↔ 现代 POS 表格；每张提取的核销照片 → 自身水印/促销/商品/赠品物料；赠品比例 × 合格 POS → 物料充足性；合同/票据/结算算术 → 申报 | 分组阻断错误 |
 
-## Collision rules
+## 冲突规则
 
-- Classify by material roles, cardinality, nesting, and source content before using an outer ZIP name.
-- A filename marker may disambiguate a role after the structural shape is satisfied; it never makes
-  an incomplete package pass. The registered maintenance-fee classifier may route an incomplete but
-  structurally recognizable package so missing roles become blocking report items.
-- If a proposed shape can also satisfy an existing classifier, redesign the classifier around a
-  stronger role signal or stop for a user decision. Classifier order is not a valid disambiguator.
-- One input ZIP may map to only one scenario, and each registered scenario may appear at most once in
-  a formal run.
-- When another scene is activated, update the accepted ZIP maximum, scene ordering, CLI choices,
-  main-page scenario counts, and all combination tests. Do not retain a previous hard-coded ZIP limit.
+- 外层 ZIP 名称中的唯一已登记标记确定核销类型，材料角色、数量约束、嵌套关系和内容只验证该类型的材料。
+- 内容不能让 AI 改类，也不能让缺件材料通过。已知类型的缺件、内部文件误命名及角色关系不明继续材料诊断，按已确定类型报告具体问题；ZIP 名称无标记或有多个类型标记时，在必要安全校验后直接打回，不调用 AI、不解读材料或套用缺件清单。分类拒绝仍生成正式报告并按原有 OSS 契约回调。
+- 新名称标记若与已有类型重叠，应修正登记标记；正式提交必须使用只含一个已登记类型的 ZIP 名称，分类器顺序不能用于消歧。
+- 一个输入 ZIP 只能映射到一个场景；已知同类型多个包保留各自来源进入材料诊断，不能静默只取一包或产生通过金额。混合多包只拒绝无法唯一分类的包，其余已知类型照常处理。API `1.31` 的公开策略为 `unclassified_archive_policy=reject_before_ai`。
+- 激活新场景时，更新允许的 ZIP 最大数量、场景顺序、CLI 选项、主页场景数量及所有组合测试。不得保留旧的硬编码 ZIP 上限。
 
-## What is shared and what stays separate
+## 公共部分与隔离部分
 
-All scenarios share safe intake, visible-fact extraction boundaries, deterministic judgment,
-schema-validated results, one formal CLI, one fixed persistent workbench, and one versioned run archive per execution. They do not share a
-generic set of evidence fields, a single model prompt, a single amount formula, or a universal output
-object. Multi-stage extraction is allowed when one scene needs bounded candidate retrieval or another
-genuine evidence dependency.
+所有场景共用安全接收、可见事实提取边界、确定性判定、schema 校验结果、一个正式 CLI、一个固定持久工作台，
+以及每次执行对应的一个带版本运行归档。它们不共用通用证据字段集、单一模型提示词、单一金额公式或通用输出对象。
+当某个场景需要有界候选检索或其他真实证据依赖时，允许多阶段提取。

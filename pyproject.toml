@@ -8,6 +8,7 @@ version = "0.2.0"
 description = "Persist deterministic offline-activity audit runs for one fixed two-level LAN system"
 requires-python = ">=3.11"
 dependencies = [
+  "alibabacloud-oss-v2>=1.4,<2",
   "httpx>=0.27,<1",
   "jsonschema>=4.20,<5",
   "mcp>=1.29,<2",

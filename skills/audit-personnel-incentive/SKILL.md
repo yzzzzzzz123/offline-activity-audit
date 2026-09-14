@@ -1,73 +1,109 @@
 ---
 name: audit-personnel-incentive
-description: Audit personnel-incentive claims from one sales Excel, one settlement image, and transfer/red-packet screenshots. Use whenever sales products must first pass the repository product-knowledge gate by exact 69 code plus a uniquely fuzzy-compatible product name, each settlement product must then be deterministically mapped, quantities and rewards reconciled line by line, transfer views deduplicated, claim totals compared, and identity/date limitations shown in the fixed personnel audit worksheet.
+description: 使用一份销售 Excel、一张结算单图片及转账/红包截图核销人员激励申报。适用于销售商品必须先以准确 69 码加唯一模糊相容商品名称通过仓库商品知识门禁，再对每个结算商品进行确定性映射、逐行核对数量与奖励、去重转账视图、比较申报合计，并在固定人员核销结果中展示身份/日期局限的任务。
 ---
 
-# Audit Personnel Incentive
+# 人员激励核销
 
-Build the chain `Excel sales rows → product knowledge base → settlement lines → transfer events → claimed amount`. Amount agreement alone does not validate product identity, recipient identity, store correspondence, or transfer date.
+生成客户错误原因和处理方式前，必须读取并执行[统一文案规范](../orchestrate-offline-audit/references/error-reasons.md)。
+错误原因只写具体错误事实，建议只写处理方式；涉及的业务文件区域只列相关实际文件 basename；回调只保留原因。核销类型由 ZIP 名称的唯一已登记标记确定，AI 不得改类。ZIP 名称无法唯一分类时由编排器直接打回，不调用本 Skill 或 AI；已知类型的错件、缺件及内部文件误命名仍继续审核或材料诊断。
 
-## AI extraction
+建立链路 `Excel 销售行 → 商品知识库 → 结算明细 → 转账事件 → 申报金额`。仅金额一致不能验证
+商品身份、收款人身份、门店对应关系或转账日期。
 
-Read [evidence.schema.json](references/evidence.schema.json) and [audit-rules.md](references/audit-rules.md) before extracting.
+## AI 提取
 
-Give the AI only the settlement image and transfer screenshots. It must return schema version `2.0` and may extract only visible facts:
+提取前读取 [evidence.schema.json](references/evidence.schema.json) 和
+[audit-rules.md](references/audit-rules.md)。
 
-- settlement customer, activity dates, declared totals, actual claim, seal/date visibility, and every product line in printed order;
-- `barcode_visible` only when the settlement itself visibly prints a legible barcode;
-- each distinct transfer event once, with amount, source files, occurrence count, visible recipient/store/date fields, and the basis for pairing mirrored chat bubbles;
-- limitations and uncertain text.
+只向 AI 提供结算单图片和转账截图。它必须返回 schema 版本 `2.0`，且只能提取可见事实：
 
-The AI must not receive or read the sales Excel, infer a barcode from product/quantity, calculate approval, or mark the case passed.
+- 结算单客户、活动日期、声明合计、实际申报金额、印章/日期可见性，以及按印刷顺序排列的每条
+  商品明细；
+- 只有结算单本身清楚印有可读条码时才填写 `barcode_visible`；
+- 每笔不同的转账事件只记录一次，包含金额、来源文件、出现次数、可见收款人/门店/日期字段，
+  以及将镜像聊天气泡配对的依据；
+- 局限和不确定文字。
 
-## Deterministic audit
+AI 不得接收或读取销售 Excel，不得根据商品/数量推断条码，不得计算核准金额，也不得将案例
+标记为通过。
 
-The formal product identity ledger is the project-level shared knowledge base at
-`shared/canban-product-multimodal-knowledge-base`, not an asset owned by another scenario Skill.
-Read its [product RAG rules](../../shared/canban-product-multimodal-knowledge-base/references/product-rag.md)
-before product reconciliation. Personnel vision still receives no catalog images.
+## 确定性核销
 
-Python reads every valid sales-Excel detail row and preserves source row, period, store, barcode, original product name, quantity, unit price, and amount cell. Before comparing the settlement, aggregate each Excel barcode and reconcile it with the validated repository product knowledge base:
+正式商品身份主账是 MySQL `product_catalog.products`。商品核对前读取
+[数据库知识规则](../../shared/product-database/audit-knowledge.md)。本文的“商品知识库/目录”均指本次数据库快照。
+通过 `audit_core.product_database.load_product_catalog` 读取；人员核销不访问商品多模态目录。
 
-- the Excel 69 code must be a valid EAN-13 and exactly equal a catalog 69 code;
-- only products under that exact 69 code are eligible name candidates;
-- the Excel product name needs only one strong, unique fuzzy-compatible match against catalog-controlled names, observed names, variants, specifications, or aliases; character-for-character equality is not required and is only the score-1 special case;
-- the personnel Excel has no product-code field, so product code is returned from the selected knowledge product and is not required as an input key;
-- an absent/unregistered/invalid 69 code, incompatible name, or same-code ambiguity fails the knowledge gate and contributes no supported reward until corrected.
+Python 读取每条有效销售 Excel 明细行，并保留来源行号、期间、门店、条码、原始商品名称、数量、
+单价和金额单元格。与结算单比较前，按 Excel 条码汇总并与已验证的仓库商品知识库核对：
 
-For every settlement line in order:
+- Excel 69 码必须是有效 EAN-13，且与目录 69 码严格相等；
+- 只有该准确 69 码下的商品才可作为名称候选；
+- Excel 商品名称只需与数据库商品名称形成强且唯一的模糊相容匹配；名称内明确的款式、规格可作辅助。
+  不要求逐字相同；数据库未登记的别名和历史观察名称不参与匹配；
+- 人员 Excel 没有产品编码字段，因此产品编码来自选中的知识库商品，不要求作为输入键；
+- 69 码缺失/未登记/无效、名称不相容或同码歧义都会使知识门禁失败，在补正前对应商品不支持
+  任何奖励金额。
 
-1. Use a settlement-visible barcode as a high-confidence direct mapping only when it exists in the code-read Excel.
-2. Otherwise first use an exact settlement quantity when it occurs in exactly one still-unused Excel SKU that has already passed the knowledge gate; under the one-line/one-barcode constraint this uniquely routes the line even when settlement OCR has shortened, misspelled, or misread the product name. If quantity is not unique, use the settlement text as fuzzy auxiliary evidence against the unused, knowledge-reconciled Excel and catalog names/aliases and require one reliable candidate. Either deterministic route remains medium confidence because the source settlement did not show the barcode, but it passes without resubmission when the selected Excel SKU has an exact 69-code knowledge match and quantity/reward agree. Product-name text never needs character-for-character equality and a low-quality name alone never overturns a unique quantity route.
-3. Sum all Excel rows for the selected barcode and keep per-store quantities/source rows.
-4. Compare Excel quantity with settlement quantity.
-5. Calculate `settlement quantity × reward unit price` and compare it with the settlement line reward.
-6. Calculate the supported line amount from the lower nonnegative quantity only for a valid Excel mapping whose knowledge status is `matched` or `fuzzy_matched`.
+按顺序处理每条结算明细：
 
-After all lines, compare calculated reward, settlement line total, declared total, deduplicated transfer total, and actual claim. Deduplicate only when visible evidence supports two views of one business transfer; repeated equal amounts remain separate events unless pairing evidence exists.
+1. 只有结算单可见条码存在于程序读取的 Excel 时，才将其作为高置信度直接映射。
+2. 否则，优先使用结算数量：当该准确数量只出现在一个尚未使用且已通过知识门禁的 Excel SKU
+   中时，在一行一条码约束下即可唯一路由该明细，即使结算单 OCR 缩短、拼错或误读商品名称。
+   数量不唯一时，将结算文字作为模糊辅助证据，与尚未使用且已经知识核对的 Excel/目录名称及
+   别名比较，并要求只有一个可靠候选。由于来源结算单没有显示条码，两种确定性路径均保持中
+   置信度；但当选中 Excel SKU 的 69 码知识匹配准确且数量/奖励一致时，无需补交即可通过。
+   商品名称文字从不要求逐字相同，低质量名称本身也不能推翻唯一数量路由。
+3. 汇总选定条码的所有 Excel 行，并保留逐门店数量和来源行。
+4. 比较 Excel 数量和结算数量。
+5. 计算 `结算数量 × 奖励单价`，并与结算明细奖励金额比较。
+6. 只有 Excel 映射有效且知识状态为 `matched` 或 `fuzzy_matched` 时，才按两方非负数量中的较小值
+   计算支持明细金额。
 
-Recipient/store/date rules are independent:
+处理完全部明细后，比较计算奖励、结算明细合计、声明合计、去重转账合计和实际申报金额。只有
+可见证据支持两个视图属于同一业务转账时才去重；除非存在配对证据，金额相同的重复记录仍是
+不同事件。
 
-- a visible chat contact is not automatically a store mapping;
-- an amount-only multiset match verifies amounts only;
-- a weekday or clock is not a complete transaction date;
-- do not write identity/date verified unless recipient, store correspondence, and complete date are all visible for every required transfer.
+收款人/门店/日期规则相互独立：
 
-## Worksheet contract
+- 可见聊天联系人不会自动构成门店映射；
+- 仅金额多重集合匹配只能验证金额；
+- 星期信息或时钟时间不是完整交易日期；
+- 除非每笔必需转账的收款人、门店对应关系和完整日期均可见，否则不得写身份/日期已验证。
 
-Generate one product row per settlement line, then `合计`, `实际申请金额`, and `收款人与日期` rows. Preserve settlement order regardless of Excel order.
+## 内部结果表合同
 
-- Use only the uniquely selected knowledge-base product's complete authoritative name as each product-row title; do not add a `结算第N行` prefix. Keep the settlement image's original recognized product text in the visual-evidence column; only fall back to that recognized text as the title when no knowledge product was uniquely established.
-- Show the original Excel product/barcode/quantity, selected knowledge-base product code/name/69 code, exact 69-code result, fuzzy-compatible product-name result, calculated reward, vision-AI product/quantity/reward, and both differences. Do not present exact name equality as a prerequisite.
-- Keep `销售Excel` and `商品知识库` as two source rows. A calculated reward is a deterministic audit result, not a knowledge-base field, so show it once in a compact calculation strip below the source comparison.
-- Write product comparison results as complete, decisive plain-language sentences: `Excel商品与知识库：...` and `结算单与销售记录：...`. When product, quantity, and reward all reconcile, say `商品、数量、奖励金额全部对应`; never use vague wording such as `可以对应`. Never expose arrow shorthand such as `A ↔ B`, or zero deltas such as `数量差：0` and `金额差：0元`. When values differ, name the failed item and show the Excel/calculated value and the settlement value explicitly.
-- Show only one overall label per product: `置信度：高`, `置信度：中`, or `置信度：低`. Exact, fuzzy, or mismatch wording belongs only in the short field-by-field explanation and is not repeated as an overall match-result label. A permitted unique fuzzy knowledge-name match is medium confidence, while a settlement line without a visible barcode remains medium confidence even when its amount matches; neither condition is an error or a resubmission reason by itself.
-- Use a concrete supplement statement for an unmapped product, quantity/reward difference, claim difference, missing recipient/store mapping, or incomplete date.
-- For every failed or unresolved row, show `问题文件` with the exact submitted basename(s), `对照文件` with the exact baseline basename when there is one, and `错误原因` with the value or required field observed or missing in each file. Explain the broken relationship in full—for example, state how many stores the named sales Excel contains and which recipient/store/full-date fields the named transfer screenshots omit—so the reader can identify the faulty material without guessing. Never write only `Excel门店与收款人无法逐一确认`, `A ↔ B 无法确认`, or another sentence that omits the filenames and causal facts.
-- Calculate every amount in Python and write values only; never use workbook formulas.
-- Freeze only the two title rows and row 3 header (`A4`); product and reconciliation rows must remain scrollable.
+每条结算明细生成一条商品行，随后生成 `合计`、`实际申请金额` 和 `收款人与日期` 行。无论 Excel
+顺序如何，都要保持结算单顺序。
 
-Formal runs occur only through the parent command:
+以下来源、完整比较、通过状态及置信度保留在内部六列投影和结构化证据中，不作为客户错误原因的流水账。客户错误原因与处理方式分别按共享规范生成。
+
+- 每个商品行标题只使用唯一选中的知识库商品完整权威名称；不要添加 `结算第N行` 前缀。结算单
+  图片中原始识别的商品文字保留在视觉证据列；只有未能唯一确定知识库商品时，才退回使用该
+  识别文字作为标题。
+- 展示原始 Excel 商品/条码/数量、选中的知识库产品编码/名称/69 码、69 码严格匹配结果、商品
+  名称模糊相容结果、计算奖励、视觉 AI 商品/数量/奖励及两项差异。不得把名称逐字相同作为前提。
+- 将 `销售Excel` 和 `商品知识库` 保留为两个来源行。计算奖励是确定性核销结果，不是知识库
+  字段，因此只在来源比较下方的紧凑计算条中展示一次。
+- 商品比较结果使用完整、明确的自然语言句子：`Excel商品与知识库：...` 和
+  `结算单与销售记录：...`。商品、数量和奖励全部核对一致时，写
+  `商品、数量、奖励金额全部对应`；绝不能使用 `可以对应` 之类的模糊措辞。绝不能暴露
+  `A ↔ B` 之类的箭头简写，也不要展示 `数量差：0`、`金额差：0元` 等零差值。数值不同时，
+  明确指出失败项，并展示 Excel/计算值与结算值。
+- 每个商品只展示一个整体标签：`置信度：高`、`置信度：中` 或 `置信度：低`。精确、模糊或不
+  匹配措辞只属于逐字段简短说明，不再作为整体匹配结果标签重复。允许的唯一模糊知识名称匹配
+  为中置信度；结算单没有可见条码时，即使金额一致也仍为中置信度。这两种情况本身都不是错误
+  或补交理由。
+- 商品未映射、数量/奖励差异、申报差异、缺少收款人/门店映射或日期不完整时，错误原因仅写相应事实，具体补充操作只写处理方式。
+- 每个失败或未解决行都要在 `问题文件` 中展示准确的已提交 basename，在存在基准时于
+  `对照文件` 中展示准确基准 basename，并在 `错误原因` 中展示每个文件已观察到或缺失的值/
+  必填字段。只保留说明断裂关系所需事实，例如指出具名销售 Excel 包含多少家门店，以及具名转账截图缺少
+  哪些收款人/门店/完整日期字段，使读者无需猜测即可确定问题材料。绝不能只写
+  `Excel门店与收款人无法逐一确认`、`A ↔ B 无法确认` 或其他省略文件名和因果事实的句子。
+- 所有金额都在 Python 中计算，只写入数值；绝不能使用工作簿公式。
+- 只冻结两个标题行和第 3 行表头（`A4`）；商品和核对行必须保持可滚动。
+
+正式运行只能通过父级命令：
 
 ```powershell
 py -3 skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --producer-model <producer-model>

@@ -28,10 +28,8 @@ from .product_rag import (
     FIELD_SHORT_CODE_PATTERN,
     PRODUCT_EXISTENCE_NAME_THRESHOLD,
     apply_visible_catalog_text_exact_hits,
-    apply_visible_short_code_exact_hits,
     catalog_product_name_values,
     ean13_is_valid,
-    load_product_rag,
     product_name_similarity,
     product_reference_label,
     resolve_product_reference_hits,
@@ -616,14 +614,7 @@ def _best_fuzzy_product(
     *,
     threshold: float = PRODUCT_EXISTENCE_NAME_THRESHOLD,
 ) -> tuple[dict[str, Any] | None, float]:
-    """Disambiguate same-ID candidates by their authoritative product names.
-
-    Catalog aliases, including packaging short codes such as ``SP-2``, remain
-    useful auxiliary name evidence elsewhere.  They must not overpower the
-    complete authoritative name when several catalog rows share one 69 code;
-    otherwise an edition-only alias can incorrectly select a ``代言人`` variant
-    even though the source name describes the ordinary package.
-    """
+    """同码多候选只按数据库完整名称消歧，不使用历史编码别名或图片描述。"""
 
     ranked = sorted(
         (
@@ -655,12 +646,6 @@ def _strict_catalog_product_codes(product: dict[str, Any]) -> set[str]:
     """Return formal business codes, excluding packaging-only short codes."""
 
     values = {str(product.get("product_code") or "").strip()}
-    values.update(
-        str(value).strip()
-        for value in product.get("product_code_aliases") or []
-        if str(value).strip()
-        and FIELD_SHORT_CODE_PATTERN.fullmatch(str(value).strip()) is None
-    )
     return {value for value in values if value}
 
 
@@ -670,13 +655,10 @@ def _product_records_catalog_reconciliation(
     *,
     source_label: str = "合同附件",
 ) -> dict[str, Any]:
-    """Resolve contract-attachment products against the shared identity ledger.
+    """将合同附件商品与本次数据库快照对账。
 
-    The 69 code and source-local business product code are both strict catalog
-    identifiers.  The source code may match either the catalog's main
-    ``product_code`` or one of its exact ``product_code_aliases``; it is also
-    preserved for contract-attachment-to-Excel comparison.  Product names are
-    fuzzy auxiliary evidence and never require exact equality.
+    69码和商品编码严格对应数据库三字段；正式数据源没有别名。
+    来源编码原样保留用于合同到Excel比较，名称仅作模糊辅助证据。
     """
 
     products = list(catalog.get("products") or [])
@@ -878,7 +860,7 @@ def _product_records_catalog_reconciliation(
                 )
             if source_values["product_code"] and not code_ids:
                 details.append(
-                    "产品编码未在知识库product_code或product_code_aliases中登记"
+                    "产品编码未在本次数据库商品资料中登记"
                 )
             if code_ids and barcode_ids and not strict_identity_ids:
                 details.append("产品编码和69码没有共同命中同一个知识库商品")
@@ -2055,7 +2037,8 @@ def audit_display_case(
     contract_path = Path(case["contract_pdf"]).resolve()
     photo_paths = [Path(value).resolve() for value in case["photo_files"]]
     contract = evidence["contract"]
-    product_rag = load_product_rag()
+    from .product_database import load_product_catalog
+    product_rag = load_product_catalog()
     contract_knowledge = _contract_product_knowledge_reconciliation(contract, product_rag)
     contract_attachment_knowledge = _contract_attachment_knowledge_reconciliation(
         contract,
@@ -2213,11 +2196,6 @@ def audit_display_case(
         raw_reference_hits = list(review.get("product_reference_hits") or [])
         reference_hits = resolve_product_reference_hits(
             raw_reference_hits,
-            product_rag,
-        )
-        reference_hits = apply_visible_short_code_exact_hits(
-            reference_hits,
-            [str(value) for value in review.get("visible_text") or []],
             product_rag,
         )
         reference_hits = apply_visible_catalog_text_exact_hits(

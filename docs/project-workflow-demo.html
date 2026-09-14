@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>线下活动核销 · 项目工作流技术展示</title>
+  <style>
+    :root {
+      --paper: #f2efe7;
+      --paper-strong: #e8e3d8;
+      --ink: #17201f;
+      --muted: #66706c;
+      --line: #cbc7ba;
+      --line-dark: #807e74;
+      --night: #101b1d;
+      --night-soft: #19292c;
+      --mint: #9ee8d5;
+      --mint-deep: #0d7869;
+      --signal: #f06445;
+      --signal-soft: #fee5dc;
+      --amber: #e6b85b;
+      --blue: #3b6f82;
+      --white: #fffefa;
+      --shadow: 0 18px 60px rgba(24, 32, 31, 0.09);
+      --radius: 22px;
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --body: Aptos, "PingFang SC", "Microsoft YaHei", sans-serif;
+      --display: Georgia, "Iowan Old Style", "Songti SC", "STSong", serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 82px; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(23, 32, 31, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(23, 32, 31, 0.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      font: 15px/1.72 var(--body);
+      overflow-x: hidden;
+    }
+    a { color: inherit; }
+    code, .mono { font-family: var(--mono); }
+    code {
+      padding: 0.1rem 0.35rem;
+      border-radius: 5px;
+      background: rgba(23, 32, 31, 0.07);
+      font-size: 0.88em;
+    }
+    ::selection { background: var(--mint); color: var(--night); }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: minmax(220px, auto) minmax(0, 1fr) auto;
+      align-items: center;
+      min-height: 64px;
+      padding: 0 24px;
+      color: #effaf6;
+      background: rgba(16, 27, 29, 0.96);
+      border-bottom: 1px solid rgba(158, 232, 213, 0.24);
+      backdrop-filter: blur(18px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-weight: 760;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      color: var(--night);
+      background: var(--mint);
+      font: 800 12px/1 var(--mono);
+      box-shadow: inset 0 0 0 5px rgba(16, 27, 29, 0.12);
+    }
+    .topbar nav {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      min-width: 0;
+      padding: 0 18px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .topbar nav::-webkit-scrollbar { display: none; }
+    .topbar nav a {
+      flex: 0 0 auto;
+      padding: 8px 10px;
+      border-radius: 999px;
+      color: #aebdba;
+      font-size: 12px;
+      text-decoration: none;
+      transition: color 160ms ease, background 160ms ease;
+    }
+    .topbar nav a:hover,
+    .topbar nav a:focus-visible,
+    .topbar nav a[aria-current="location"] {
+      color: #fff;
+      background: rgba(158, 232, 213, 0.13);
+      outline: none;
+    }
+    .version {
+      color: var(--mint);
+      font: 700 11px/1 var(--mono);
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    main { width: 100%; }
+    .frame {
+      width: min(1240px, calc(100% - 48px));
+      margin: 0 auto;
+    }
+    section { position: relative; margin: 0 auto 92px; }
+
+    .hero {
+      width: 100%;
+      min-height: 610px;
+      margin-bottom: 76px;
+      overflow: visible;
+      color: #f8fbf8;
+      background:
+        radial-gradient(circle at 86% 20%, rgba(158, 232, 213, 0.18), transparent 30%),
+        linear-gradient(125deg, #0f191b 0%, #16272a 58%, #0d5f56 140%);
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.11;
+      background-image: repeating-linear-gradient(120deg, transparent 0 36px, #fff 37px 38px);
+      pointer-events: none;
+    }
+    .hero-inner {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+      gap: 72px;
+      align-items: center;
+      width: min(1240px, calc(100% - 48px));
+      min-height: 610px;
+      margin: 0 auto;
+      padding: 74px 0 68px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      color: var(--mint);
+      font: 800 12px/1 var(--mono);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before {
+      content: "";
+      width: 34px;
+      height: 2px;
+      background: currentColor;
+    }
+    .hero h1 {
+      max-width: 760px;
+      margin: 0;
+      font: 700 clamp(44px, 6vw, 78px)/1.06 var(--display);
+      letter-spacing: -0.045em;
+    }
+    .hero h1 em {
+      display: block;
+      color: var(--mint);
+      font-style: normal;
+    }
+    .hero-lead {
+      max-width: 690px;
+      margin: 26px 0 0;
+      color: #c8d5d2;
+      font-size: 17px;
+    }
+    .hero-note {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 28px;
+      color: #92aaa5;
+      font: 12px/1.5 var(--mono);
+    }
+    .hero-note::before {
+      content: "CURRENT";
+      padding: 5px 8px;
+      border: 1px solid rgba(158, 232, 213, 0.42);
+      border-radius: 999px;
+      color: var(--mint);
+      font-weight: 800;
+    }
+    .hero-pipeline {
+      position: relative;
+      padding: 30px;
+      border: 1px solid rgba(158, 232, 213, 0.32);
+      border-radius: 28px;
+      background: rgba(6, 17, 18, 0.52);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25);
+    }
+    .hero-pipeline::after {
+      content: "";
+      position: absolute;
+      inset: 13px;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      pointer-events: none;
+    }
+    .pipeline-label {
+      margin-bottom: 22px;
+      color: #8fa4a0;
+      font: 800 11px/1 var(--mono);
+      letter-spacing: 0.16em;
+    }
+    .pipe {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      gap: 14px;
+      align-items: center;
+      padding: 13px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .pipe:last-child { border-bottom: 0; }
+    .pipe-index {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      color: var(--night);
+      background: var(--mint);
+      font: 900 12px/1 var(--mono);
+    }
+    .pipe strong { display: block; font-size: 14px; }
+    .pipe span { display: block; color: #8fa4a0; font-size: 11px; }
+    .pipe-code { color: var(--amber); font: 700 10px/1 var(--mono); }
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      width: min(1240px, calc(100% - 48px));
+      margin: -34px auto 0;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      color: var(--ink);
+      background: var(--white);
+      box-shadow: var(--shadow);
+      transform: translateY(34px);
+    }
+    .stat {
+      min-width: 0;
+      padding: 22px 26px;
+      border-right: 1px solid var(--line);
+    }
+    .stat:last-child { border-right: 0; }
+    .stat strong {
+      display: block;
+      font: 700 35px/1 var(--display);
+      letter-spacing: -0.04em;
+    }
+    .stat span { color: var(--muted); font-size: 12px; }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) minmax(240px, 0.55fr);
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 28px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .section-no {
+      color: var(--signal);
+      font: 800 14px/1 var(--mono);
+      letter-spacing: 0.13em;
+    }
+    .section-head h2 {
+      margin: 0;
+      font: 700 clamp(31px, 4.2vw, 51px)/1.08 var(--display);
+      letter-spacing: -0.035em;
+    }
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .sources {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 18px;
+    }
+    .source-path {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: #59635f;
+      background: rgba(255, 254, 250, 0.64);
+      font: 10px/1.25 var(--mono);
+      overflow-wrap: anywhere;
+    }
+    .source-path::before {
+      content: "SRC";
+      margin-right: 7px;
+      color: var(--mint-deep);
+      font-weight: 900;
+    }
+
+    .architecture-map {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      padding: 24px;
+      overflow: hidden;
+      border: 1px solid #26373a;
+      border-radius: var(--radius);
+      color: #eef5f2;
+      background: var(--night);
+      box-shadow: var(--shadow);
+    }
+    .architecture-map::before {
+      content: "";
+      position: absolute;
+      top: 93px;
+      right: 8%;
+      left: 8%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--mint), var(--signal), transparent);
+    }
+    .arch-node {
+      position: relative;
+      z-index: 1;
+      min-width: 0;
+      min-height: 216px;
+      padding: 18px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      background: #162528;
+    }
+    .arch-node::after {
+      content: "";
+      position: absolute;
+      top: 63px;
+      right: -9px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 5px var(--night);
+    }
+    .arch-node:last-child::after { display: none; }
+    .arch-node small { color: var(--mint); font: 800 10px/1 var(--mono); letter-spacing: 0.12em; }
+    .arch-node h3 { margin: 14px 0 9px; font-size: 16px; line-height: 1.2; }
+    .arch-node p { margin: 0; color: #9eb0ac; font-size: 12px; }
+    .arch-node .owner { position: absolute; right: 14px; bottom: 14px; color: var(--amber); font: 700 10px/1 var(--mono); }
+    .boundary-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--white);
+      overflow: hidden;
+    }
+    .boundary {
+      padding: 18px 20px;
+      border-right: 1px solid var(--line);
+    }
+    .boundary:last-child { border-right: 0; }
+    .boundary strong { display: block; margin-bottom: 5px; }
+    .boundary span { color: var(--muted); font-size: 12px; }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0;
+      padding: 18px 0 4px;
+      overflow-x: auto;
+    }
+    .stage {
+      position: relative;
+      min-width: 178px;
+      padding: 0 18px 22px 0;
+    }
+    .stage::before {
+      content: "";
+      position: absolute;
+      top: 18px;
+      right: 0;
+      left: 36px;
+      height: 1px;
+      background: var(--line-dark);
+    }
+    .stage:last-child::before { display: none; }
+    .stage-dot {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      margin-bottom: 18px;
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      background: var(--paper);
+      font: 900 11px/1 var(--mono);
+    }
+    .stage:nth-child(3) .stage-dot { color: var(--white); background: var(--blue); border-color: var(--blue); }
+    .stage:nth-child(5) .stage-dot { color: var(--white); background: var(--signal); border-color: var(--signal); }
+    .stage:last-child .stage-dot { color: var(--night); background: var(--mint); border-color: var(--mint-deep); }
+    .stage h3 { margin: 0 0 7px; font-size: 15px; }
+    .stage p { margin: 0; color: var(--muted); font-size: 12px; }
+    .stage code { display: inline-block; margin-top: 11px; color: var(--mint-deep); }
+    .flow-rule {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      padding: 20px 24px;
+      border-left: 4px solid var(--signal);
+      background: var(--signal-soft);
+    }
+    .flow-rule strong { font-size: 15px; }
+    .flow-rule span { color: #7a4439; font-size: 12px; }
+
+    .scenario-layout {
+      display: grid;
+      grid-template-columns: minmax(270px, 0.34fr) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .scenario-intro {
+      position: sticky;
+      top: 92px;
+      padding: 26px;
+      border-radius: var(--radius);
+      color: #f5fbf8;
+      background: var(--night);
+    }
+    .scenario-intro .big { display: block; color: var(--mint); font: 700 82px/0.9 var(--display); }
+    .scenario-intro h3 { margin: 18px 0 8px; font: 700 24px/1.15 var(--display); }
+    .scenario-intro p { margin: 0; color: #a9bab6; font-size: 13px; }
+    .scenario-table {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--white);
+      overflow: hidden;
+    }
+    .scenario-row {
+      display: grid;
+      grid-template-columns: 48px minmax(150px, 0.6fr) minmax(190px, 1fr) minmax(180px, 0.9fr);
+      gap: 16px;
+      align-items: center;
+      min-height: 68px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .scenario-row:last-child { border-bottom: 0; }
+    .scenario-row:hover { background: #f7f5ee; }
+    .scenario-row .num { color: var(--signal); font: 800 12px/1 var(--mono); }
+    .scenario-row strong { line-height: 1.25; }
+    .scenario-row span { color: var(--muted); font-size: 12px; }
+    .runtime-tag {
+      justify-self: start;
+      padding: 5px 8px;
+      border-radius: 999px;
+      color: #175f55 !important;
+      background: #ddf5ee;
+      font: 800 10px/1 var(--mono) !important;
+    }
+
+    .sequence {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.34fr) minmax(0, 1fr) minmax(180px, 0.34fr);
+      min-height: 510px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--white);
+      overflow: hidden;
+    }
+    .sequence-side {
+      padding: 26px 22px;
+      color: #eef8f5;
+      background: var(--night-soft);
+    }
+    .sequence-side:last-child { color: var(--ink); background: #e7dfcf; }
+    .sequence-side small { color: var(--mint); font: 800 10px/1 var(--mono); letter-spacing: 0.12em; }
+    .sequence-side:last-child small { color: var(--signal); }
+    .sequence-side h3 { margin: 16px 0 9px; font: 700 24px/1.1 var(--display); }
+    .sequence-side p { margin: 0; color: #aebebb; font-size: 12px; }
+    .sequence-side:last-child p { color: var(--muted); }
+    .sequence-main { padding: 24px 30px; }
+    .seq-item {
+      display: grid;
+      grid-template-columns: 108px 24px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      padding: 10px 0;
+    }
+    .seq-state {
+      padding-top: 3px;
+      color: var(--mint-deep);
+      font: 800 10px/1.3 var(--mono);
+      text-align: right;
+    }
+    .seq-line { position: relative; align-self: stretch; min-height: 44px; }
+    .seq-line::before { content: ""; position: absolute; top: 4px; bottom: -20px; left: 10px; width: 1px; background: var(--line); }
+    .seq-item:last-child .seq-line::before { bottom: calc(100% - 12px); }
+    .seq-line::after { content: ""; position: absolute; top: 4px; left: 5px; width: 9px; height: 9px; border: 2px solid var(--white); border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 1px var(--signal); }
+    .seq-copy strong { display: block; font-size: 14px; }
+    .seq-copy span { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .evidence-card {
+      position: relative;
+      min-height: 280px;
+      padding: 25px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--white);
+      overflow: hidden;
+    }
+    .evidence-card::before {
+      content: attr(data-code);
+      position: absolute;
+      right: -5px;
+      bottom: -20px;
+      color: rgba(23, 32, 31, 0.05);
+      font: 800 96px/1 var(--display);
+    }
+    .evidence-card small { color: var(--signal); font: 800 10px/1 var(--mono); letter-spacing: 0.12em; }
+    .evidence-card h3 { margin: 18px 0 9px; font: 700 24px/1.15 var(--display); }
+    .evidence-card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .evidence-card ul { position: relative; margin: 18px 0 0; padding: 0; list-style: none; }
+    .evidence-card li { margin-top: 8px; padding-left: 17px; font-size: 12px; }
+    .evidence-card li::before { content: "—"; position: absolute; left: 0; color: var(--mint-deep); }
+    .contract-band {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      margin-top: 16px;
+      border: 1px solid var(--night);
+      border-radius: 18px;
+      background: var(--night);
+      overflow: hidden;
+    }
+    .contract-band > div { padding: 22px; color: #e9f2ef; background: var(--night-soft); }
+    .contract-band strong { display: block; margin-bottom: 7px; }
+    .contract-band span { color: #a5b6b2; font-size: 12px; }
+
+    .artifact-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(300px, 1.1fr);
+      gap: 18px;
+    }
+    .tree {
+      margin: 0;
+      padding: 28px;
+      overflow: auto;
+      border-radius: var(--radius);
+      color: #d6e5e0;
+      background: var(--night);
+      font: 12px/1.75 var(--mono);
+      box-shadow: var(--shadow);
+    }
+    .tree .dir { color: var(--mint); }
+    .tree .note-text { color: #819691; }
+    .artifact-cards { display: grid; gap: 12px; }
+    .artifact-card {
+      display: grid;
+      grid-template-columns: 78px minmax(0, 1fr);
+      gap: 18px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--white);
+    }
+    .artifact-card .label { color: var(--signal); font: 800 10px/1.4 var(--mono); }
+    .artifact-card strong { display: block; margin-bottom: 4px; }
+    .artifact-card p { margin: 0; color: var(--muted); font-size: 12px; }
+
+    .table-shell {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--white);
+    }
+    table { width: 100%; min-width: 860px; border-collapse: collapse; }
+    th, td { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); background: #ebe7dd; font: 800 10px/1.3 var(--mono); letter-spacing: 0.08em; }
+    td { font-size: 12px; }
+    tr:last-child td { border-bottom: 0; }
+    .method { color: var(--signal); font: 900 11px/1.2 var(--mono); }
+    .read { color: var(--mint-deep); font-weight: 800; }
+    .write { color: #a5402d; font-weight: 800; }
+
+    .guard-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      border: 1px solid var(--line-dark);
+      border-radius: var(--radius);
+      background: var(--line-dark);
+    }
+    .guard {
+      min-height: 210px;
+      padding: 26px;
+      background: var(--white);
+    }
+    .guard:nth-child(2), .guard:nth-child(3) { background: #e9e4d9; }
+    .guard .guard-no { color: var(--signal); font: 900 11px/1 var(--mono); }
+    .guard h3 { margin: 17px 0 8px; font: 700 23px/1.15 var(--display); }
+    .guard p { margin: 0; color: var(--muted); font-size: 12px; }
+    .guard strong { color: var(--ink); }
+
+    .verify-board {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+      gap: 18px;
+    }
+    .verify-list {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--white);
+      overflow: hidden;
+    }
+    .verify-row {
+      display: grid;
+      grid-template-columns: 50px minmax(180px, 0.65fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: center;
+      padding: 17px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    .verify-row:last-child { border-bottom: 0; }
+    .check {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: var(--night);
+      background: var(--mint);
+      font-weight: 900;
+    }
+    .verify-row strong { font-size: 13px; }
+    .verify-row span { color: var(--muted); font-size: 12px; }
+    .acceptance {
+      padding: 28px;
+      border-radius: var(--radius);
+      color: #eef8f5;
+      background: var(--night);
+    }
+    .acceptance small { color: var(--mint); font: 800 10px/1 var(--mono); letter-spacing: 0.12em; }
+    .acceptance h3 { margin: 18px 0 12px; font: 700 27px/1.12 var(--display); }
+    .acceptance ul { margin: 0; padding-left: 18px; color: #b5c5c1; font-size: 12px; }
+    .acceptance li { margin-top: 8px; }
+
+    .closing {
+      width: min(1240px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 54px;
+      overflow: hidden;
+      border-radius: 28px 28px 0 0;
+      color: #eff7f4;
+      background: var(--night);
+    }
+    .closing-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr); gap: 50px; align-items: end; }
+    .closing h2 { margin: 0; font: 700 clamp(34px, 5vw, 62px)/1.04 var(--display); letter-spacing: -0.04em; }
+    .closing h2 em { color: var(--mint); font-style: normal; }
+    .closing p { margin: 0; color: #a9bbb6; }
+    .closing .sources { margin-top: 24px; }
+    .closing .source-path { color: #c4d1ce; background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.16); }
+    footer {
+      padding: 24px;
+      color: #73817d;
+      background: var(--night);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      font: 10px/1.5 var(--mono);
+      text-align: center;
+    }
+
+    details {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 254, 250, 0.7);
+    }
+    summary { padding: 14px 17px; cursor: pointer; font-weight: 750; }
+    details > div { padding: 0 17px 16px; color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 1050px) {
+      .topbar { grid-template-columns: auto 1fr; }
+      .version { display: none; }
+      .hero-inner { grid-template-columns: 1fr; gap: 36px; }
+      .hero-pipeline { max-width: 680px; }
+      .architecture-map { grid-template-columns: 1fr; }
+      .architecture-map::before, .arch-node::after { display: none; }
+      .arch-node { min-height: 0; }
+      .section-head { grid-template-columns: 72px minmax(0, 1fr); }
+      .section-head p { grid-column: 2; }
+      .scenario-layout, .artifact-layout, .verify-board { grid-template-columns: 1fr; }
+      .scenario-intro { position: static; }
+      .sequence { grid-template-columns: 1fr; }
+      .sequence-side { min-height: auto; }
+    }
+
+    @media (max-width: 720px) {
+      html { scroll-padding-top: 118px; }
+      .topbar { grid-template-columns: 1fr; gap: 5px; padding: 10px 16px 8px; }
+      .topbar nav { justify-content: flex-start; padding: 0; }
+      .frame, .hero-inner, .hero-stats, .closing { width: min(100% - 28px, 1240px); }
+      .hero-inner { min-height: 0; padding: 60px 0 72px; }
+      .hero h1 { font-size: clamp(41px, 13vw, 62px); }
+      .hero-pipeline { padding: 22px; }
+      .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stat { padding: 18px; border-bottom: 1px solid var(--line); }
+      .stat:nth-child(2) { border-right: 0; }
+      .stat:nth-child(3), .stat:nth-child(4) { border-bottom: 0; }
+      section { margin-bottom: 68px; }
+      .section-head { grid-template-columns: 1fr; gap: 10px; }
+      .section-head p { grid-column: 1; }
+      .boundary-strip, .evidence-grid, .contract-band, .guard-grid { grid-template-columns: 1fr; }
+      .boundary { border-right: 0; border-bottom: 1px solid var(--line); }
+      .boundary:last-child { border-bottom: 0; }
+      .workflow {
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(220px, 76vw);
+        overscroll-behavior-inline: contain;
+        scroll-snap-type: inline proximity;
+      }
+      .stage { min-width: 0; scroll-snap-align: start; }
+      .flow-rule { grid-template-columns: 1fr; }
+      .scenario-row { grid-template-columns: 38px minmax(0, 1fr); gap: 7px 10px; padding: 15px; }
+      .scenario-row > span:not(.num), .scenario-row > .runtime-tag { grid-column: 2; }
+      .artifact-card { grid-template-columns: 1fr; gap: 8px; }
+      .verify-row { grid-template-columns: 36px minmax(0, 1fr); }
+      .verify-row > span { grid-column: 2; }
+      .closing { padding: 38px 24px; }
+      .closing-grid { grid-template-columns: 1fr; gap: 28px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+
+    @media print {
+      .topbar { position: static; }
+      body { background: #fff; }
+      section { break-inside: avoid; }
+      .scenario-intro { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">OA</span>线下活动核销 · 技术展示</div>
+    <nav aria-label="页面章节">
+      <a href="#overview">概览</a>
+      <a href="#architecture">架构</a>
+      <a href="#workflow">主流程</a>
+      <a href="#scenarios">场景</a>
+      <a href="#oss">OSS</a>
+      <a href="#evidence">证据</a>
+      <a href="#archive">档案</a>
+      <a href="#workbench">工作台</a>
+      <a href="#safety">边界</a>
+      <a href="#verification">验证</a>
+    </nav>
+          <span class="version">SYSTEM 2.11.8 · API 1.21</span>
+  </header>
+
+  <main>
+    <section class="hero" id="overview" data-sources="README.md|audit_core/scenario_registry.py|audit_core/workbench_store.py|audit_core/workbench_html.py">
+      <div class="hero-inner">
+        <div>
+          <span class="eyebrow">Evidence-led offline audit system</span>
+          <h1>把一组活动材料，变成<em>可追溯的核销决定。</em></h1>
+          <p class="hero-lead">本项目接收本地或 OSS 投递的原始 ZIP，以 AI 提取可见事实，以确定性代码执行核销规则，再把结果、证据、日志和断点封装为可离线复核的持久档案。</p>
+          <p class="hero-note">基于 main @ aaa2628a5347 与当前工作树源码生成 · 2026-09-08</p>
+          <div class="sources" aria-label="概览来源">
+            <span class="source-path">README.md</span>
+            <span class="source-path">audit_core/scenario_registry.py</span>
+            <span class="source-path">audit_core/workbench_store.py</span>
+          </div>
+        </div>
+        <div class="hero-pipeline" aria-label="核心处理链">
+          <div class="pipeline-label">ONE FORMAL PIPELINE</div>
+          <div class="pipe"><span class="pipe-index">01</span><div><strong>ZIP 进入可信边界</strong><span>本地 input 或内网 OSS 入站</span></div><b class="pipe-code">INTAKE</b></div>
+          <div class="pipe"><span class="pipe-index">02</span><div><strong>AI 只提取可见事实</strong><span>每类材料服从独立 Skill 与 Schema</span></div><b class="pipe-code">EVIDENCE</b></div>
+          <div class="pipe"><span class="pipe-index">03</span><div><strong>代码完成规则核销</strong><span>金额、状态与异常由确定性函数生成</span></div><b class="pipe-code">DECIDE</b></div>
+          <div class="pipe"><span class="pipe-index">04</span><div><strong>同源页面与档案发布</strong><span>验证后原子写入，不复用旧输出</span></div><b class="pipe-code">PUBLISH</b></div>
+        </div>
+      </div>
+      <div class="hero-stats" aria-label="源码确认的项目规模">
+        <div class="stat"><strong>10</strong><span>已登记核销场景</span></div>
+        <div class="stat"><strong>6</strong><span>统一主流程阶段</span></div>
+        <div class="stat"><strong>3</strong><span>OSS 正式请求字段</span></div>
+        <div class="stat"><strong>1</strong><span>统一结果 Schema</span></div>
+      </div>
+    </section>
+
+    <div class="frame">
+      <section id="architecture" data-sources="skills/orchestrate-offline-audit/scripts/run.py|audit_core/workbench_runtime.py|audit_core/orchestrator.py|audit_core/codex_runner.py|audit_core/workbench_html.py">
+        <div class="section-head">
+          <span class="section-no">01 / ARCH</span>
+          <h2>一条主链，五段责任。</h2>
+          <p>入口可以不同，但业务分析只能汇入 bundled runner。模型、规则、存储与展示各自拥有清晰边界。</p>
+        </div>
+        <div class="architecture-map" aria-label="五段系统架构">
+          <article class="arch-node"><small>01 · INGRESS</small><h3>本地 / OSS 入站</h3><p>本地命令读取项目输入目录；内网 OSS 适配器验证域名、对象和幂等身份。</p><span class="owner">TRUSTED CODE</span></article>
+          <article class="arch-node"><small>02 · RUNTIME</small><h3>持久化 Runner</h3><p><code>run.py</code> 只转入 <code>workbench_runtime</code>，先预留唯一运行目录并建立追踪账本。</p><span class="owner">CONTROL PLANE</span></article>
+          <article class="arch-node"><small>03 · PERCEPTION</small><h3>Codex + 场景 Skill</h3><p>按场景加载证据约束，读取图片、PDF 与表格中的可见事实；不直接决定核销金额。</p><span class="owner">AI EVIDENCE</span></article>
+          <article class="arch-node"><small>04 · DECISION</small><h3>确定性审计核心</h3><p>十类审计函数执行匹配、复算与异常规则，结果统一通过 <code>audit-result.schema.json</code>。</p><span class="owner">RULE ENGINE</span></article>
+          <article class="arch-node"><small>05 · DELIVERY</small><h3>档案 / 工作台 / 回调</h3><p>同一验证结果进入静态档案、局域网两级页面；OSS 任务再回传精简中文结论。</p><span class="owner">ATOMIC OUTPUT</span></article>
+        </div>
+        <div class="boundary-strip" aria-label="三类责任边界">
+          <div class="boundary"><strong>AI：看见并结构化</strong><span>视觉识别、候选比对和有限判断必须落入场景证据 Schema。</span></div>
+          <div class="boundary"><strong>代码：校验并决定</strong><span>输入安全、金额复算、业务规则、状态、哈希和发布由确定性代码控制。</span></div>
+          <div class="boundary"><strong>人：复核并授权</strong><span>低置信度、资料补正、特殊费用核定及不可逆删除保留人工责任。</span></div>
+        </div>
+        <div class="sources" aria-label="架构来源">
+          <span class="source-path">audit_core/workbench_runtime.py</span><span class="source-path">audit_core/orchestrator.py</span><span class="source-path">audit_core/codex_runner.py</span><span class="source-path">audit_core/workbench_html.py</span>
+        </div>
+      </section>
+
+      <section id="workflow" data-sources="audit_core/workbench_store.py|audit_core/orchestrator.py|tests/test_workbench.py">
+        <div class="section-head">
+          <span class="section-no">02 / FLOW</span>
+          <h2>六阶段证据闭环。</h2>
+          <p>全部场景按阶段成批向前推进：先识别，再校验证据，再统一决策，最后封存；流程不能交错倒退。</p>
+        </div>
+        <div class="workflow" aria-label="正式核销六阶段">
+          <article class="stage"><span class="stage-dot">01</span><h3>运行初始化</h3><p>预留运行目录，写入 manifest、事件日志与首个断点。</p><code>bootstrap</code></article>
+          <article class="stage"><span class="stage-dot">02</span><h3>材料分流</h3><p>识别 ZIP 场景，绑定合同、表格、图片和票据角色。</p><code>intake</code></article>
+          <article class="stage"><span class="stage-dot">03</span><h3>AI 识别</h3><p>按场景提取材料中真正可见的结构化事实。</p><code>analysis</code></article>
+          <article class="stage"><span class="stage-dot">04</span><h3>证据校验</h3><p>逐场景验证 Schema、来源文件与证据完整性。</p><code>evidence</code></article>
+          <article class="stage"><span class="stage-dot">05</span><h3>核销决策</h3><p>确定性规则复算金额、检查边界并形成异常。</p><code>decision</code></article>
+          <article class="stage"><span class="stage-dot">06</span><h3>结果封存</h3><p>核对页面投影与档案哈希，生成独立静态页面。</p><code>verification</code></article>
+        </div>
+        <div class="flow-rule"><strong>同一事实，只在一个权威阶段形成。</strong><span>观察事件 → Schema 门禁 → 结果门禁 → 页面门禁 → 原子发布</span></div>
+        <div class="sources" aria-label="工作流来源"><span class="source-path">audit_core/workbench_store.py</span><span class="source-path">audit_core/orchestrator.py</span><span class="source-path">tests/test_workbench.py</span></div>
+      </section>
+
+      <section id="scenarios" data-sources="audit_core/scenario_registry.py|audit_core/codex_runner.py|contracts/audit-result.schema.json">
+        <div class="section-head">
+          <span class="section-no">03 / ROUTE</span>
+          <h2>十个业务入口，同一输出语言。</h2>
+          <p>每个场景有自己的材料契约、证据 Schema 与规则函数；注册表固定顺序、中文标签和运行路径。</p>
+        </div>
+        <div class="scenario-layout">
+          <aside class="scenario-intro"><span class="big">10</span><h3>独立场景 Skill</h3><p>场景差异留在各自 Skill 和审计模块中；统一 runner 只负责路由、门禁、阶段顺序与发布。</p></aside>
+          <div class="scenario-table" role="list" aria-label="已登记核销场景">
+            <div class="scenario-row" role="listitem"><span class="num">01</span><strong>人员激励</strong><span>销售表、结算单、转账凭证与商品知识库</span><span class="runtime-tag">PERSONNEL</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">02</span><strong>堆头 / 陈列</strong><span>合同、销售明细、现场图与陈列标准</span><span class="runtime-tag">DISPLAY</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">03</span><strong>海报 / 展示道具</strong><span>合同、票据、结算单与水印返图</span><span class="runtime-tag">POSTER</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">04</span><strong>其他费用</strong><span>先排除既有类型，再检查独立特殊审批</span><span class="runtime-tag">DOCUMENT</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">05</span><strong>维护费用</strong><span>盖章 POS、电子表、协议、照片与结算</span><span class="runtime-tag">DOCUMENT</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">06</span><strong>额外搭赠</strong><span>合同、结算、出货、小票与活动照片</span><span class="runtime-tag">DOCUMENT</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">07</span><strong>价格补差</strong><span>POS、结算、促销合同和活动价现场证据</span><span class="runtime-tag">DOCUMENT</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">08</span><strong>POS 达标激励</strong><span>逐店 POS、档位合同、活动证明与结算</span><span class="runtime-tag">DOCUMENT</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">09</span><strong>进场费</strong><span>签章协议、上架照片与系统扣款凭证</span><span class="runtime-tag">DOCUMENT</span></div>
+            <div class="scenario-row" role="listitem"><span class="num">10</span><strong>客户自采赠品物料</strong><span>赠送规则、票据、POS、照片与盖章结算</span><span class="runtime-tag">DOCUMENT</span></div>
+          </div>
+        </div>
+        <div class="sources" aria-label="场景来源"><span class="source-path">audit_core/scenario_registry.py</span><span class="source-path">audit_core/codex_runner.py</span><span class="source-path">contracts/audit-result.schema.json</span></div>
+      </section>
+
+      <section id="oss" data-sources="audit_core/oss_intake.py|audit_core/workbench_server.py|tests/test_oss_intake.py|skills/orchestrate-offline-audit/references/oss-intake.md">
+        <div class="section-head">
+          <span class="section-no">04 / OSS</span>
+          <h2>三字段入站，完整任务生命周期。</h2>
+          <p>外部系统只发送 <code>verifyCode</code>、<code>analyzeId</code>、<code>downloadUrl</code>；签名查询串只在内存中使用。</p>
+        </div>
+        <div class="sequence" aria-label="OSS 自动分析时序">
+          <aside class="sequence-side"><small>UPSTREAM</small><h3>业务系统</h3><p>在受信任内网提交一个 ZIP 对象；<code>verifyCode:analyzeId</code> 形成稳定业务身份，终态重投会覆盖上游最新结果。</p></aside>
+          <div class="sequence-main">
+            <div class="seq-item"><span class="seq-state">accepted</span><i class="seq-line"></i><div class="seq-copy"><strong>验证请求合同</strong><span>三个字段完整、回调已配置、同一身份未指向另一对象；运行中重复合并，终态重复创建新尝试。</span></div></div>
+            <div class="seq-item"><span class="seq-state">downloading</span><i class="seq-line"></i><div class="seq-copy"><strong>安全下载并验 ZIP</strong><span>HTTPS 443、精确域名白名单、公网解析、大小、ETag / SHA-256 与 ZIP 格式。</span></div></div>
+            <div class="seq-item"><span class="seq-state">downloaded</span><i class="seq-line"></i><div class="seq-copy"><strong>进入串行核销队列</strong><span>ZIP 已校验落盘且签名 URL 已丢弃；下载 worker 可继续处理后续 ZIP。</span></div></div>
+            <div class="seq-item"><span class="seq-state">running</span><i class="seq-line"></i><div class="seq-copy"><strong>调用唯一正式 runner</strong><span>单核销 worker 严格串行执行 bundled <code>run.py</code>，并读取原子结果收据。</span></div></div>
+            <div class="seq-item"><span class="seq-state">callback</span><i class="seq-line"></i><div class="seq-copy"><strong>构建三字段回调</strong><span>回传相同 verifyCode、analyzeId 与来自正式快照的两句式中文 result：分析概况一句，错误原因一句。</span></div></div>
+            <div class="seq-item"><span class="seq-state">completed</span><i class="seq-line"></i><div class="seq-copy"><strong>保存完成事实</strong><span>传输重试只重发已保存结果；上游再次提交才新建尝试、重跑 AI，旧档案不覆盖。</span></div></div>
+          </div>
+          <aside class="sequence-side"><small>CALLBACK</small><h3>只回结论</h3><p><code>POST /api/v1/ai/analyze/callback</code><br>不回传下载地址、本地绝对路径或密钥。</p></aside>
+        </div>
+        <details><summary>失败如何留痕？</summary><div>下载或核销失败写入任务 failure，并在 OSS 投递区显示“失败”和安全原因；核销已经完成但回调失败时保留正式 worktree、原始 ZIP 与结果收据，并标记 <code>callback_failed</code>。失败不混入核销台账，底层记录仍留在技术档案；服务重启会把未完成入站任务安全终止为失败，不伪装为完成。</div></details>
+        <details><summary>连续投递如何展示和取消？</summary><div>一级页面逐条显示全部未完成或失败 attempt：接收、下载和已落盘等待统一标为“排队中”，正式核销和回调标为“运行中”，失败标为“失败”。三类卡片都有“删除记录”；同源确认后，排队项从 worker 跳过，运行项先终止专属 runner 并阻止尚未发出的回调，再清理唯一归属的收据、ZIP 与未完成档案。最近记录和核销台账都只展示已完成运行。</div></details>
+        <div class="sources" aria-label="OSS 来源"><span class="source-path">audit_core/oss_intake.py</span><span class="source-path">audit_core/workbench_server.py</span><span class="source-path">tests/test_oss_intake.py</span></div>
+      </section>
+
+      <section id="evidence" data-sources="audit_core/orchestrator.py|contracts/audit-result.schema.json|audit_core/common.py|shared/product-database/audit-knowledge.md">
+        <div class="section-head">
+          <span class="section-no">05 / EVIDENCE</span>
+          <h2>看见、判断、负责，三件事分开。</h2>
+          <p>项目用 Schema 和来源清单阻止模型越权：AI 不能凭文件名补造事实，确定性代码也不能替代人工授权。</p>
+        </div>
+        <div class="evidence-grid">
+          <article class="evidence-card" data-code="AI"><small>AGENT INFERENCE</small><h3>可见事实层</h3><p>Codex 阅读被明确绑定的图片、PDF 与表格投影，返回场景专属结构化证据。</p><ul><li>输出必须通过对应 evidence schema</li><li>低置信度与不可见保持原样</li><li>商品参考图只证明商品身份</li></ul></article>
+          <article class="evidence-card" data-code="FX"><small>DETERMINISTIC CODE</small><h3>业务规则层</h3><p>代码核对来源、复算金额、执行匹配规则并形成统一结果对象。</p><ul><li>统一结果包含 summary 与 exceptions</li><li>异常保留影响和补交建议</li><li>结果再次通过总 Schema 门禁</li></ul></article>
+          <article class="evidence-card" data-code="H"><small>HUMAN AUTHORITY</small><h3>人工责任层</h3><p>人工核验是独立操作注释，不改写 AI 结论、错误卡片、manifest 或原始证据。</p><ul><li>特殊费用最终金额由有权人核定</li><li>低置信度位置等进入人工复核</li><li>永久删除必须显式确认目标</li></ul></article>
+        </div>
+        <div class="contract-band">
+          <div><strong>统一结果骨架</strong><span><code>schema_version</code> · <code>generated_at</code> · <code>scenario</code> · <code>case_id</code> · <code>case_name</code> · <code>summary</code> · <code>exceptions</code></span></div>
+          <div><strong>共享商品身份底座</strong><span>商品身份只读 MySQL，候选参考图只从私有 OSS 按需获取；GitHub 图库仅作独立灾备，不参与分析。</span></div>
+        </div>
+        <div class="sources" aria-label="证据来源"><span class="source-path">contracts/audit-result.schema.json</span><span class="source-path">audit_core/orchestrator.py</span><span class="source-path">shared/product-database/audit-knowledge.md</span></div>
+      </section>
+
+      <section id="archive" data-sources="audit_core/workbench_runtime.py|audit_core/workbench_store.py|audit_core/workbench_html.py">
+        <div class="section-head">
+          <span class="section-no">06 / STATE</span>
+          <h2>一次运行，就是一份独立档案。</h2>
+          <p>运行目录在开始时建立，过程持续追加事件、证据和断点；完成与失败都能生成真实状态的静态页面。</p>
+        </div>
+        <div class="artifact-layout">
+          <pre class="tree" aria-label="运行档案目录结构"><span class="dir">worktrees/&lt;日期_时间-模型_强度&gt;/</span>
+├─ offline-activity-audit.html   <span class="note-text"># 自包含静态档案</span>
+├─ manifest.json                <span class="note-text"># 身份、状态、模型、计数</span>
+├─ snapshot.json                <span class="note-text"># 原子页面与验证快照</span>
+├─ <span class="dir">analysis/</span>
+│  ├─ input-cases.json          <span class="note-text"># 材料角色绑定</span>
+│  ├─ <span class="dir">evidence/</span>              <span class="note-text"># AI 可见事实</span>
+│  ├─ <span class="dir">results/</span>               <span class="note-text"># 确定性结果</span>
+│  └─ verification.json         <span class="note-text"># 投影校验</span>
+├─ <span class="dir">dom/checkpoints/</span>           <span class="note-text"># 阶段断点</span>
+└─ <span class="dir">logs/</span>
+   ├─ events.jsonl              <span class="note-text"># 追加事件</span>
+   └─ run.log                   <span class="note-text"># 可观察日志</span></pre>
+          <div class="artifact-cards">
+            <article class="artifact-card"><span class="label">IDENTITY</span><div><strong>业务日期与接收时间分离</strong><p><code>run-id</code> 保留业务日期；目录时间戳使用核销 worker 实际认领运行时的上海时间，并记录实际模型和推理强度。</p></div></article>
+            <article class="artifact-card"><span class="label">ATOMIC</span><div><strong>先验证，再原子写入</strong><p>中间 workbook 和临时 HTML 只在临时目录存在；正式页面只接受已经校验的同源数据投影。</p></div></article>
+            <article class="artifact-card"><span class="label">TRACE</span><div><strong>事件、证据、结果各存一次</strong><p>manifest 管状态，snapshot 管最终投影，analysis 管受控明细，events 管过程顺序。</p></div></article>
+            <article class="artifact-card"><span class="label">FAILURE</span><div><strong>失败不冒充完成</strong><p>失败运行写入 failure、失败断点与诊断静态页；没有合法业务视图时清空历史模板数据。</p></div></article>
+          </div>
+        </div>
+        <div class="sources" aria-label="档案来源"><span class="source-path">audit_core/workbench_runtime.py</span><span class="source-path">audit_core/workbench_store.py</span><span class="source-path">audit_core/workbench_html.py</span></div>
+      </section>
+
+      <section id="workbench" data-sources="audit_core/workbench_server.py|audit_core/workbench_html.py|offline-activity-audit.html|tests/test_workbench.py">
+        <div class="section-head">
+          <span class="section-no">07 / UI + API</span>
+          <h2>一个固定壳，两级阅读深度。</h2>
+          <p>根 HTML 是唯一版本化客户页面。服务端只注入经过验证的运行上下文，磁盘上的根页面不会因查询而改写。</p>
+        </div>
+        <div class="table-shell">
+          <table>
+            <thead><tr><th>METHOD</th><th>资源</th><th>职责</th><th>边界</th></tr></thead>
+            <tbody>
+              <tr><td class="method">GET</td><td><code>/</code> · <code>/?run=&lt;id&gt;</code></td><td>一级管理总览 / 二级运行结果</td><td class="read">验证结果只读</td></tr>
+              <tr><td class="method">GET</td><td><code>/api/config</code> · <code>/api/runs</code></td><td>系统版本、六阶段配置与完整运行目录</td><td class="read">ETag + 私有重验证</td></tr>
+              <tr><td class="method">GET</td><td><code>/api/runs/&lt;id&gt;/snapshot</code></td><td>运行快照、场景结果与技术索引</td><td class="read">来源签名变化即刷新</td></tr>
+              <tr><td class="method">GET</td><td><code>analysis</code> · <code>checkpoints</code> · <code>log</code> · <code>events</code></td><td>白名单技术档案与运行可观察性</td><td class="read">路径受 manifest 授权</td></tr>
+              <tr><td class="method">POST</td><td><code>/api/runs/&lt;id&gt;/manual-review</code></td><td>记录布尔人工核验注释</td><td class="write">不改写业务结论</td></tr>
+              <tr><td class="method">DELETE</td><td><code>/api/runs/&lt;id&gt;</code></td><td>显式永久删除终态运行的专属档案</td><td class="write">同源 + nonce + 精确确认</td></tr>
+              <tr><td class="method">POST</td><td><code>/api/intake/oss</code></td><td>可选的内网 OSS 运输适配器</td><td class="write">单下载 + 单核销 worker，三字段合同</td></tr>
+              <tr><td class="method">GET / DELETE</td><td><code>/api/intake/jobs?completed=0</code> · <code>/api/intake/jobs/&lt;id&gt;</code></td><td>排队/运行/失败任务列表、状态与删除</td><td class="write">同源 + nonce + 精确 job 确认</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="boundary-strip">
+          <div class="boundary"><strong>一级：核销管理中心</strong><span>系统概览、仅已完成核销台账和全状态技术档案；首页不加载全部历史卡片。</span></div>
+          <div class="boundary"><strong>二级：单次核销结果</strong><span>默认错误总览；正确检查项作为独立日志视图，底层快照不因筛选改变。</span></div>
+          <div class="boundary"><strong>离线：同源静态档案</strong><span>页面、结果和受控技术资源内嵌在一个 HTML 中，直接双击也可复核。</span></div>
+        </div>
+        <div class="sources" aria-label="工作台来源"><span class="source-path">audit_core/workbench_server.py</span><span class="source-path">audit_core/workbench_html.py</span><span class="source-path">offline-activity-audit.html</span></div>
+      </section>
+
+      <section id="safety" data-sources="audit_core/archive_input.py|audit_core/oss_intake.py|audit_core/workbench_delete.py|tests/test_workbench_delete.py">
+        <div class="section-head">
+          <span class="section-no">08 / GUARD</span>
+          <h2>失败关闭，不靠“应该没事”。</h2>
+          <p>每个外部边界都有可执行拒绝条件；异常不会用旧结果、拼接结果或无证据结论替代。</p>
+        </div>
+        <div class="guard-grid">
+          <article class="guard"><span class="guard-no">ZIP / 01</span><h3>压缩包先过安全门</h3><p>拒绝路径穿越、盘符、链接、加密成员、重复目标和异常压缩比；限制 <strong>2,000 个成员、单成员 250 MiB、总展开 1 GiB</strong>。</p></article>
+          <article class="guard"><span class="guard-no">OSS / 02</span><h3>临时链接不成为档案</h3><p>只允许 HTTPS 443 和精确白名单域名；签名 URL 不写入任务收据、日志、worktree 或回调，错误信息再次脱敏。</p></article>
+          <article class="guard"><span class="guard-no">OUTPUT / 03</span><h3>未验证页面不能发布</h3><p>证据 Schema、统一结果 Schema、内部六列投影和最终 HTML 依次通过校验；临时文件在结束路径统一清理。</p></article>
+          <article class="guard"><span class="guard-no">DELETE / 04</span><h3>不可逆动作必须精确授权</h3><p>普通运行删除只允许终态记录；OSS 排队、运行和失败任务走专用 job 路由。两者都要求同源 Origin、进程 nonce 和完全匹配的目标 ID；链接、共享分支或归属歧义一律拒绝。</p></article>
+        </div>
+        <div class="sources" aria-label="安全来源"><span class="source-path">audit_core/archive_input.py</span><span class="source-path">audit_core/oss_intake.py</span><span class="source-path">audit_core/workbench_delete.py</span><span class="source-path">tests/test_workbench_delete.py</span></div>
+      </section>
+
+      <section id="verification" data-sources="AGENTS.md|pyproject.toml|tests/test_output_contracts.py|tests/test_oss_intake.py|tests/test_workbench.py|tests/workbench_browser_smoke.py">
+        <div class="section-head">
+          <span class="section-no">09 / VERIFY</span>
+          <h2>验收覆盖代码、数据与浏览器。</h2>
+          <p>单元测试验证输入、规则、缓存、接口和删除边界；浏览器 smoke test 验证真实页面行为、键盘路径与控制台。</p>
+        </div>
+        <div class="verify-board">
+          <div class="verify-list">
+            <div class="verify-row"><span class="check">✓</span><strong>Python 与 Skill 结构</strong><span>compileall、Skill frontmatter、JSON / YAML 解析和差异空白检查。</span></div>
+            <div class="verify-row"><span class="check">✓</span><strong>输入与场景规则</strong><span>ZIP 安全、十类路由、商品身份、金额复算、异常与证据来源。</span></div>
+            <div class="verify-row"><span class="check">✓</span><strong>持久化与输出合同</strong><span>六阶段单调推进、原子快照、静态自包含 HTML、失败诊断页和不覆盖策略。</span></div>
+            <div class="verify-row"><span class="check">✓</span><strong>OSS 运输链</strong><span>三字段合同、运行中去重、终态重跑、下载校验、bundled runner、三字段回调与历史保留。</span></div>
+            <div class="verify-row"><span class="check">✓</span><strong>局域网 API 与缓存</strong><span>HTTP/1.1、gzip、ETag、变更即刷新、并发合并与固定内存边界。</span></div>
+            <div class="verify-row"><span class="check">✓</span><strong>真实浏览器行为</strong><span>1440×960 页面、页签、筛选、焦点、抽屉、离线档案、无控制台错误。</span></div>
+          </div>
+          <aside class="acceptance"><small>DEFINITION OF DONE</small><h3>业务结论与技术证据同时可复核。</h3><ul><li>正式结果来自当前输入和本次模型提取</li><li>页面展示与 Schema 化结果一一对应</li><li>所有来源文件和数量保持完整</li><li>工作台与静态档案读取同一快照</li><li>临时提取物和中间页面全部清理</li></ul></aside>
+        </div>
+        <div class="sources" aria-label="验证来源"><span class="source-path">AGENTS.md</span><span class="source-path">tests/test_output_contracts.py</span><span class="source-path">tests/test_oss_intake.py</span><span class="source-path">tests/test_workbench.py</span><span class="source-path">tests/workbench_browser_smoke.py</span></div>
+      </section>
+    </div>
+
+    <section class="closing" id="conclusion" data-sources="README.md|skills/orchestrate-offline-audit/SKILL.md|audit_core/orchestrator.py|audit_core/workbench_runtime.py">
+      <div class="closing-grid">
+        <h2>系统的核心不是“识别”，<br>而是<em>证据闭环。</em></h2>
+        <p>入口可自动化，模型可升级，页面可演进；但场景合同、证据来源、确定性规则、人工责任和原子档案共同保证核销结果可以被解释、复核与追责。</p>
+      </div>
+      <div class="sources" aria-label="结论来源"><span class="source-path">README.md</span><span class="source-path">skills/orchestrate-offline-audit/SKILL.md</span><span class="source-path">audit_core/orchestrator.py</span><span class="source-path">audit_core/workbench_runtime.py</span></div>
+    </section>
+  </main>
+
+  <footer>PROJECT WORKFLOW SHOWCASE · SOURCE-GROUNDED · SELF-CONTAINED HTML · NO BUSINESS RECORDS EMBEDDED</footer>
+
+  <script>
+    (() => {
+      const links = [...document.querySelectorAll('.topbar nav a')];
+      const sections = links.map(link => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+      if (!('IntersectionObserver' in window) || !sections.length) return;
+      const observer = new IntersectionObserver(entries => {
+        const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible) return;
+        links.forEach(link => {
+          const active = link.getAttribute('href') === `#${visible.target.id}`;
+          if (active) link.setAttribute('aria-current', 'location');
+          else link.removeAttribute('aria-current');
+        });
+      }, { rootMargin: '-18% 0px -66% 0px', threshold: [0, 0.15, 0.5] });
+      sections.forEach(section => observer.observe(section));
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+name: offline-product-catalog
+
+services:
+  mysql:
+    image: mysql:8.0.45@sha256:4af1f8815716546f5b12410f7621f37f93db8dd11a184706ef59111930b8c2ff
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_BIND_ADDRESS:-127.0.0.1}:${MYSQL_PORT:-3307}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root_password
+      MYSQL_ROOT_HOST: localhost
+      MYSQL_INITDB_SKIP_TZINFO: "1"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_as_cs
+      - --require-secure-transport=ON
+      - --skip-name-resolve
+      - --skip-log-bin
+      - --mysqlx=OFF
+      - --max-connections=20
+      - --innodb-buffer-pool-size=64M
+      - --innodb-redo-log-capacity=64M
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./init-viewer.sh:/docker-entrypoint-initdb.d/02-viewer.sh:ro
+    secrets:
+      - root_password
+      - viewer_password
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'MYSQL_PWD="$$(cat /run/secrets/root_password)" mysql --no-defaults --protocol=socket --user=root --batch --skip-column-names --execute="SELECT 1 FROM product_catalog.products LIMIT 1" >/dev/null'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mysql_data:
+
+secrets:
+  root_password:
+    file: ${PRODUCT_DB_SECRETS_DIR:?Run dbctl.py configure first}/root_password.txt
+  viewer_password:
+    file: ${PRODUCT_DB_SECRETS_DIR:?Run dbctl.py configure first}/viewer_password.txt

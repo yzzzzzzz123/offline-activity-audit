@@ -6,6 +6,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterable
 
+from .card_evidence import EvidenceContext, attach_sheet_evidence, enrich_pass_item
+
 
 SCENARIO_PRESENTATION: dict[str, tuple[str, str]] = {
     "personnel_incentive": ("人员激励", "人员激励核销"),
@@ -55,29 +57,6 @@ CONTROL_PRESENTATION: dict[str, tuple[str, str, str]] = {
     "gift_quantity_sufficiency": ("赠品数量", "赠品数量核验通过", "amount"),
 }
 
-CONTROL_FILE_HINTS: dict[str, tuple[str, ...]] = {
-    "required_materials": (),
-    "fee_nature": ("contract", "settlement", "合同", "结算"),
-    "promotional_contract": ("contract", "合同"),
-    "contract_authority": ("contract", "合同"),
-    "contract_amount": ("contract", "合同"),
-    "settlement": ("settlement", "结算"),
-    "sales_delivery_statement": ("sales", "delivery", "销售", "出货"),
-    "shipment_reconciliation": ("sales", "delivery", "settlement", "销售", "出货", "结算"),
-    "receipt_execution": ("receipt", "小票"),
-    "activity_execution": ("activity", "photo", "活动", "照片"),
-    "activity_existence": ("activity", "photo", "receipt", "活动", "照片", "小票"),
-    "duplicate_evidence": ("photo", "照片"),
-    "pos_visual_seal": ("pos",),
-    "pos_spreadsheet": ("pos", "spreadsheet"),
-    "pos_correspondence": ("pos",),
-    "system_deduction_proof": ("deduction", "扣款"),
-    "shelf_photo_coverage": ("photo", "货架", "照片"),
-    "all_store_photo_coverage": ("photo", "照片"),
-    "activity_photo_coverage": ("photo", "activity", "返图", "活动"),
-    "purchase_document": ("purchase", "payment", "invoice", "receipt", "采购", "付款", "票据"),
-}
-
 PASS_VALUE_SET = {
     "pass",
     "passed",
@@ -114,48 +93,6 @@ def _unique(values: Iterable[str]) -> list[str]:
         seen.add(clean)
         result.append(clean)
     return result
-
-
-def _source_entries(value: Any, path: tuple[str, ...] = ()) -> list[tuple[str, str]]:
-    entries: list[tuple[str, str]] = []
-    if isinstance(value, dict):
-        source = _basename(value.get("source_file"))
-        if source:
-            descriptor = " ".join(
-                [
-                    *path,
-                    _text(value.get("role")),
-                    _text(value.get("document_type")),
-                    _text(value.get("title")),
-                ]
-            ).lower()
-            entries.append((source, descriptor))
-        for key, item in value.items():
-            if key in {"evidence", "visible_text", "notes", "limitations"}:
-                continue
-            entries.extend(_source_entries(item, (*path, str(key).lower())))
-    elif isinstance(value, list):
-        for item in value:
-            entries.extend(_source_entries(item, path))
-    return entries
-
-
-def _source_files_for_control(
-    result: dict[str, Any], control_id: str
-) -> tuple[list[str], int]:
-    entries = _source_entries(result)
-    hints = CONTROL_FILE_HINTS.get(control_id)
-    selected = entries
-    if hints:
-        selected = [
-            entry
-            for entry in entries
-            if any(hint.lower() in entry[1] for hint in hints)
-        ]
-    names = _unique(name for name, _descriptor in selected)
-    if not names and entries:
-        names = _unique(name for name, _descriptor in entries)
-    return names[:8], len(names)
 
 
 def _case_subject(result: dict[str, Any], default: str) -> str:
@@ -209,6 +146,7 @@ def _generic_control_items(
         return []
     subject = _case_subject(result, f"本次{audit_type}材料")
     items: list[dict[str, Any]] = []
+    context = EvidenceContext(scenario, result)
     for control in controls:
         if not isinstance(control, dict) or _text(control.get("status")).lower() != "pass":
             continue
@@ -217,7 +155,7 @@ def _generic_control_items(
             control_id,
             ("业务规则", "业务规则检查通过", "material"),
         )
-        files, file_count = _source_files_for_control(result, control_id)
+        files = context.control_files(control_id)
         items.append(
             _item(
                 category=category,
@@ -225,12 +163,13 @@ def _generic_control_items(
                 subject=subject,
                 basis=_text(control.get("basis")),
                 source_files=files,
-                source_file_count=file_count,
+                source_file_count=len(files),
                 confidence=_text(control.get("confidence")) or "high",
                 confidence_score=control.get("confidence_score"),
                 scope=scope,
             )
         )
+        items[-1]["control_id"] = control_id
     return items
 
 
@@ -318,7 +257,7 @@ def _display_items(result: dict[str, Any]) -> list[dict[str, Any]]:
                 title="现场照片重复检查通过",
                 subject=f"{photo_count} 张现场照片",
                 basis="未发现完全相同的现场照片内容。",
-                source_files=photo_files[:8],
+                source_files=photo_files,
                 source_file_count=len(photo_files),
                 scope="store",
             )
@@ -775,6 +714,10 @@ def build_pass_check_log(
     for sheet in view.get("sheets") or []:
         if not isinstance(sheet, dict):
             continue
+        if sheet.get("projection_kind") == "material_diagnostic":
+            # Classifying submitted files does not establish a passed business
+            # check, even when the hinted business scenario is known.
+            continue
         scenario = _text(sheet.get("scenario"))
         if not scenario or scenario in seen_scenarios:
             continue
@@ -786,6 +729,9 @@ def build_pass_check_log(
         result = results_by_scenario.get(scenario)
         result = result if isinstance(result, dict) else {}
         items = _scenario_items(scenario, result, sheet, audit_type)
+        evidence_context = EvidenceContext(scenario, result)
+        for item in items:
+            enrich_pass_item(evidence_context, item)
         category_counts: dict[str, int] = {}
         for item in items:
             sequence += 1
@@ -806,7 +752,7 @@ def build_pass_check_log(
             }
         )
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "total": sequence,
         "audit_type_count": len(groups),
         "types_with_pass": sum(1 for group in groups if group["item_count"] > 0),
@@ -823,6 +769,11 @@ def attach_pass_check_log(
         return view
     enriched = deepcopy(view)
     enriched["pass_check_log"] = build_pass_check_log(enriched, results_by_scenario)
+    for sheet in enriched.get("sheets") or []:
+        if sheet.get("projection_kind") == "material_diagnostic":
+            continue
+        scenario = _text(sheet.get("scenario"))
+        attach_sheet_evidence(sheet, EvidenceContext(scenario, results_by_scenario.get(scenario) or {}))
     return enriched
 
 
@@ -831,6 +782,10 @@ def load_workspace_results(workspace: Path) -> dict[str, dict[str, Any]]:
     if not result_root.is_dir():
         return {}
     results: dict[str, dict[str, Any]] = {}
+    try:
+        cases = json.loads((workspace / "analysis" / "input-cases.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        cases = {}
     for path in sorted(result_root.glob("*.json")):
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
@@ -840,5 +795,12 @@ def load_workspace_results(workspace: Path) -> dict[str, dict[str, Any]]:
             continue
         scenario = _text(value.get("scenario")) or path.stem
         if scenario in SCENARIO_PRESENTATION:
+            # Presentation companions only: never write back into saved results.
+            try:
+                evidence = json.loads((workspace / "analysis" / "evidence" / path.name).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                evidence = {}
+            value["_presentation_evidence"] = evidence if isinstance(evidence, dict) else {}
+            value["_presentation_case"] = cases.get(scenario, {}) if isinstance(cases, dict) else {}
             results[scenario] = value
     return results

@@ -1,4 +1,4 @@
 interface:
-  display_name: "Promotional Display Audit"
-  short_description: "Audit contract/photos with multi-view product retrieval"
-  default_prompt: "Use $audit-promotional-display to extract contract and field-photo facts, compare visible packaging with the validated multi-view product RAG, and leave Excel reading, store judgment, amount calculation, and worksheet generation to deterministic code."
+  display_name: "促销陈列核销"
+  short_description: "使用数据库商品主账及按需参考图核验合同与现场照片"
+  default_prompt: "使用 $audit-promotional-display 提取合同和现场照片事实，从商品数据库识别候选，仅按数据库 image_manifest_key 从私有 OSS 读取参考图；Excel 读取、商品对账、门店判断、金额计算和结果生成交由确定性程序完成。"

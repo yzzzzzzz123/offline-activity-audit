@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import ipaddress
 import json
@@ -7,6 +8,7 @@ import os
 import queue
 import re
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -24,13 +26,21 @@ from urllib.parse import quote, unquote, urljoin, urlparse
 from zoneinfo import ZoneInfo
 
 from .common import AuditError
+from .codex_runner import DEFAULT_MODEL, DEFAULT_REASONING_EFFORT
 from .orchestrator import (
     SCENARIO_ORDER,
     normalize_producer_model,
     normalize_run_id,
     output_date_from_run_id,
 )
-from .workbench_store import atomic_write_json, read_json_file, utc_now
+from .workbench_store import (
+    ANALYSIS_SUMMARY_FILENAME,
+    atomic_write_json,
+    read_json_file,
+    render_analysis_summary_markdown,
+    utc_now,
+)
+from .workbench_delete import RunDeletionConflict, prepare_intake_job_deletion
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -49,11 +59,26 @@ JOB_ID_PATTERN = re.compile(r"[a-f0-9]{24}")
 EVENT_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}")
 VERIFY_CODE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,79}")
 SHA256_PATTERN = re.compile(r"[a-fA-F0-9]{64}")
-ACTIVE_JOB_STATUSES = {"accepted", "downloading", "running", "callback"}
+ACTIVE_JOB_STATUSES = {
+    "accepted",
+    "downloading",
+    "downloaded",
+    "running",
+    "callback",
+}
+TERMINAL_JOB_STATUSES = {"completed", "failed"}
+INTERNAL_JOB_FIELDS = {"idempotency_fingerprint", "identity_job_id"}
+
+
+def _attempt_job_id(identity_job_id: str, attempt: int) -> str:
+    if attempt <= 1:
+        return identity_job_id
+    value = f"{identity_job_id}:attempt:{attempt}"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
 
 
 class OSSIntakeError(AuditError):
-    """Base error for the authenticated OSS transport adapter."""
+    """Base error for the OSS transport adapter."""
 
 
 class OSSIntakeRequestError(OSSIntakeError):
@@ -77,7 +102,7 @@ class OSSIntakeExecutionError(OSSIntakeError):
 
 
 class OSSIntakeCallbackError(OSSIntakeError):
-    """The completed audit result could not be delivered to the caller."""
+    """The persisted audit outcome could not be delivered to the caller."""
 
     def __init__(
         self,
@@ -89,6 +114,10 @@ class OSSIntakeCallbackError(OSSIntakeError):
         super().__init__(message)
         self.attempts = attempts
         self.http_status = http_status
+
+
+class OSSIntakeCancelledError(OSSIntakeError):
+    """The user canceled an accepted intake attempt from the workbench."""
 
 
 def _normalized_host(value: str) -> str:
@@ -103,7 +132,6 @@ def _normalized_host(value: str) -> str:
 
 @dataclass(frozen=True)
 class OSSIntakeConfig:
-    webhook_secret: str
     allowed_hosts: tuple[str, ...]
     producer_model: str = "codex"
     max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES
@@ -111,14 +139,14 @@ class OSSIntakeConfig:
     allow_private_hosts: bool = False
     workbench_url: str | None = None
     callback_url: str | None = None
+    allow_http_callback: bool = False
+    callback_required: bool = True
+    receive_only: bool = False
     callback_token: str | None = None
     callback_timeout_seconds: int = DEFAULT_CALLBACK_TIMEOUT_SECONDS
     callback_attempts: int = DEFAULT_CALLBACK_ATTEMPTS
 
     def __post_init__(self) -> None:
-        secret = str(self.webhook_secret or "")
-        if len(secret) < 16:
-            raise OSSIntakeRequestError("OSS webhook 密钥至少需要 16 个字符")
         hosts = tuple(sorted({_normalized_host(value) for value in self.allowed_hosts}))
         if not hosts:
             raise OSSIntakeRequestError("启用 OSS 接口时必须配置至少一个精确下载域名")
@@ -140,10 +168,13 @@ class OSSIntakeConfig:
         if not 1 <= callback_attempts <= 5:
             raise OSSIntakeRequestError("OSS 结果回调尝试次数必须在 1 到 5 之间")
         callback_url = str(self.callback_url or "").strip() or None
+        allow_http_callback = bool(self.allow_http_callback)
         if callback_url is not None:
             parsed_callback = urlparse(callback_url)
+            callback_scheme = parsed_callback.scheme.lower()
             if (
-                parsed_callback.scheme.lower() != "https"
+                callback_scheme not in {"http", "https"}
+                or (callback_scheme == "http" and not allow_http_callback)
                 or not parsed_callback.hostname
                 or parsed_callback.username is not None
                 or parsed_callback.password is not None
@@ -151,19 +182,24 @@ class OSSIntakeConfig:
                 or parsed_callback.path.rstrip("/") != CALLBACK_PATH
             ):
                 raise OSSIntakeRequestError(
-                    f"OSS 结果回调必须是路径为 {CALLBACK_PATH} 的完整 HTTPS 地址"
+                    f"OSS 结果回调必须是路径为 {CALLBACK_PATH} 的完整 HTTPS 地址；"
+                    "受信任内网 HTTP 必须显式启用"
                 )
         callback_token = str(self.callback_token or "").strip() or None
+        receive_only = bool(self.receive_only)
+        callback_required = bool(self.callback_required) and not receive_only
         try:
             producer_model = normalize_producer_model(self.producer_model)
         except AuditError as exc:
             raise OSSIntakeRequestError(str(exc)) from exc
-        object.__setattr__(self, "webhook_secret", secret)
         object.__setattr__(self, "allowed_hosts", hosts)
         object.__setattr__(self, "producer_model", producer_model)
         object.__setattr__(self, "max_download_bytes", max_download_bytes)
         object.__setattr__(self, "download_timeout_seconds", timeout_seconds)
         object.__setattr__(self, "callback_url", callback_url)
+        object.__setattr__(self, "allow_http_callback", allow_http_callback)
+        object.__setattr__(self, "callback_required", callback_required)
+        object.__setattr__(self, "receive_only", receive_only)
         object.__setattr__(self, "callback_token", callback_token)
         object.__setattr__(
             self,
@@ -305,13 +341,13 @@ def _url_basename_or_fallback(
     download_url: str,
     *,
     verify_code: str,
-    file_id: int,
+    analyze_id: int,
 ) -> tuple[str, str]:
     candidate = unquote(PurePosixPath(urlparse(download_url).path).name)
     try:
         return _safe_object_basename(candidate), "url"
     except OSSIntakeRequestError:
-        return _safe_object_basename(f"{verify_code}-{file_id}.zip"), "fallback"
+        return _safe_object_basename(f"{verify_code}-{analyze_id}.zip"), "fallback"
 
 
 def _normalize_compact_submission(
@@ -329,12 +365,12 @@ def _normalize_compact_submission(
             "verifyCode 必须为 1～80 位 ASCII 字母、数字或 ._:-"
         )
 
-    raw_file_id = payload.get("fileId")
-    if isinstance(raw_file_id, bool) or not isinstance(raw_file_id, int):
-        raise OSSIntakeRequestError("fileId 必须是正整数")
-    file_id = int(raw_file_id)
-    if not 1 <= file_id <= 9_223_372_036_854_775_807:
-        raise OSSIntakeRequestError("fileId 必须是 64 位正整数")
+    raw_analyze_id = payload.get("analyzeId")
+    if isinstance(raw_analyze_id, bool) or not isinstance(raw_analyze_id, int):
+        raise OSSIntakeRequestError("analyzeId 必须是正整数")
+    analyze_id = int(raw_analyze_id)
+    if not 1 <= analyze_id <= 9_223_372_036_854_775_807:
+        raise OSSIntakeRequestError("analyzeId 必须是 64 位正整数")
 
     raw_download_url = payload.get("downloadUrl")
     if not isinstance(raw_download_url, str):
@@ -343,21 +379,25 @@ def _normalize_compact_submission(
     basename, basename_source = _url_basename_or_fallback(
         download_url,
         verify_code=verify_code,
-        file_id=file_id,
+        analyze_id=analyze_id,
     )
     parsed = urlparse(download_url)
     host = _normalized_host(parsed.hostname or "")
     object_key = unquote(parsed.path.lstrip("/")) or basename
-    event_id = f"{verify_code}:{file_id}"
+    event_id = f"{verify_code}:{analyze_id}"
     business_date = _business_date_from_verify_code(verify_code)
     canonical = {
         "contract": "oss_ai_v1",
         "verifyCode": verify_code,
-        "fileId": file_id,
+        "analyzeId": analyze_id,
         "url_identity": _url_identity(download_url),
     }
+    # Keep the historical fingerprint encoding so a field rename does not
+    # turn an existing business identity and object path into a conflict.
+    fingerprint_fields = {**canonical}
+    fingerprint_fields["fileId"] = fingerprint_fields.pop("analyzeId")
     fingerprint = hashlib.sha256(
-        json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+        json.dumps(fingerprint_fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
             "utf-8"
         )
     ).hexdigest()
@@ -366,7 +406,7 @@ def _normalize_compact_submission(
         **canonical,
         "event_id": event_id,
         "verify_code": verify_code,
-        "file_id": file_id,
+        "analyze_id": analyze_id,
         "bucket": host,
         "object_key": object_key,
         "basename": basename,
@@ -377,10 +417,11 @@ def _normalize_compact_submission(
         "sha256": None,
         "business_date": business_date,
         "scenario": None,
-        "callback_required": True,
+        "callback_required": config.callback_required,
         "fingerprint": fingerprint,
         "job_id": job_id,
         "run_id": f"{business_date}-oss-{job_id[:12]}",
+        "generated_run_id": True,
     }
 
 
@@ -393,7 +434,7 @@ def _normalize_legacy_submission(
     raw_event_id = payload.get("event_id")
     if not isinstance(raw_event_id, str):
         raise OSSIntakeRequestError(
-            "请求必须提供 verifyCode、fileId、downloadUrl"
+            "请求必须提供 verifyCode、analyzeId、downloadUrl"
         )
     event_id = raw_event_id.strip()
     if EVENT_ID_PATTERN.fullmatch(event_id) is None:
@@ -479,6 +520,7 @@ def _normalize_legacy_submission(
         "fingerprint": fingerprint,
         "job_id": job_id,
         "run_id": run_id,
+        "generated_run_id": requested_run_id is None,
     }
 
 
@@ -490,11 +532,13 @@ def normalize_submission(
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise OSSIntakeRequestError("请求 JSON 顶层必须是对象")
-    compact_keys = {"verifyCode", "fileId", "downloadUrl"}
+    if "fileId" in payload:
+        raise OSSIntakeRequestError("fileId 已更名为 analyzeId，请使用 analyzeId")
+    compact_keys = {"verifyCode", "analyzeId", "downloadUrl"}
     if compact_keys.intersection(payload):
         if not compact_keys.issubset(payload):
             raise OSSIntakeRequestError(
-                "请求必须同时提供 verifyCode、fileId、downloadUrl"
+                "请求必须同时提供 verifyCode、analyzeId、downloadUrl"
             )
         return _normalize_compact_submission(
             payload,
@@ -569,14 +613,47 @@ def _response_basename(
     raise OSSIntakeDownloadError("OSS 下载响应没有可用的 ZIP 文件名")
 
 
+def _download_connection_failure(reason: Any) -> str:
+    """Classify transport errors without exposing URLs or exception text."""
+    error_numbers = {getattr(reason, "errno", None), getattr(reason, "winerror", None)}
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        detail = "TLS 证书校验失败"
+    elif isinstance(reason, ssl.SSLError):
+        detail = "TLS 握手失败"
+    elif isinstance(reason, socket.gaierror):
+        detail = "域名无法解析"
+    elif isinstance(reason, TimeoutError) or error_numbers & {errno.ETIMEDOUT, 10060}:
+        detail = "连接超时"
+    elif isinstance(reason, ConnectionRefusedError) or error_numbers & {
+        errno.ECONNREFUSED, 10061
+    }:
+        detail = "目标服务器拒绝连接"
+    elif isinstance(reason, ConnectionResetError) or error_numbers & {
+        errno.ECONNRESET, 10054
+    }:
+        detail = "连接被重置"
+    else:
+        return "OSS 下载连接失败"
+    return f"OSS 下载连接失败：{detail}"
+
+
 def download_oss_object(
     submission: dict[str, Any],
     destination: Path,
     config: OSSIntakeConfig,
+    *,
+    cancel_event: threading.Event | None = None,
 ) -> dict[str, Any]:
+    if cancel_event is not None and cancel_event.is_set():
+        raise OSSIntakeCancelledError("投递任务已取消")
     url = _validate_download_url(str(submission["download_url"]), config)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    opener = urllib.request.build_opener(_ValidatedRedirectHandler(config))
+    # OSS has its own validated destination policy. Desktop/model proxies must
+    # not route signed downloads or make them depend on a local proxy process.
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _ValidatedRedirectHandler(config),
+    )
     request = urllib.request.Request(
         url,
         headers={"User-Agent": "offline-activity-audit-oss-intake/1.0"},
@@ -623,6 +700,8 @@ def download_oss_object(
             )
             with actual_destination.open("xb") as stream:
                 while True:
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise OSSIntakeCancelledError("投递任务已取消")
                     block = response.read(1024 * 1024)
                     if not block:
                         break
@@ -650,9 +729,12 @@ def download_oss_object(
     except urllib.error.HTTPError as exc:
         raise OSSIntakeDownloadError(f"OSS 下载失败：HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
-        raise OSSIntakeDownloadError("OSS 下载连接失败") from exc
+        raise OSSIntakeDownloadError(_download_connection_failure(exc.reason)) from exc
     except (OSError, zipfile.BadZipFile) as exc:
-        raise OSSIntakeDownloadError("OSS 对象下载或 ZIP 校验失败") from exc
+        message = _download_connection_failure(exc)
+        if message == "OSS 下载连接失败":
+            message = "OSS 对象下载或 ZIP 校验失败"
+        raise OSSIntakeDownloadError(message) from exc
     finally:
         if actual_destination.exists() and not verified:
             actual_destination.unlink(missing_ok=True)
@@ -666,6 +748,7 @@ def run_formal_audit_subprocess(
     worktrees_root: Path,
     scenario: str | None,
     workbench_url: str | None,
+    cancel_event: threading.Event | None = None,
 ) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(
         prefix="offline-audit-oss-result-"
@@ -679,8 +762,14 @@ def run_formal_audit_subprocess(
             run_id,
             "--producer-model",
             producer_model,
+            "--model",
+            DEFAULT_MODEL,
+            "--reasoning-effort",
+            DEFAULT_REASONING_EFFORT,
             "--input-dir",
             str(input_dir),
+            "--input-source",
+            "oss",
             "--worktrees",
             str(worktrees_root),
             "--result-json",
@@ -696,74 +785,149 @@ def run_formal_audit_subprocess(
         kwargs: dict[str, Any] = {}
         if os.name == "nt":
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        completed = subprocess.run(
-            command,
-            cwd=PROJECT_ROOT,
-            env=environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-            **kwargs,
+        if cancel_event is None:
+            completed = subprocess.run(
+                command,
+                cwd=PROJECT_ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+                **kwargs,
+            )
+            returncode = completed.returncode
+            output = completed.stdout or ""
+        else:
+            if cancel_event.is_set():
+                raise OSSIntakeCancelledError("投递任务已取消")
+            if os.name == "nt":
+                kwargs["creationflags"] = int(kwargs.get("creationflags") or 0) | getattr(
+                    subprocess,
+                    "CREATE_NEW_PROCESS_GROUP",
+                    0,
+                )
+            else:
+                kwargs["start_new_session"] = True
+            process = subprocess.Popen(
+                command,
+                cwd=PROJECT_ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                **kwargs,
+            )
+            output = ""
+            while True:
+                try:
+                    output, _ = process.communicate(timeout=0.25)
+                    break
+                except subprocess.TimeoutExpired:
+                    if not cancel_event.is_set():
+                        continue
+                    _terminate_formal_process(process)
+                    try:
+                        output, _ = process.communicate(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        output, _ = process.communicate()
+                    raise OSSIntakeCancelledError("投递任务已取消")
+            returncode = int(process.returncode or 0)
+            if cancel_event.is_set():
+                raise OSSIntakeCancelledError("投递任务已取消")
+        result = read_json_file(result_path) if result_path.is_file() else None
+        classification_failed = bool(
+            isinstance(result, dict) and result.get("status") == "failed"
+            and isinstance(result.get("failure"), dict)
+            and result["failure"].get("code") == "classification_failed"
         )
-        if completed.returncode != 0:
-            detail = (completed.stdout or "").strip()[-2000:]
+        if returncode != 0 and not (returncode == 2 and classification_failed):
+            detail = output.strip()[-2000:]
             raise OSSIntakeExecutionError(
                 "正式核销运行失败" + (f"：{detail}" if detail else "")
             )
-        if not result_path.is_file():
+        if result is None:
             raise OSSIntakeExecutionError("正式核销运行未返回结果收据")
-        result = read_json_file(result_path)
-        if str(result.get("status")) != "completed" or not result.get(
+        if (str(result.get("status")) != "completed" and not classification_failed) or not result.get(
             "workspace_id"
         ):
             raise OSSIntakeExecutionError("正式核销运行返回的结果收据无效")
         return result
 
 
-def build_callback_result(result: dict[str, Any]) -> str:
-    error_count = int(result.get("error_count") or 0)
-    scenarios = [str(value) for value in result.get("scenarios") or []]
-    scenario_count = len(scenarios)
-    if error_count:
-        heading = (
-            f"核销分析完成，共{scenario_count or 1}个场景，"
-            f"发现{error_count}个错误项。"
-        )
-    else:
-        heading = f"核销分析完成，共{scenario_count or 1}个场景，未发现阻断问题。"
+def _terminate_formal_process(process: subprocess.Popen[str]) -> None:
+    """Terminate only the formal runner process tree owned by this intake job."""
 
-    notes: list[str] = []
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if completed.returncode == 0 or process.poll() is not None:
+            return
+    process.kill()
+
+
+def build_callback_result(result: dict[str, Any]) -> str:
+    summary_value = str(result.get("analysis_summary") or "").strip()
+    worktree_value = str(result.get("worktree") or "").strip()
+    if summary_value and worktree_value:
+        try:
+            summary_path = Path(summary_value).resolve()
+            worktree_path = Path(worktree_value).resolve()
+            relative = summary_path.relative_to(worktree_path)
+            if (
+                relative.as_posix() == ANALYSIS_SUMMARY_FILENAME
+                and summary_path.is_file()
+            ):
+                callback_result = summary_path.read_text(encoding="utf-8").strip()
+                if callback_result:
+                    return _bounded_callback_result(callback_result)
+        except (OSError, UnicodeError, ValueError):
+            pass
+
+    view_payload: dict[str, Any] = {"sheets": []}
     snapshot_value = result.get("snapshot")
     if snapshot_value:
         try:
             snapshot = read_json_file(Path(str(snapshot_value)).resolve())
             view = snapshot.get("view") if isinstance(snapshot, dict) else None
-            sheets = view.get("sheets") if isinstance(view, dict) else None
-            if isinstance(sheets, list):
-                for sheet in sheets:
-                    if not isinstance(sheet, dict):
-                        continue
-                    name = str(
-                        sheet.get("name")
-                        or sheet.get("title")
-                        or sheet.get("scenario")
-                        or "核销结果"
-                    ).strip()
-                    note = str(sheet.get("note") or "").strip()
-                    if note:
-                        notes.append(f"{name}：{note}")
+            if isinstance(view, dict):
+                view_payload = view
         except (OSError, ValueError, json.JSONDecodeError):
-            notes = []
+            pass
 
-    callback_result = heading
-    if notes:
-        callback_result += " " + " ".join(notes)
-    if len(callback_result) > MAX_CALLBACK_RESULT_CHARS:
-        callback_result = callback_result[: MAX_CALLBACK_RESULT_CHARS - 8] + "……（截断）"
-    return callback_result
+    scenarios = [str(value) for value in result.get("scenarios") or []]
+    if result.get("status") == "failed" and not view_payload.get("sheets"):
+        message = str((result.get("failure") or {}).get("message") or "").strip()
+        if not message:
+            raise OSSIntakeExecutionError("核销失败结果缺少具体原因")
+        return _bounded_callback_result("## 核销失败\n\n" + message)
+    callback_result = render_analysis_summary_markdown(
+        view_payload,
+        {
+            "scenario_count": len(scenarios) or 1,
+            "error_count": int(result.get("error_count") or 0),
+        },
+    )
+    return _bounded_callback_result(callback_result)
+
+
+def _bounded_callback_result(value: str) -> str:
+    if len(value) <= MAX_CALLBACK_RESULT_CHARS:
+        return value
+    suffix = "\n\n> 回调内容已截断；完整小结已保存在本地运行档案。"
+    return value[: MAX_CALLBACK_RESULT_CHARS - len(suffix)].rstrip() + suffix
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -792,12 +956,20 @@ def post_analysis_callback(
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json; charset=utf-8",
-        "Idempotency-Key": f"{payload['verifyCode']}:{payload['fileId']}",
+        "Idempotency-Key": (
+            f"{payload['verifyCode']}:{payload['analyzeId']}:"
+            f"{hashlib.sha256(encoded).hexdigest()[:16]}"
+        ),
         "User-Agent": "offline-activity-audit-callback/1.0",
     }
     if config.callback_token:
         headers["Authorization"] = f"Bearer {config.callback_token}"
-    opener = urllib.request.build_opener(_NoRedirectHandler())
+    # Callback delivery uses its own direct connection. A stale process or
+    # Windows proxy must not block the configured business callback endpoint.
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _NoRedirectHandler(),
+    )
     last_error = "未知错误"
     last_status: int | None = None
     for attempt in range(1, config.callback_attempts + 1):
@@ -869,39 +1041,94 @@ class OSSIntakeStore:
             job["finished_at"] = utc_now()
             job["failure"] = {
                 "code": "service_restarted",
-                "message": "服务在任务完成前重启；如需重新分析，请使用新的 fileId 和下载地址投递。",
+                "message": "服务在任务完成前重启；如需重新分析，请使用同一业务字段和新的临时下载地址再次投递。",
             }
             atomic_write_json(path, job)
 
+    def _jobs_for_identity(self, identity_job_id: str) -> list[dict[str, Any]]:
+        matches: list[dict[str, Any]] = []
+        for path in self.jobs_root.glob("*.json"):
+            try:
+                job = read_json_file(path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            job_id = str(job.get("job_id") or "")
+            stored_identity = str(job.get("identity_job_id") or job_id)
+            if stored_identity != identity_job_id:
+                continue
+            if JOB_ID_PATTERN.fullmatch(job_id) is None or path.name != f"{job_id}.json":
+                continue
+            try:
+                attempt = int(job.get("attempt") or 1)
+            except (TypeError, ValueError):
+                continue
+            if attempt < 1:
+                continue
+            job["attempt"] = attempt
+            matches.append(job)
+        return matches
+
     def create_or_get(self, submission: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-        job_id = str(submission["job_id"])
-        path = self._path(job_id)
+        identity_job_id = str(submission.get("identity_job_id") or submission["job_id"])
+        self._path(identity_job_id)
         with self._lock:
-            if path.is_file():
-                existing = read_json_file(path)
+            identity_jobs = self._jobs_for_identity(identity_job_id)
+            supersedes_job_id: str | None = None
+            if identity_jobs:
+                existing = max(
+                    identity_jobs,
+                    key=lambda item: (
+                        int(item.get("attempt") or 1),
+                        str(item.get("created_at") or ""),
+                        str(item.get("job_id") or ""),
+                    ),
+                )
                 if existing.get("idempotency_fingerprint") != submission["fingerprint"]:
                     identity = (
-                        "同一 verifyCode 与 fileId"
-                        if submission.get("callback_required")
+                        "同一 verifyCode 与 analyzeId"
+                        if submission.get("contract") == "oss_ai_v1"
                         else "同一 event_id"
                     )
                     raise OSSIntakeConflictError(
                         f"{identity}已用于另一个 OSS 对象"
                     )
-                return existing, False
+                if str(existing.get("status")) not in TERMINAL_JOB_STATUSES:
+                    return existing, False
+                attempt = max(int(item.get("attempt") or 1) for item in identity_jobs) + 1
+                supersedes_job_id = str(existing["job_id"])
+            else:
+                attempt = 1
+
+            job_id = _attempt_job_id(identity_job_id, attempt)
+            path = self._path(job_id)
+            if path.exists():
+                raise OSSIntakeConflictError("无法为本次重复投递创建唯一任务")
+            submission["identity_job_id"] = identity_job_id
+            submission["job_id"] = job_id
+            submission["attempt"] = attempt
+            submission["supersedes_job_id"] = supersedes_job_id
+            if attempt > 1 and submission.get("generated_run_id"):
+                submission["run_id"] = (
+                    f"{submission['business_date']}-oss-{job_id[:12]}"
+                )
             now = utc_now()
             callback_required = bool(submission.get("callback_required"))
             job = {
-                "schema_version": "1.1",
+                "schema_version": "1.4",
                 "job_id": job_id,
+                "identity_job_id": identity_job_id,
+                "attempt": attempt,
+                "supersedes_job_id": supersedes_job_id,
                 "event_id": submission["event_id"],
                 "verifyCode": submission.get("verify_code"),
-                "fileId": submission.get("file_id"),
+                "analyzeId": submission.get("analyze_id"),
                 "idempotency_fingerprint": submission["fingerprint"],
                 "status": "accepted",
                 "created_at": now,
                 "updated_at": now,
                 "started_at": None,
+                "downloaded_at": None,
+                "audit_started_at": None,
                 "finished_at": None,
                 "run_id": submission["run_id"],
                 "producer_model": submission["producer_model"],
@@ -935,6 +1162,34 @@ class OSSIntakeStore:
                 raise FileNotFoundError(job_id)
             return read_json_file(path)
 
+    def list(
+        self,
+        *,
+        active_only: bool = False,
+        completed: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            jobs: list[dict[str, Any]] = []
+            for path in self.jobs_root.glob("*.json"):
+                job = read_json_file(path)
+                job_id = str(job.get("job_id") or "")
+                if JOB_ID_PATTERN.fullmatch(job_id) is None or path.name != f"{job_id}.json":
+                    raise OSSIntakeRequestError("OSS 投递任务收据标识不安全")
+                status = str(job.get("status"))
+                if active_only and status not in ACTIVE_JOB_STATUSES:
+                    continue
+                if completed is not None and (status == "completed") is not completed:
+                    continue
+                jobs.append(job)
+            return sorted(
+                jobs,
+                key=lambda item: (
+                    str(item.get("created_at") or ""),
+                    str(item.get("job_id") or ""),
+                ),
+                reverse=True,
+            )
+
     def update(self, job_id: str, **changes: Any) -> dict[str, Any]:
         with self._lock:
             job = self.get(job_id)
@@ -948,6 +1203,15 @@ Downloader = Callable[[dict[str, Any], Path, OSSIntakeConfig], dict[str, Any]]
 AuditRunner = Callable[..., dict[str, Any]]
 URLValidator = Callable[[str, OSSIntakeConfig], str]
 CallbackSender = Callable[[dict[str, Any], OSSIntakeConfig], dict[str, Any]]
+
+
+class _JobControl:
+    def __init__(self) -> None:
+        self.cancel_event = threading.Event()
+        self.idle_event = threading.Event()
+        self.idle_event.set()
+        self.lock = threading.Lock()
+        self.active_stages = 0
 
 
 class OSSIntakeService:
@@ -972,22 +1236,25 @@ class OSSIntakeService:
         self.runner = runner
         self.url_validator = url_validator
         self.callback_sender = callback_sender
-        self._queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
+        self._download_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
+        self._audit_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
         self._closed = threading.Event()
-        self._worker = threading.Thread(
-            target=self._worker_loop,
-            name="offline-audit-oss-intake",
+        self._lifecycle_lock = threading.Lock()
+        self._controls: dict[str, _JobControl] = {}
+        self._download_worker = threading.Thread(
+            target=self._download_worker_loop,
+            name="offline-audit-oss-download",
             daemon=True,
         )
-        self._worker.start()
-
-    @property
-    def secret(self) -> str:
-        return self.config.webhook_secret
+        self._audit_worker = threading.Thread(
+            target=self._audit_worker_loop,
+            name="offline-audit-oss-audit",
+            daemon=True,
+        )
+        self._download_worker.start()
+        self._audit_worker.start()
 
     def submit(self, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-        if self._closed.is_set():
-            raise OSSIntakeUnavailableError("OSS 入站服务正在关闭")
         submission = normalize_submission(
             payload,
             self.config,
@@ -996,31 +1263,149 @@ class OSSIntakeService:
         if submission.get("callback_required") and not self.config.callback_url:
             raise OSSIntakeUnavailableError("OSS 分析结果回调地址尚未配置")
         submission["producer_model"] = self.config.producer_model
-        job, created = self.store.create_or_get(submission)
-        if created:
-            self._queue.put(submission)
+        with self._lifecycle_lock:
+            if self._closed.is_set():
+                raise OSSIntakeUnavailableError("OSS 入站服务正在关闭")
+            job, created = self.store.create_or_get(submission)
+            if created:
+                self._controls[str(submission["job_id"])] = _JobControl()
+                self._download_queue.put(submission)
         return job, created
 
     def get(self, job_id: str) -> dict[str, Any]:
         return self.store.get(job_id)
 
-    def close(self) -> None:
-        if self._closed.is_set():
-            return
-        self._closed.set()
-        self._queue.put(None)
+    def list(
+        self,
+        *,
+        active_only: bool = False,
+        completed: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.store.list(active_only=active_only, completed=completed)
 
-    def _worker_loop(self) -> None:
+    def delete(self, job_id: str) -> dict[str, Any]:
+        with self._lifecycle_lock:
+            job = self.store.get(job_id)
+            active = str(job.get("status")) in ACTIVE_JOB_STATUSES
+            control = self._controls.get(job_id)
+            if active and control is None:
+                raise RunDeletionConflict("该活动任务不属于当前服务进程，不能安全终止")
+            if control is not None:
+                with control.lock:
+                    control.cancel_event.set()
+                idle_event = control.idle_event
+            else:
+                idle_event = None
+        if idle_event is not None and not idle_event.wait(timeout=75):
+            raise RunDeletionConflict("任务终止超时，尚不能安全删除，请稍后重试")
+        with self._lifecycle_lock:
+            if active:
+                try:
+                    self.store.update(
+                        job_id,
+                        status="failed",
+                        failure={
+                            "code": "cancelled_by_user",
+                            "message": "用户已从工作台取消并删除本次投递任务。",
+                        },
+                        finished_at=utc_now(),
+                    )
+                except FileNotFoundError:
+                    pass
+            plan = prepare_intake_job_deletion(
+                self.worktrees_root,
+                job_id,
+                input_root=self.input_root,
+            )
+            result = plan.execute()
+            self._controls.pop(job_id, None)
+            result["canceled"] = active
+            return result
+
+    def close(self) -> None:
+        with self._lifecycle_lock:
+            if self._closed.is_set():
+                return
+            self._closed.set()
+            self._download_queue.put(None)
+
+    def _download_worker_loop(self) -> None:
         while True:
-            submission = self._queue.get()
+            submission = self._download_queue.get()
+            try:
+                if submission is None:
+                    # The sentinel is queued after every accepted submission. Forward it
+                    # only after all downloads have either failed or entered the audit
+                    # queue, so close() cannot strand a verified ZIP between stages.
+                    self._audit_queue.put(None)
+                    return
+                control = self._begin_job_stage(submission)
+                if control is None:
+                    continue
+                try:
+                    self._download(submission, control)
+                finally:
+                    self._end_job_stage(control)
+                    self._release_terminal_control(submission, control)
+            finally:
+                self._download_queue.task_done()
+
+    def _audit_worker_loop(self) -> None:
+        while True:
+            submission = self._audit_queue.get()
             try:
                 if submission is None:
                     return
-                self._process(submission)
+                control = self._begin_job_stage(submission)
+                if control is None:
+                    continue
+                try:
+                    self._audit(submission, control)
+                finally:
+                    self._end_job_stage(control)
+                    self._release_terminal_control(submission, control)
             finally:
-                self._queue.task_done()
+                self._audit_queue.task_done()
 
-    def _process(self, submission: dict[str, Any]) -> None:
+    def _begin_job_stage(self, submission: dict[str, Any]) -> _JobControl | None:
+        control = self._controls.get(str(submission["job_id"]))
+        if control is None:
+            return None
+        with control.lock:
+            if control.cancel_event.is_set():
+                return None
+            control.active_stages += 1
+            control.idle_event.clear()
+            return control
+
+    @staticmethod
+    def _end_job_stage(control: _JobControl) -> None:
+        with control.lock:
+            control.active_stages = max(0, control.active_stages - 1)
+            if control.active_stages == 0:
+                control.idle_event.set()
+
+    def _release_terminal_control(
+        self,
+        submission: dict[str, Any],
+        control: _JobControl,
+    ) -> None:
+        job_id = str(submission["job_id"])
+        try:
+            terminal = str(self.store.get(job_id).get("status")) in TERMINAL_JOB_STATUSES
+        except FileNotFoundError:
+            terminal = True
+        if terminal:
+            with self._lifecycle_lock:
+                if self._controls.get(job_id) is control:
+                    self._controls.pop(job_id, None)
+
+    @staticmethod
+    def _raise_if_cancelled(control: _JobControl) -> None:
+        if control.cancel_event.is_set():
+            raise OSSIntakeCancelledError("投递任务已取消")
+
+    def _download(self, submission: dict[str, Any], control: _JobControl) -> None:
         job_id = str(submission["job_id"])
         self.store.update(
             job_id,
@@ -1032,7 +1417,20 @@ class OSSIntakeService:
             input_dir = self.input_root / job_id
             input_dir.mkdir(parents=True, exist_ok=True)
             destination = input_dir / str(submission["basename"])
-            delivery = self.downloader(submission, destination, self.config)
+            if self.downloader is download_oss_object:
+                delivery = self.downloader(
+                    submission,
+                    destination,
+                    self.config,
+                    cancel_event=control.cancel_event,
+                )
+            else:
+                # Existing test and integration downloaders keep their legacy
+                # three-argument contract. Cancellation is still checked
+                # immediately after they return; the bundled downloader also
+                # checks it between streamed blocks.
+                delivery = self.downloader(submission, destination, self.config)
+            self._raise_if_cancelled(control)
             input_file = Path(str(delivery.get("input_file") or destination)).resolve()
             try:
                 input_file.relative_to(input_dir.resolve())
@@ -1045,7 +1443,54 @@ class OSSIntakeService:
                 "input_directory": str(input_dir),
                 "input_file": str(input_file),
             }
-            self.store.update(job_id, status="running", delivery=delivery)
+            # Verification has made the local ZIP authoritative for the rest of
+            # this attempt. Release the temporary credential before either
+            # completing receive-only mode or waiting for the audit worker.
+            submission.pop("download_url", None)
+            if self.config.receive_only:
+                self.store.update(
+                    job_id,
+                    status="completed",
+                    delivery=delivery,
+                    downloaded_at=utc_now(),
+                    result=None,
+                    callback={
+                        "required": False,
+                        "status": "not_required",
+                        "attempts": 0,
+                        "http_status": None,
+                        "delivered_at": None,
+                    },
+                    failure=None,
+                    finished_at=utc_now(),
+                )
+                return
+            with control.lock:
+                if control.cancel_event.is_set():
+                    raise OSSIntakeCancelledError("投递任务已取消")
+                self.store.update(
+                    job_id,
+                    status="downloaded",
+                    delivery=delivery,
+                    downloaded_at=utc_now(),
+                    failure=None,
+                )
+                self._audit_queue.put(submission)
+        except OSSIntakeCancelledError:
+            return
+        except BaseException as exc:
+            self._fail_job(submission, exc)
+
+    def _audit(self, submission: dict[str, Any], control: _JobControl) -> None:
+        job_id = str(submission["job_id"])
+        input_dir = self.input_root / job_id
+        self.store.update(
+            job_id,
+            status="running",
+            audit_started_at=utc_now(),
+            failure=None,
+        )
+        try:
             result = self.runner(
                 run_id=submission["run_id"],
                 producer_model=self.config.producer_model,
@@ -1053,18 +1498,27 @@ class OSSIntakeService:
                 worktrees_root=self.worktrees_root,
                 scenario=submission.get("scenario"),
                 workbench_url=self.config.workbench_url,
+                cancel_event=control.cancel_event,
             )
+            self._raise_if_cancelled(control)
+            classification_failed = (
+                result.get("status") == "failed"
+                and (result.get("failure") or {}).get("code") == "classification_failed"
+            )
+            if result.get("status") != "completed" and not classification_failed:
+                raise OSSIntakeExecutionError("正式核销运行返回的结果收据无效")
             callback: dict[str, Any]
             if submission.get("callback_required"):
                 callback_payload = {
                     "verifyCode": submission["verify_code"],
-                    "fileId": submission["file_id"],
+                    "analyzeId": submission["analyze_id"],
                     "result": build_callback_result(result),
                 }
                 self.store.update(
                     job_id,
                     status="callback",
                     result=result,
+                    failure=result.get("failure") if classification_failed else None,
                     callback={
                         "required": True,
                         "status": "sending",
@@ -1073,7 +1527,9 @@ class OSSIntakeService:
                         "delivered_at": None,
                     },
                 )
+                self._raise_if_cancelled(control)
                 callback = self.callback_sender(callback_payload, self.config)
+                self._raise_if_cancelled(control)
                 callback = {
                     "required": True,
                     "status": "delivered",
@@ -1091,45 +1547,55 @@ class OSSIntakeService:
                 }
             self.store.update(
                 job_id,
-                status="completed",
+                status="failed" if classification_failed else "completed",
                 result=result,
                 callback=callback,
-                failure=None,
+                failure=result.get("failure") if classification_failed else None,
                 finished_at=utc_now(),
             )
+        except OSSIntakeCancelledError:
+            return
         except BaseException as exc:
-            existing_job = self.store.get(job_id)
-            result = existing_job.get("result") or self._find_run_receipt(
-                str(submission["run_id"])
+            self._fail_job(submission, exc)
+
+    def _fail_job(
+        self,
+        submission: dict[str, Any],
+        exc: BaseException,
+    ) -> None:
+        job_id = str(submission["job_id"])
+        existing_job = self.store.get(job_id)
+        result = existing_job.get("result") or self._find_run_receipt(
+            str(submission["run_id"])
+        )
+        message = self._safe_failure_message(exc, submission)
+        if isinstance(exc, OSSIntakeCallbackError):
+            failure_code = "callback_failed"
+            callback = {
+                "required": True,
+                "status": "failed",
+                "attempts": exc.attempts,
+                "http_status": exc.http_status,
+                "delivered_at": None,
+            }
+        else:
+            failure_code = (
+                "audit_failed"
+                if isinstance(exc, OSSIntakeExecutionError)
+                else "intake_failed"
             )
-            message = self._safe_failure_message(exc, submission)
-            if isinstance(exc, OSSIntakeCallbackError):
-                failure_code = "callback_failed"
-                callback = {
-                    "required": True,
-                    "status": "failed",
-                    "attempts": exc.attempts,
-                    "http_status": exc.http_status,
-                    "delivered_at": None,
-                }
-            else:
-                failure_code = (
-                    "audit_failed"
-                    if isinstance(exc, OSSIntakeExecutionError)
-                    else "intake_failed"
-                )
-                callback = existing_job.get("callback")
-            self.store.update(
-                job_id,
-                status="failed",
-                result=result,
-                callback=callback,
-                failure={
-                    "code": failure_code,
-                    "message": message,
-                },
-                finished_at=utc_now(),
-            )
+            callback = existing_job.get("callback")
+        self.store.update(
+            job_id,
+            status="failed",
+            result=result,
+            callback=callback,
+            failure={
+                "code": failure_code,
+                "message": message,
+            },
+            finished_at=utc_now(),
+        )
 
     def _find_run_receipt(self, run_id: str) -> dict[str, Any] | None:
         matches: list[tuple[float, Path, dict[str, Any]]] = []
@@ -1166,7 +1632,6 @@ class OSSIntakeService:
         message = str(exc).strip() or exc.__class__.__name__
         secrets_to_hide = {
             str(submission.get("download_url") or ""),
-            self.config.webhook_secret,
             str(self.config.callback_url or ""),
             str(self.config.callback_token or ""),
         }
@@ -1178,10 +1643,14 @@ class OSSIntakeService:
 
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:
-    """Return the authenticated API projection without internal fingerprints."""
+    """Return the public API projection without internal fingerprints."""
 
-    return {
+    result = {
         key: value
         for key, value in job.items()
-        if key != "idempotency_fingerprint"
+        if key not in INTERNAL_JOB_FIELDS
     }
+    # Project old receipts without rewriting immutable job history.
+    if "fileId" in result:
+        result.setdefault("analyzeId", result.pop("fileId"))
+    return result
