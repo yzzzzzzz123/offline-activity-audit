@@ -97,6 +97,12 @@ def _measurement_tokens(value: Any) -> set[str]:
     }
 
 
+def product_measurements_compatible(left: Any, right: Any) -> bool:
+    left_tokens = _measurement_tokens(left)
+    right_tokens = _measurement_tokens(right)
+    return not left_tokens or not right_tokens or bool(left_tokens & right_tokens)
+
+
 def catalog_product_name_score(value: Any, product: dict[str, Any]) -> float:
     """Score one source name against the names controlled by one catalog product."""
 

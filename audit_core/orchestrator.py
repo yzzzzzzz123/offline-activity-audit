@@ -8,6 +8,7 @@ import shutil
 import sys
 import unicodedata
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -27,77 +28,15 @@ from .poster_material import audit_poster_material_case
 from .pos_target_incentive import audit_pos_target_incentive_case
 from .price_difference_support import audit_price_difference_support_case
 from .report import create_combined_report, verify_workbook
+from .scenario_registry import EVIDENCE_SCHEMA_BY_SCENARIO as EVIDENCE_SCHEMA, SCENARIO_ORDER
 from .self_procured_gift_material import audit_self_procured_gift_material_case
+from .workflow import build_audit_chain, invoke_audit_chain
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_DIR = PROJECT_ROOT / "input"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "worktrees"
 RESULT_SCHEMA = PROJECT_ROOT / "contracts" / "audit-result.schema.json"
-EVIDENCE_SCHEMA = {
-    "personnel_incentive": PROJECT_ROOT
-    / "skills"
-    / "audit-personnel-incentive"
-    / "references"
-    / "evidence.schema.json",
-    "promotional_display": PROJECT_ROOT
-    / "skills"
-    / "audit-promotional-display"
-    / "references"
-    / "evidence.schema.json",
-    "poster_material": PROJECT_ROOT
-    / "skills"
-    / "audit-poster-material"
-    / "references"
-    / "evidence.schema.json",
-    "other_expense": PROJECT_ROOT
-    / "skills"
-    / "audit-other-expense"
-    / "references"
-    / "evidence.schema.json",
-    "maintenance_fee": PROJECT_ROOT
-    / "skills"
-    / "audit-maintenance-fee"
-    / "references"
-    / "evidence.schema.json",
-    "giveaway_promotion": PROJECT_ROOT
-    / "skills"
-    / "audit-giveaway-promotion"
-    / "references"
-    / "evidence.schema.json",
-    "price_difference_support": PROJECT_ROOT
-    / "skills"
-    / "audit-price-difference-support"
-    / "references"
-    / "evidence.schema.json",
-    "pos_target_incentive": PROJECT_ROOT
-    / "skills"
-    / "audit-pos-target-incentive"
-    / "references"
-    / "evidence.schema.json",
-    "entry_fee": PROJECT_ROOT
-    / "skills"
-    / "audit-entry-fee"
-    / "references"
-    / "evidence.schema.json",
-    "self_procured_gift_material": PROJECT_ROOT
-    / "skills"
-    / "audit-self-procured-gift-material"
-    / "references"
-    / "evidence.schema.json",
-}
-SCENARIO_ORDER = (
-    "personnel_incentive",
-    "promotional_display",
-    "poster_material",
-    "other_expense",
-    "maintenance_fee",
-    "giveaway_promotion",
-    "price_difference_support",
-    "pos_target_incentive",
-    "entry_fee",
-    "self_procured_gift_material",
-)
 EvidenceProvider = Callable[[dict[str, Any], Path], dict[str, Any]]
 RunObserver = Callable[[str, dict[str, Any]], None]
 
@@ -338,22 +277,242 @@ def _publish_html_without_overwrite(
         return target_html
 
 
-def _publish_pair_without_overwrite(
-    temporary_workbook: Path,
-    temporary_html: Path,
-    run_id: str,
-    producer_model: str,
-    output_dir: Path,
-) -> Path:
-    """Compatibility entry point for callers of the former pair publisher."""
+@dataclass
+class _AuditWorkflow:
+    """One run's state, passed through each typed LCEL stage in order."""
 
-    return _publish_html_without_overwrite(
-        temporary_workbook,
-        temporary_html,
-        run_id,
-        producer_model,
-        output_dir,
-    )
+    run_id: str
+    producer_model: str
+    input_dir: str | Path
+    output_root: Path
+    temporary_root: Path
+    provider: EvidenceProvider
+    scenario: str | None
+    observer: RunObserver | None
+    temporary_workbook: Path | None = None
+    temporary_html: Path | None = None
+    receipt: dict[str, Any] = field(default_factory=dict)
+    cases: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
+    scenarios: list[str] = field(default_factory=list, init=False)
+    diagnostic_case: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    classification_rejections: list[dict[str, Any]] = field(default_factory=list, init=False, repr=False)
+    evidence_by_scenario: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
+    diagnostic_evidence: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    results: list[dict[str, Any]] = field(default_factory=list, init=False, repr=False)
+    diagnostic_result: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    diagnostic_view: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    supplemental_view: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    supplemental_verification: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
+    rejection_result: dict[str, Any] | None = field(default=None, init=False, repr=False)
+
+    def intake(self) -> _AuditWorkflow:
+        selected_scenarios = {self.scenario} if self.scenario else None
+        self.cases, self.diagnostic_case, self.classification_rejections = _prepare_audit_inputs(
+            self.input_dir, self.temporary_root, selected_scenarios,
+        )
+        self.scenarios = [name for name in SCENARIO_ORDER if name in self.cases]
+        if self.observer is not None:
+            self.observer(
+                "cases.prepared",
+                {
+                    "cases": self.cases,
+                    "scenarios": self.scenarios,
+                    "temporary_root": str(self.temporary_root),
+                },
+            )
+        if {"personnel_incentive", "promotional_display"}.intersection(self.scenarios):
+            from .product_database import load_product_catalog
+            catalog = load_product_catalog()
+            if self.observer is not None:
+                self.observer("product_database.loaded", {"catalog": catalog})
+        return self
+
+    def analysis(self) -> _AuditWorkflow:
+        self.evidence_by_scenario = {}
+        for scenario_name in self.scenarios:
+            case = self.cases[scenario_name]
+            if self.observer is not None:
+                self.observer("scenario.started", {"scenario": scenario_name})
+            self.evidence_by_scenario[scenario_name] = self.provider(case, self.temporary_root)
+
+        self.diagnostic_evidence = None
+        if self.diagnostic_case is not None:
+            if self.observer is not None:
+                self.observer("material_diagnostic.started", {"case": self.diagnostic_case})
+            self.diagnostic_evidence = self.provider(self.diagnostic_case, self.temporary_root)
+        return self
+
+    def evidence(self) -> _AuditWorkflow:
+        for scenario_name in self.scenarios:
+            evidence = self.evidence_by_scenario[scenario_name]
+            validate_json(evidence, EVIDENCE_SCHEMA[scenario_name])
+            if self.observer is not None:
+                self.observer(
+                    "evidence.validated",
+                    {"scenario": scenario_name, "evidence": evidence},
+                )
+
+        if self.diagnostic_case is not None:
+            from .material_diagnostic_ai import validate_material_observations
+            validate_material_observations(self.diagnostic_case, self.diagnostic_evidence)
+            if self.observer is not None:
+                self.observer("material_diagnostic.evidence_validated", {"evidence": self.diagnostic_evidence})
+        return self
+
+    def decision(self) -> _AuditWorkflow:
+        self.results = []
+        for scenario_name in self.scenarios:
+            case = self.cases[scenario_name]
+            evidence = self.evidence_by_scenario[scenario_name]
+            if scenario_name == "personnel_incentive":
+                result = audit_personnel_case(case, evidence)
+            elif scenario_name == "promotional_display":
+                result = audit_display_case(case, evidence)
+            elif scenario_name == "poster_material":
+                result = audit_poster_material_case(case, evidence)
+            elif scenario_name == "other_expense":
+                result = audit_other_expense_case(case, evidence)
+            elif scenario_name == "maintenance_fee":
+                result = audit_maintenance_fee_case(case, evidence)
+            elif scenario_name == "giveaway_promotion":
+                result = audit_giveaway_promotion_case(case, evidence)
+            elif scenario_name == "price_difference_support":
+                result = audit_price_difference_support_case(case, evidence)
+            elif scenario_name == "pos_target_incentive":
+                result = audit_pos_target_incentive_case(case, evidence)
+            elif scenario_name == "entry_fee":
+                result = audit_entry_fee_case(case, evidence)
+            elif scenario_name == "self_procured_gift_material":
+                result = audit_self_procured_gift_material_case(case, evidence)
+            else:
+                raise AuditError(f"未登记的核销处理器：{scenario_name}")
+            validate_json(result, RESULT_SCHEMA)
+            self.results.append(result)
+            if self.observer is not None:
+                self.observer(
+                    "result.validated",
+                    {"scenario": scenario_name, "result": result},
+                )
+
+        self.diagnostic_result = None
+        self.diagnostic_view = None
+        if self.diagnostic_case is not None:
+            from .material_diagnostic_output import (
+                build_material_diagnostic_result, build_material_diagnostic_view,
+            )
+            self.diagnostic_result = build_material_diagnostic_result(self.diagnostic_case, self.diagnostic_evidence)
+            self.diagnostic_view = build_material_diagnostic_view(self.diagnostic_result)
+            if self.observer is not None:
+                self.observer("material_diagnostic.result_validated", {"result": self.diagnostic_result})
+
+        self.supplemental_view = self.diagnostic_view
+        self.supplemental_verification = {}
+        if self.diagnostic_result is not None:
+            self.supplemental_verification["material_diagnostic"] = {
+                "schema_validated": True, "source_coverage_validated": True,
+            }
+        self.rejection_result = None
+        if self.classification_rejections:
+            from .material_diagnostic_output import (
+                build_classification_rejection_result, build_classification_rejection_view,
+            )
+            self.rejection_result = build_classification_rejection_result(self.classification_rejections)
+            rejection_view = build_classification_rejection_view(self.rejection_result)
+            if self.supplemental_view is None:
+                self.supplemental_view = rejection_view
+            else:
+                self.supplemental_view["sheets"].extend(rejection_view["sheets"])
+            self.supplemental_view["classification_rejection"] = self.rejection_result
+            self.supplemental_verification["classification_rejection"] = {
+                "schema_validated": True, "archive_safety_validated": True,
+                "ai_called": False, "conclusion": "rejected",
+            }
+            if self.observer is not None:
+                self.observer("classification_rejection.result_validated", {"result": self.rejection_result})
+        return self
+
+    def _render_verified_report(self) -> dict[str, Any]:
+        if not self.results and self.supplemental_view is not None:
+            self.scenarios = [name for name in SCENARIO_ORDER if any(
+                a.get("scenario") == name for a in (self.diagnostic_result or {}).get("archives", [])
+            )]
+            verification = self.supplemental_verification
+            if self.observer is not None:
+                self.observer("report.verified", {"verification": verification})
+            return {"run_id": self.run_id, "producer_model": self.producer_model,
+                    "view_payload": self.supplemental_view, "scenarios": self.scenarios, "verification": verification}
+
+        self.temporary_workbook = self.temporary_root / "internal-report.xlsx"
+        self.temporary_html = self.temporary_workbook.with_suffix(".html")
+        create_combined_report(self.results, self.temporary_workbook)
+        verification = verify_workbook(self.temporary_workbook, self.scenarios)
+        create_html_report_from_workbook(self.temporary_workbook, self.temporary_html)
+        html_verification = verify_html_report(
+            self.temporary_html,
+            self.scenarios,
+            workbook_path=self.temporary_workbook,
+        )
+        if self.supplemental_view is not None:
+            combined_view = _embedded_payload(self.temporary_html.read_text(encoding="utf-8"))
+            combined_view["sheets"].extend(self.supplemental_view["sheets"])
+            if self.diagnostic_result is not None:
+                combined_view["material_diagnostic"] = self.diagnostic_result
+            if self.rejection_result is not None:
+                combined_view["classification_rejection"] = self.rejection_result
+            self.scenarios = [name for name in SCENARIO_ORDER if name in self.cases or any(
+                a.get("scenario") == name for a in (self.diagnostic_result or {}).get("archives", [])
+            )]
+            combined_verification = {"workbook": verification, "html": html_verification,
+                                     **self.supplemental_verification}
+            if self.observer is not None:
+                self.observer("report.verified", {"verification": combined_verification})
+            return {"run_id": self.run_id, "producer_model": self.producer_model,
+                    "view_payload": combined_view, "scenarios": self.scenarios, "verification": combined_verification}
+        if self.observer is not None:
+            self.observer(
+                "report.verified",
+                {
+                    "verification": {
+                        "workbook": verification,
+                        "html": html_verification,
+                    }
+                },
+            )
+        published_html = _publish_html_without_overwrite(
+            self.temporary_workbook,
+            self.temporary_html,
+            self.run_id,
+            self.producer_model,
+            self.output_root,
+        )
+        self.temporary_workbook = None
+        self.temporary_html = None
+        verification.pop("path", None)
+        html_verification["path"] = str(published_html)
+        verification["html"] = html_verification
+        return {
+            "run_id": self.run_id,
+            "producer_model": self.producer_model,
+            "output": str(published_html),
+            "outputs": {
+                "html": str(published_html),
+            },
+            "scenarios": self.scenarios,
+            "verification": verification,
+        }
+
+    def verification(self) -> _AuditWorkflow:
+        self.receipt = self._render_verified_report()
+        return self
+
+    def chain(self):
+        return build_audit_chain([
+            ("intake", _AuditWorkflow.intake),
+            ("analysis", _AuditWorkflow.analysis),
+            ("evidence", _AuditWorkflow.evidence),
+            ("decision", _AuditWorkflow.decision),
+            ("verification", _AuditWorkflow.verification),
+        ])
 
 
 @with_product_catalog
@@ -374,199 +533,16 @@ def run_audit(
     output_root = Path(output_dir).resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     provider = evidence_provider or _default_provider(model, reasoning_effort)
-    temporary_workbook: Path | None = None
-    temporary_html: Path | None = None
     temporary_root = _create_temporary_root(output_root)
-
+    workflow = _AuditWorkflow(
+        run_id=normalized_run_id, producer_model=normalized_producer_model,
+        input_dir=input_dir, output_root=output_root, temporary_root=temporary_root,
+        provider=provider, scenario=scenario, observer=observer,
+    )
     try:
-        selected_scenarios = {scenario} if scenario else None
-        cases, diagnostic_case, classification_rejections = _prepare_audit_inputs(
-            input_dir, temporary_root, selected_scenarios,
-        )
-        scenarios = [scenario for scenario in SCENARIO_ORDER if scenario in cases]
-        if observer is not None:
-            observer(
-                "cases.prepared",
-                {
-                    "cases": cases,
-                    "scenarios": scenarios,
-                    "temporary_root": str(temporary_root),
-                },
-            )
-        if {"personnel_incentive", "promotional_display"}.intersection(scenarios):
-            from .product_database import load_product_catalog
-            catalog = load_product_catalog()
-            if observer is not None:
-                observer("product_database.loaded", {"catalog": catalog})
-        evidence_by_scenario: dict[str, dict[str, Any]] = {}
-        for scenario_name in scenarios:
-            case = cases[scenario_name]
-            if observer is not None:
-                observer("scenario.started", {"scenario": scenario_name})
-            evidence_by_scenario[scenario_name] = provider(case, temporary_root)
-
-        diagnostic_evidence = None
-        if diagnostic_case is not None:
-            if observer is not None:
-                observer("material_diagnostic.started", {"case": diagnostic_case})
-            diagnostic_evidence = provider(diagnostic_case, temporary_root)
-
-        for scenario_name in scenarios:
-            evidence = evidence_by_scenario[scenario_name]
-            validate_json(evidence, EVIDENCE_SCHEMA[scenario_name])
-            if observer is not None:
-                observer(
-                    "evidence.validated",
-                    {"scenario": scenario_name, "evidence": evidence},
-                )
-
-        if diagnostic_case is not None:
-            from .material_diagnostic_ai import validate_material_observations
-            validate_material_observations(diagnostic_case, diagnostic_evidence)
-            if observer is not None:
-                observer("material_diagnostic.evidence_validated", {"evidence": diagnostic_evidence})
-
-        results: list[dict[str, Any]] = []
-        for scenario_name in scenarios:
-            case = cases[scenario_name]
-            evidence = evidence_by_scenario[scenario_name]
-            if scenario_name == "personnel_incentive":
-                result = audit_personnel_case(case, evidence)
-            elif scenario_name == "promotional_display":
-                result = audit_display_case(case, evidence)
-            elif scenario_name == "poster_material":
-                result = audit_poster_material_case(case, evidence)
-            elif scenario_name == "other_expense":
-                result = audit_other_expense_case(case, evidence)
-            elif scenario_name == "maintenance_fee":
-                result = audit_maintenance_fee_case(case, evidence)
-            elif scenario_name == "giveaway_promotion":
-                result = audit_giveaway_promotion_case(case, evidence)
-            elif scenario_name == "price_difference_support":
-                result = audit_price_difference_support_case(case, evidence)
-            elif scenario_name == "pos_target_incentive":
-                result = audit_pos_target_incentive_case(case, evidence)
-            elif scenario_name == "entry_fee":
-                result = audit_entry_fee_case(case, evidence)
-            else:
-                result = audit_self_procured_gift_material_case(case, evidence)
-            validate_json(result, RESULT_SCHEMA)
-            results.append(result)
-            if observer is not None:
-                observer(
-                    "result.validated",
-                    {"scenario": scenario_name, "result": result},
-                )
-
-        diagnostic_result = None
-        diagnostic_view = None
-        if diagnostic_case is not None:
-            from .material_diagnostic_output import (
-                build_material_diagnostic_result, build_material_diagnostic_view,
-            )
-            diagnostic_result = build_material_diagnostic_result(diagnostic_case, diagnostic_evidence)
-            diagnostic_view = build_material_diagnostic_view(diagnostic_result)
-            if observer is not None:
-                observer("material_diagnostic.result_validated", {"result": diagnostic_result})
-
-        supplemental_view = diagnostic_view
-        supplemental_verification = {}
-        if diagnostic_result is not None:
-            supplemental_verification["material_diagnostic"] = {
-                "schema_validated": True, "source_coverage_validated": True,
-            }
-        rejection_result = None
-        if classification_rejections:
-            from .material_diagnostic_output import (
-                build_classification_rejection_result, build_classification_rejection_view,
-            )
-            rejection_result = build_classification_rejection_result(classification_rejections)
-            rejection_view = build_classification_rejection_view(rejection_result)
-            if supplemental_view is None:
-                supplemental_view = rejection_view
-            else:
-                supplemental_view["sheets"].extend(rejection_view["sheets"])
-            supplemental_view["classification_rejection"] = rejection_result
-            supplemental_verification["classification_rejection"] = {
-                "schema_validated": True, "archive_safety_validated": True,
-                "ai_called": False, "conclusion": "rejected",
-            }
-            if observer is not None:
-                observer("classification_rejection.result_validated", {"result": rejection_result})
-
-        if not results and supplemental_view is not None:
-            scenarios = [name for name in SCENARIO_ORDER if any(
-                a.get("scenario") == name for a in (diagnostic_result or {}).get("archives", [])
-            )]
-            verification = supplemental_verification
-            if observer is not None:
-                observer("report.verified", {"verification": verification})
-            return {"run_id": normalized_run_id, "producer_model": normalized_producer_model,
-                    "view_payload": supplemental_view, "scenarios": scenarios, "verification": verification}
-
-        temporary_workbook = temporary_root / "internal-report.xlsx"
-        temporary_html = temporary_workbook.with_suffix(".html")
-        create_combined_report(results, temporary_workbook)
-        verification = verify_workbook(temporary_workbook, scenarios)
-        create_html_report_from_workbook(temporary_workbook, temporary_html)
-        html_verification = verify_html_report(
-            temporary_html,
-            scenarios,
-            workbook_path=temporary_workbook,
-        )
-        if supplemental_view is not None:
-            combined_view = _embedded_payload(temporary_html.read_text(encoding="utf-8"))
-            combined_view["sheets"].extend(supplemental_view["sheets"])
-            if diagnostic_result is not None:
-                combined_view["material_diagnostic"] = diagnostic_result
-            if rejection_result is not None:
-                combined_view["classification_rejection"] = rejection_result
-            scenarios = [name for name in SCENARIO_ORDER if name in cases or any(
-                a.get("scenario") == name for a in (diagnostic_result or {}).get("archives", [])
-            )]
-            combined_verification = {"workbook": verification, "html": html_verification,
-                                     **supplemental_verification}
-            if observer is not None:
-                observer("report.verified", {"verification": combined_verification})
-            return {"run_id": normalized_run_id, "producer_model": normalized_producer_model,
-                    "view_payload": combined_view, "scenarios": scenarios, "verification": combined_verification}
-        if observer is not None:
-            observer(
-                "report.verified",
-                {
-                    "verification": {
-                        "workbook": verification,
-                        "html": html_verification,
-                    }
-                },
-            )
-        published_html = _publish_html_without_overwrite(
-            temporary_workbook,
-            temporary_html,
-            normalized_run_id,
-            normalized_producer_model,
-            output_root,
-        )
-        temporary_workbook = None
-        temporary_html = None
-        verification.pop("path", None)
-        html_verification["path"] = str(published_html)
-        verification["html"] = html_verification
-        return {
-            "run_id": normalized_run_id,
-            "producer_model": normalized_producer_model,
-            "output": str(published_html),
-            "outputs": {
-                "html": str(published_html),
-            },
-            "scenarios": scenarios,
-            "verification": verification,
-        }
+        completed = invoke_audit_chain(workflow.chain(), workflow)
+        return completed.receipt
     finally:
-        if temporary_workbook and temporary_workbook.exists():
-            temporary_workbook.unlink()
-        if temporary_html and temporary_html.exists():
-            temporary_html.unlink()
         if temporary_root.exists():
             shutil.rmtree(temporary_root)
 

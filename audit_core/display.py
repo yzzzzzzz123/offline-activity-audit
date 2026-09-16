@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -24,16 +24,7 @@ from .location_resolution import (
     default_location_resolver,
     deterministic_location_resolution,
 )
-from .product_rag import (
-    FIELD_SHORT_CODE_PATTERN,
-    PRODUCT_EXISTENCE_NAME_THRESHOLD,
-    apply_visible_catalog_text_exact_hits,
-    catalog_product_name_values,
-    ean13_is_valid,
-    product_name_similarity,
-    product_reference_label,
-    resolve_product_reference_hits,
-)
+from .product_rag import PRODUCT_EXISTENCE_NAME_THRESHOLD, apply_visible_catalog_text_exact_hits, canonical_product_name, catalog_product_name_score, catalog_product_name_values, product_measurements_compatible, ean13_is_valid, product_name_similarity, product_reference_label, resolve_product_reference_hits
 
 
 PASS_STORE_MATCHES = {"exact", "compatible"}
@@ -551,61 +542,10 @@ def _determine_store_match(
     return "location_unverified", basis, location_resolution
 
 
-def _canonical_product(value: Any) -> str:
-    text = unicodedata.normalize("NFKC", str(value or "")).lower()
-    text = text.replace("參半", "参半")
-    return re.sub(r"[^0-9a-z\u4e00-\u9fff+%]+", "", text)
-
-
 def _strict_identity_key(value: Any) -> str:
     """Preserve a formal business identifier for exact source comparison."""
 
     return str(value or "").strip()
-
-
-def _product_grams(value: Any) -> set[str]:
-    text = _canonical_product(value)
-    for token in ("参半", "oralshark", "牙膏", "组合装", "超值装", "特享装", "量贩装"):
-        text = text.replace(token, "")
-    if len(text) < 2:
-        return {text} if text else set()
-    return {text[index : index + 2] for index in range(len(text) - 1)}
-
-
-def _similarity(left: Any, right: Any) -> float:
-    return product_name_similarity(left, right)
-
-
-def _catalog_name_values(product: dict[str, Any]) -> list[str]:
-    return catalog_product_name_values(product)
-
-
-def _measurement_tokens(value: Any) -> set[str]:
-    text = unicodedata.normalize("NFKC", str(value or "")).lower()
-    return {
-        f"{number}{unit}"
-        for number, unit in re.findall(
-            r"(\d+(?:\.\d+)?)\s*(ml|毫升|g|克|支|条|片)",
-            text,
-        )
-    }
-
-
-def _name_measurements_compatible(left: Any, right: Any) -> bool:
-    left_tokens = _measurement_tokens(left)
-    right_tokens = _measurement_tokens(right)
-    return not left_tokens or not right_tokens or bool(left_tokens & right_tokens)
-
-
-def _catalog_name_score(value: Any, product: dict[str, Any]) -> float:
-    return max(
-        (
-            _similarity(value, candidate)
-            for candidate in _catalog_name_values(product)
-            if _name_measurements_compatible(value, candidate)
-        ),
-        default=0.0,
-    )
 
 
 def _best_fuzzy_product(
@@ -619,7 +559,7 @@ def _best_fuzzy_product(
     ranked = sorted(
         (
             (
-                _similarity(value, str(product.get("product_name") or "")),
+                product_name_similarity(value, str(product.get("product_name") or "")),
                 product,
             )
             for product in products
@@ -690,10 +630,10 @@ def _product_records_catalog_reconciliation(
                 str(product["product_id"])
                 for product in products
                 if source_values["product_name"]
-                and _canonical_product(source_values["product_name"])
+                and canonical_product_name(source_values["product_name"])
                 in {
-                    _canonical_product(value)
-                    for value in _catalog_name_values(product)
+                    canonical_product_name(value)
+                    for value in catalog_product_name_values(product)
                 }
             },
             "barcode_69": {
@@ -722,7 +662,7 @@ def _product_records_catalog_reconciliation(
             elif len(strict_identity_ids) == 1:
                 selected = by_id[next(iter(strict_identity_ids))]
                 name_match_type = "fuzzy"
-                fuzzy_score = _catalog_name_score(
+                fuzzy_score = catalog_product_name_score(
                     source_values["product_name"], selected
                 ) if source_values["product_name"] else 0.0
             else:
@@ -1194,11 +1134,11 @@ def _product_name_pair_status(left: Any, right: Any) -> tuple[str, float]:
     right_value = str(right or "").strip()
     if not left_value or not right_value:
         return "unverifiable", 0.0
-    if _canonical_product(left_value) == _canonical_product(right_value):
+    if canonical_product_name(left_value) == canonical_product_name(right_value):
         return "exact", 1.0
-    score = _similarity(left_value, right_value)
+    score = product_name_similarity(left_value, right_value)
     if (
-        _name_measurements_compatible(left_value, right_value)
+        product_measurements_compatible(left_value, right_value)
         and score > PRODUCT_EXISTENCE_NAME_THRESHOLD
     ):
         return "fuzzy", score
@@ -1759,10 +1699,10 @@ def _contract_product_knowledge_reconciliation(
             str(product["product_id"])
             for product in products
             if source_name
-            and _canonical_product(source_name)
+            and canonical_product_name(source_name)
             in {
-                _canonical_product(candidate)
-                for candidate in _catalog_name_values(product)
+                canonical_product_name(candidate)
+                for candidate in catalog_product_name_values(product)
             }
         }
 
@@ -1943,7 +1883,7 @@ def build_promotion_summary(review: dict[str, Any]) -> tuple[str, bool]:
         if str(item.get("text") or "").strip()
     ]
     product_text = "；".join(str(value) for value in review.get("recognized_products") or [])
-    canonical = _canonical_product(product_text)
+    canonical = canonical_product_name(product_text)
     if "3+2" in canonical and not any("3+2" in value for value in signals):
         signals.append("3+2组合装")
     if "1+1" in canonical and not any("1+1" in value for value in signals):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from audit_core.extraction_chain import render_prompt
+
 from collections import Counter
 from contextlib import ExitStack
 from contextvars import ContextVar
@@ -187,7 +189,7 @@ class DisplayPipelineTests(unittest.TestCase):
         name = kwargs["model_root"].name
         with self.call_lock:
             self.calls.append({
-                "stage": name, "images": list(kwargs["images"]), "prompt": kwargs["prompt"],
+                "stage": name, "images": list(kwargs["images"]), "prompt": render_prompt(kwargs["prompt"]),
                 "skill": kwargs["skill_dir"], "root": kwargs["model_root"],
                 "thread": get_ident(), "context": _CALL_CONTEXT.get(),
                 "effort": kwargs["reasoning_effort"],

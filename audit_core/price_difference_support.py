@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
+from .common import optional_iso_date, normalized_name_score
 from .common import AuditError, json_number, money, normalize_text, now_utc
 from .excel_sources import read_maintenance_pos
 
@@ -64,25 +63,6 @@ def _equal_money(left: Any, right: Any) -> bool:
         and right_value is not None
         and abs(left_value - right_value) <= CENT
     )
-
-
-def _date(value: Any) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(str(value))
-    except ValueError:
-        return None
-
-
-def _name_score(left: Any, right: Any) -> float:
-    a = normalize_text(left)
-    b = normalize_text(right)
-    if not a or not b:
-        return 0.0
-    if a in b or b in a:
-        return 1.0
-    return SequenceMatcher(None, a, b).ratio()
 
 
 def _document_text(document: dict[str, Any]) -> str:
@@ -147,7 +127,7 @@ def _party_aligned(documents: list[dict[str, Any]]) -> tuple[bool, str]:
     if len(dealer_names) < 2:
         return False, "至少两份权威资料未同时识别到经销商全称"
     anchor = dealer_names[0]
-    problems = [name for name in dealer_names[1:] if _name_score(anchor, name) < 0.82]
+    problems = [name for name in dealer_names[1:] if normalized_name_score(anchor, name) < 0.82]
     if problems:
         return False, "经销商名称不一致：" + "、".join(dealer_names)
     return True, "合同、结算和盖章POS识别到同一经销商：" + anchor
@@ -179,13 +159,13 @@ def _photo_coverage(
         if value is not None
     ]
     expected_count = max(expected_count_values, default=0)
-    start = _date(contract.get("activity_start")) if contract else None
-    end = _date(contract.get("activity_end")) if contract else None
+    start = optional_iso_date(contract.get("activity_start")) if contract else None
+    end = optional_iso_date(contract.get("activity_end")) if contract else None
     activity_price = contract.get("activity_price") if contract else None
     valid_photos: list[dict[str, Any]] = []
     invalid_sources: list[str] = []
     for photo in photos:
-        photo_date = _date(photo.get("photo_date"))
+        photo_date = optional_iso_date(photo.get("photo_date"))
         valid = all(
             photo.get(field) == "visible"
             for field in (
@@ -215,7 +195,7 @@ def _photo_coverage(
         location = str(photo.get("photo_location") or "")
         if expected_stores:
             scored = sorted(
-                ((_name_score(location, store), store) for store in expected_stores),
+                ((normalized_name_score(location, store), store) for store in expected_stores),
                 reverse=True,
             )
             if scored and scored[0][0] >= 0.65 and (

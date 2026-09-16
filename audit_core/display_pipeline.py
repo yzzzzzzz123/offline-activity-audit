@@ -1,8 +1,6 @@
 """Bounded, source-preserving visual calls behind the single official runner."""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from contextvars import copy_context
 from copy import deepcopy
 import hashlib
 import json
@@ -10,6 +8,10 @@ from pathlib import Path
 import shutil
 from typing import Any, Callable
 
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableLambda
+
+from .prompts import bound_prompt
 from .common import AuditError, validate_json
 from .contract_pipeline import extract_contract_chunks
 from .display_chunks import (
@@ -17,6 +19,7 @@ from .display_chunks import (
     merge_photo_assignments, merge_product_queries, merge_routed_results,
 )
 from .model_metrics import save_model_observations
+from .workflow import batch_local
 
 PHOTO_BATCH_SIZE = 3
 ATTACHMENT_ROW_BATCH_SIZE = 8
@@ -24,10 +27,8 @@ VISUAL_WORKERS = 2
 
 
 def _map_chunks(function: Callable, chunks: list) -> list:
-    # Each task inherits only the diagnostics sink, not another model context.
-    with ThreadPoolExecutor(max_workers=VISUAL_WORKERS) as executor:
-        futures = [executor.submit(copy_context().run, function, item) for item in chunks]
-        return [future.result() for future in futures]
+    return batch_local(RunnableLambda(function, name="visual_material_batch"),
+                       chunks, max_concurrency=VISUAL_WORKERS)
 
 
 def _assignment_schema() -> dict[str, Any]:
@@ -68,7 +69,7 @@ def extract_display_chunks(
         shutil.copy2(skill_dir / "references" / "visual-extraction.md", stage_skill / "SKILL.md")
         return stage_root, stage_skill
 
-    def run(stage_root: Path, stage_skill: Path, schema: Path, prompt: str,
+    def run(stage_root: Path, stage_skill: Path, schema: Path, prompt: PromptTemplate,
             images: list[Path], label: str, validator: Callable | None = None,
             effort: str | None = None) -> dict[str, Any]:
         # Neither production calibration labels nor prior model results enter a stage.
@@ -140,14 +141,11 @@ def extract_display_chunks(
         schema = route_root / "route.schema.json"
         schema.write_text(json.dumps(_assignment_schema(), ensure_ascii=False), encoding="utf-8")
         prompt = (
-            f"完整读取 `{route_skill / 'SKILL.md'}`。仅为当前 {len(images)} 张现场照片建立门店路由，使用 `{schema}`。\n"
-            "逐张查看原图水印/门头可见地点，原样保留 photo_file；每图恰好一条。以下名单仅作路由索引，不是现场证据。\n"
-            f"门店索引：{json.dumps(route_table, ensure_ascii=False)}\n"
-            f"照片：{json.dumps([p.name for p in images], ensure_ascii=False)}\n"
-            "可用文件名编号及名称作为路由线索，但不能将其写为 visible_location 或证明同址；"
-            "水印/门头不可读时 visible_location=null，location_basis明确标注仅按文件名路由。"
-            "能唯一归属才返回 store_line_no；无法唯一归属返回null并说明。地点文字不同不在本轮判错，后续代码独立地图核验。"
-            "不识别商品/日期/陈列，不读合同PDF、Excel、其他照片、参考图片或历史结果。"
+            bound_prompt("""完整读取 `{skill_path}`。仅为当前 {image_count} 张现场照片建立门店路由，使用 `{schema}`。
+逐张查看原图水印/门头可见地点，原样保留 photo_file；每图恰好一条。以下名单仅作路由索引，不是现场证据。
+门店索引：{route_table_json}
+照片：{image_names_json}
+可用文件名编号及名称作为路由线索，但不能将其写为 visible_location 或证明同址；水印/门头不可读时 visible_location=null，location_basis明确标注仅按文件名路由。能唯一归属才返回 store_line_no；无法唯一归属返回null并说明。地点文字不同不在本轮判错，后续代码独立地图核验。不识别商品/日期/陈列，不读合同PDF、Excel、其他照片、参考图片或历史结果。""", skill_path=route_skill / 'SKILL.md', image_count=len(images), schema=schema, route_table_json=json.dumps(route_table, ensure_ascii=False), image_names_json=json.dumps([p.name for p in images], ensure_ascii=False))
         )
 
         def validate(value: dict) -> None:
@@ -220,8 +218,11 @@ def extract_display_chunks(
         ]}}
         schema = api._write_subset_schema(full_schema, photo_root / "photo.schema.json", "photo_reviews", "单店现场照片事实")
         prompt = api._photo_prompt(photo_skill, rules, images, schema, local_contract, rag, references)
-        prompt += "\n本轮不可变路由：" + json.dumps([route], ensure_ascii=False)
-        prompt += "\n必须原样保留此路由的三个字段；路由仅用于分组，可见地点和日期仍须独立从照片读取，不得继承索引内容。"
+        prompt += bound_prompt(
+            "\n本轮不可变路由：{route_json}"
+            "\n必须原样保留此路由的三个字段；路由仅用于分组，可见地点和日期仍须独立从照片读取，不得继承索引内容。",
+            route_json=json.dumps([route], ensure_ascii=False),
+        )
         local_case = {**case, "photo_files": [str(p) for p in images]}
 
         def validate(value: dict) -> None:

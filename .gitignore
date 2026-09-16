@@ -2,6 +2,9 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
 .audit-tmp/
 /docs/.docx-build/
 /worktrees/

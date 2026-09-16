@@ -7,16 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from .common import (
-    AuditError,
-    decimal_value,
-    exception,
-    json_number,
-    money,
-    normalize_text,
-    now_utc,
-    unique_by,
-)
+from .common import decimal_value, exception, json_number, money, normalize_text, now_utc, unique_by
 from .excel_sources import image_file_inventory, read_personnel_sales
 from .product_rag import (
     PRODUCT_EXISTENCE_NAME_THRESHOLD,

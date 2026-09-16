@@ -10,7 +10,7 @@ from .common import AuditError
 from .error_reason import attach_error_reasons
 from .html_report import DATA_CLOSE, DATA_OPEN
 from .pass_check_log import attach_pass_check_log, load_workspace_results
-from .workbench_store import atomic_write_text, main_flow_task_list, project_run_status, read_json_file
+from .workbench_store import read_event_records, atomic_write_text, main_flow_task_list, project_run_status, read_json_file
 
 
 API_VERSION = "1.38"
@@ -95,20 +95,6 @@ def inject_workbench_context(html: str, context: dict[str, Any]) -> str:
     return html[:closing_head] + tags + html[closing_head:]
 
 
-def _event_records(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    events: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(event, dict):
-            events.append(event)
-    return events
-
-
 def _workspace_resource(workspace: Path, relative_path: str) -> Path:
     relative = Path(relative_path)
     if not relative_path or relative.is_absolute() or ".." in relative.parts:
@@ -166,7 +152,7 @@ def render_static_run_archive_html(
     snapshot["view"] = attach_error_reasons(snapshot["view"])
     if run.get("status") == "completed" and isinstance(snapshot.get("view"), dict):
         run["error_count"] = projected_view_error_count(snapshot["view"])
-    snapshot["recent_events"] = _event_records(
+    snapshot["recent_events"] = read_event_records(
         workspace_path / "logs" / "events.jsonl"
     )[-120:]
 

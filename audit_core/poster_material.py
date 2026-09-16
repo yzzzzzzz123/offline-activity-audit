@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from datetime import date
 from decimal import Decimal
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
+from .common import optional_iso_date
 from .common import (
     POSTER_MATERIAL_QUANTITY_CALIBRATION_PREFIX,
     AuditError,
@@ -31,15 +31,6 @@ def _optional_money(value: Any, *, label: str) -> Decimal | None:
     if value is None:
         return None
     return money(value, label=label)
-
-
-def _iso_date(value: Any) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(str(value))
-    except ValueError:
-        return None
 
 
 def _company_key(value: Any) -> str:
@@ -324,8 +315,8 @@ def audit_poster_material_case(
         )
 
     photo_problems: list[str] = []
-    activity_start = _iso_date(contract.get("activity_start"))
-    activity_end = _iso_date(contract.get("activity_end"))
+    activity_start = optional_iso_date(contract.get("activity_start"))
+    activity_end = optional_iso_date(contract.get("activity_end"))
     missing_watermarks: list[str] = []
     outside_period: list[str] = []
     content_or_position_gaps: list[str] = []
@@ -344,7 +335,7 @@ def audit_poster_material_case(
             for field in ("watermark_date", "watermark_time", "watermark_location")
         ):
             missing_watermarks.append(source_file)
-        visible_date = _iso_date(photo.get("watermark_date"))
+        visible_date = optional_iso_date(photo.get("watermark_date"))
         if (
             visible_date is None
             or activity_start is None

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-from .common import AuditError, json_number, money, normalize_text, now_utc
+from .common import optional_iso_date, normalized_name_score
+from .common import AuditError, json_number, money, now_utc
 from .excel_sources import read_pos_target_summary
 
 
@@ -59,25 +59,6 @@ def _equal(left: Any, right: Any) -> bool:
     return a is not None and b is not None and abs(a - b) <= CENT
 
 
-def _score(left: Any, right: Any) -> float:
-    a = normalize_text(left)
-    b = normalize_text(right)
-    if not a or not b:
-        return 0.0
-    if a in b or b in a:
-        return 1.0
-    return SequenceMatcher(None, a, b).ratio()
-
-
-def _date(value: Any) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(str(value))
-    except ValueError:
-        return None
-
-
 def _control(controls: list[dict[str, str]], control_id: str, passed: bool, basis: str) -> None:
     controls.append({"control_id": control_id, "status": "pass" if passed else "fail", "basis": basis})
 
@@ -94,7 +75,7 @@ def _pos_correspondence(
     for record in spreadsheet.get("records") or []:
         candidates = sorted(
             (
-                (_score(record.get("store_name"), visual_rows[index].get("store_name")), index)
+                (normalized_name_score(record.get("store_name"), visual_rows[index].get("store_name")), index)
                 for index in unused
                 if _equal(record.get("sales_amount"), visual_rows[index].get("sales_amount"))
             ),
@@ -135,7 +116,7 @@ def _activity_proof_valid(
     invalid: list[str] = []
     for item in proofs:
         source = str(item.get("source_file") or "")
-        activity_date = _date(item.get("activity_date"))
+        activity_date = optional_iso_date(item.get("activity_date"))
         period_ok = start is not None and end is not None and activity_date is not None and start <= activity_date <= end
         role = str(item.get("role") or "")
         if role == "activity_photo":
@@ -310,7 +291,7 @@ def audit_pos_target_incentive_case(
             )
         )
 
-    recipient_pass = bool(contract and settlement) and contract.get("recipient_type") == "dealer" and settlement.get("recipient_type") == "dealer" and _score(contract.get("dealer_name"), settlement.get("dealer_name")) >= 0.82
+    recipient_pass = bool(contract and settlement) and contract.get("recipient_type") == "dealer" and settlement.get("recipient_type") == "dealer" and normalized_name_score(contract.get("dealer_name"), settlement.get("dealer_name")) >= 0.82
     _control(controls, "dealer_recipient", recipient_pass, "合同与结算均明确同一经销商为激励对象" if recipient_pass else "合同缺失、激励对象不是经销商或经销商名称不一致")
     if not recipient_pass:
         issues.append(
@@ -325,8 +306,8 @@ def audit_pos_target_incentive_case(
             )
         )
 
-    start = _date(contract.get("activity_start")) if contract else None
-    end = _date(contract.get("activity_end")) if contract else None
+    start = optional_iso_date(contract.get("activity_start")) if contract else None
+    end = optional_iso_date(contract.get("activity_end")) if contract else None
     activity_pass, activity_basis = _activity_proof_valid(proofs, start, end)
     _control(controls, "activity_existence", activity_pass, activity_basis)
     if not activity_pass:

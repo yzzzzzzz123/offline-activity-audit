@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-from .common import AuditError, json_number, money, normalize_text, now_utc, sha256_file
+from .common import optional_iso_date, normalized_name_score
+from .common import AuditError, json_number, money, now_utc, sha256_file
 from .excel_sources import read_self_procured_pos_summary
 
 
@@ -65,27 +64,8 @@ def _equal(left: Any, right: Any) -> bool:
     return a is not None and b is not None and abs(a - b) <= CENT
 
 
-def _date(value: Any) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(str(value))
-    except ValueError:
-        return None
-
-
-def _score(left: Any, right: Any) -> float:
-    a = normalize_text(left)
-    b = normalize_text(right)
-    if not a or not b:
-        return 0.0
-    if a in b or b in a:
-        return 1.0
-    return SequenceMatcher(None, a, b).ratio()
-
-
 def _same_material(left: Any, right: Any) -> bool:
-    return _score(left, right) >= 0.72
+    return normalized_name_score(left, right) >= 0.72
 
 
 def _visual_pos_representations(
@@ -121,7 +101,7 @@ def _pos_representation_matches(
     for record in spreadsheet.get("records") or []:
         ranked = sorted(
             (
-                (_score(record.get("store_name"), visual_rows[index].get("store_name")), index)
+                (normalized_name_score(record.get("store_name"), visual_rows[index].get("store_name")), index)
                 for index in unused
                 if _equal(record.get("sales_quantity"), visual_rows[index].get("sales_quantity"))
                 and _equal(record.get("sales_amount"), visual_rows[index].get("sales_amount"))
@@ -254,7 +234,7 @@ def audit_self_procured_gift_material_case(
     )
     authority_match = bool(contract and settlement) and all(
         (
-            _score(contract.get("dealer_name"), settlement.get("dealer_name")) >= 0.82,
+            normalized_name_score(contract.get("dealer_name"), settlement.get("dealer_name")) >= 0.82,
             contract.get("activity_start") == settlement.get("activity_start"),
             contract.get("activity_end") == settlement.get("activity_end"),
             _same_material(contract.get("gift_material_name"), settlement.get("gift_material_name")),
@@ -375,18 +355,18 @@ def audit_self_procured_gift_material_case(
     activity = case.get("activity_return") or {}
     activity_records = list(activity.get("records") or [])
     photo_by_source = {str(item.get("source_file") or ""): item for item in photos}
-    start = _date(contract.get("activity_start")) if contract else None
-    end = _date(contract.get("activity_end")) if contract else None
+    start = optional_iso_date(contract.get("activity_start")) if contract else None
+    end = optional_iso_date(contract.get("activity_end")) if contract else None
     photo_reconciliation: list[dict[str, Any]] = []
     invalid_photos: list[str] = []
     for record in activity_records:
         source = Path(record["photo_file"]).name
         photo = photo_by_source.get(source)
-        photo_date = _date(photo.get("photo_date")) if photo else None
+        photo_date = optional_iso_date(photo.get("photo_date")) if photo else None
         period_ok = bool(start and end and photo_date and start <= photo_date <= end)
         store_score = max(
-            _score(record.get("store_name"), photo.get("photo_store_name") if photo else None),
-            _score(record.get("store_name"), photo.get("photo_location") if photo else None),
+            normalized_name_score(record.get("store_name"), photo.get("photo_store_name") if photo else None),
+            normalized_name_score(record.get("store_name"), photo.get("photo_location") if photo else None),
         )
         visual_ok = bool(photo) and all(
             photo.get(field) == "visible"

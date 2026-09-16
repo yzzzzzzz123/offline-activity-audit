@@ -513,6 +513,27 @@ GET 资源是私有内容且必须重新验证；未变化请求可以返回 304
 `worktrees/` 下已有旧 HTML 是只读兼容结果，可信服务可以投影但不得修改。
 旧式或验收工作簿仍只用于测试，运行时代码或模型提示词绝不能读取、复制或使用。
 
+## LangChain 编排与维护
+
+用户于 2026-09-15 要求优化项目并采用 LangChain。正式 bundled runner 通过
+`audit_core.workflow` 的 LCEL `RunnableSequence` 执行 `intake → analysis → evidence → decision → verification`。
+运行初始化和最终原子封存仍由 `workbench_runtime` 管理；十类场景、材料诊断及分类拒绝共享此流程。
+各场景必须先全部提取、再全部校验证据、最后核算；框架不增加整链重试或模型并发。
+Codex 传输、只读沙箱、分块重试、超时及确定性业务规则保持原边界。
+节点传递本次 `_AuditWorkflow` 状态；所有视觉调用执行 `PromptTemplate → ChatPromptTemplate →
+CodexChatModel(BaseChatModel) → EvidenceOutputParser(BaseOutputParser)` 的实际 LCEL 提取链。
+提示词的来源 JSON 和文件名必须作为绑定变量传入，不能拼入模板造成二次格式化。
+解析器严格执行完整 JSON、原始 Schema 与当前来源校验，禁止自动修补残缺 JSON；失败仅重试当前块。
+`CatalogProductRetriever(BaseRetriever)` 只按当前现场可见锚点检索本次 MySQL 快照，返回 `Document`；
+保持原有逐照片均衡候选、总量上限及选后读取 OSS 参考图边界，不接入远端向量库或历史结果缓存。
+视觉分块使用 `Runnable.batch`，保留原有两个工作线程上限、输出顺序与运行级商品快照上下文。
+局部禁用 LangSmith 追踪、隔离父级回调并禁用模型缓存；全局 debug/verbose 开启时停止，
+不能将业务材料、原始模型输出或报告写入框架追踪。场景元数据统一来自 `scenario_registry`。
+
+主动清理使用 `py -3 -B scripts/clean_temporary.py` 预览、`--apply` 执行。
+只清理指定代码目录的可再生 Python 缓存及按既有归属/占用规则可清理的系统临时容器；
+输入 ZIP、正式核销档案、诊断记录、数据库/备份、凭据及 Git 历史不属于此命令的清理范围。
+
 ## 变更验证
 
 至少运行：

@@ -54,6 +54,7 @@ from .workbench_html import (
     replace_audit_payload as _replace_audit_payload,
 )
 from .workbench_store import (
+    read_event_records,
     DEFAULT_WORKTREES_ROOT,
     WORKSPACE_ID_PATTERN,
     atomic_write_json,
@@ -94,20 +95,6 @@ def _read_root_html_template(
     return Path(path).read_text(encoding="utf-8")
 
 
-def _read_event_records(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    events: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(event, dict):
-            events.append(event)
-    return events
-
-
 def _completed_projection_signature(
     workspace: Path,
 ) -> tuple[tuple[str, int, int, int], ...]:
@@ -146,7 +133,7 @@ def _read_completed_snapshot_projection(
         load_workspace_results(workspace),
     )
     snapshot["view"] = attach_error_reasons(snapshot["view"])
-    snapshot["recent_events"] = _read_event_records(
+    snapshot["recent_events"] = read_event_records(
         workspace / "logs" / "events.jsonl"
     )[-120:]
     return snapshot
@@ -1028,7 +1015,7 @@ class WorkbenchCatalog:
 
     def events(self, workspace_id: str) -> list[dict[str, Any]]:
         workspace = self._workspace(workspace_id)
-        return _read_event_records(workspace / "logs" / "events.jsonl")
+        return read_event_records(workspace / "logs" / "events.jsonl")
 
     def _resource_signature(self, path: Path) -> tuple[int, int, int] | None:
         try:

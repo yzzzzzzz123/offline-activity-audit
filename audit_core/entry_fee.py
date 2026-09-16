@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
+from .common import optional_iso_date, normalized_name_score
 from .common import AuditError, json_number, money, normalize_text, now_utc, sha256_file
 
 
@@ -58,25 +57,6 @@ def _round(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
-def _date(value: Any) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(str(value))
-    except ValueError:
-        return None
-
-
-def _score(left: Any, right: Any) -> float:
-    a = normalize_text(left)
-    b = normalize_text(right)
-    if not a or not b:
-        return 0.0
-    if a in b or b in a:
-        return 1.0
-    return SequenceMatcher(None, a, b).ratio()
-
-
 def _store_text(value: Any) -> str:
     text = normalize_text(value)
     for old, new in (("瓯", "欧"), ("购物广场", ""), ("吾悦广场", "吾悦")):
@@ -97,8 +77,8 @@ def _store_score(photo: dict[str, Any], store: dict[str, Any]) -> float:
     scores: list[float] = []
     for photo_value in photo_values:
         for store_value in store_values:
-            raw_score = _score(photo_value, store_value)
-            simplified_score = _score(_store_text(photo_value), _store_text(store_value))
+            raw_score = normalized_name_score(photo_value, store_value)
+            simplified_score = normalized_name_score(_store_text(photo_value), _store_text(store_value))
             scores.append(max(raw_score, simplified_score))
     return max(scores, default=0.0)
 
@@ -135,7 +115,7 @@ def _match_product(
         for value in (visible.get("product_name"), visible.get("visible_package_text"))
     )
     ranked = sorted(
-        ((_score(visible_text, item.get("product_name")), index) for index, item in enumerate(items)),
+        ((normalized_name_score(visible_text, item.get("product_name")), index) for index, item in enumerate(items)),
         reverse=True,
     )
     if not ranked or ranked[0][0] < 0.72:
@@ -287,7 +267,7 @@ def audit_entry_fee_case(
             )
         )
 
-    agreement_date = _date(contract.get("agreement_date")) if contract else None
+    agreement_date = optional_iso_date(contract.get("agreement_date")) if contract else None
     agreement_year = contract.get("agreement_year") if contract else None
     photo_records: list[dict[str, Any]] = []
     stores_with_valid_photo: set[int] = set()
@@ -296,7 +276,7 @@ def audit_entry_fee_case(
     invalid_watermark_sources: list[str] = []
     for photo in photos:
         source = str(photo.get("source_file") or "")
-        photo_date = _date(photo.get("photo_date"))
+        photo_date = optional_iso_date(photo.get("photo_date"))
         date_ok = photo_date is not None
         if agreement_date is not None and photo_date is not None:
             date_ok = date_ok and photo_date >= agreement_date

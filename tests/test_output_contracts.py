@@ -27,7 +27,7 @@ from audit_core.html_report import (
 )
 from audit_core.orchestrator import (
     _create_temporary_root,
-    _publish_pair_without_overwrite,
+    _publish_html_without_overwrite,
     next_output_path,
     normalize_producer_model,
     output_date_from_run_id,
@@ -682,7 +682,7 @@ class ProducerFilenameTests(unittest.TestCase):
             temporary_workbook.write_bytes(b"xlsx-content")
             temporary_html.write_text("<html>result</html>", encoding="utf-8")
 
-            html_path = _publish_pair_without_overwrite(
+            html_path = _publish_html_without_overwrite(
                 temporary_workbook,
                 temporary_html,
                 "20260818-simple-013",

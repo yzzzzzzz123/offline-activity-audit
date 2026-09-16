@@ -22,6 +22,46 @@
 
 核销类型是开始业务核验的前提。ZIP 名称未注明类型或包含多个具体类型时，该包核销失败，不调用 AI；运行 manifest、snapshot、正式收据及 OSS job 均为 `failed`，失败代码为 `classification_failed`，不发布 `run.completed`。CLI 以退出码 2 返回已保存的失败收据，OSS 仍按原三字段契约回传 `核销失败：核销方式无法确认` 及全部具体原因；回传成功只表示送达，不能把核销改成完成。回传失败单独记为 `callback_failed`，原核销失败与原因继续保留。混合批次中已知类型照常检查并保留结果，只要仍有无法分类的包，整次记录为失败。类型已确定且业务核验执行完成后，材料缺失、金额差异等才作为完成结果中的失败检查项展示，与正确检查项并列。旧档案若曾把分类退回标成 completed，工作台只读投影为失败，不重写历史证据或自动重发回调。
 
+## LangChain 框架
+
+正式入口使用 LangChain Core 的 LCEL `RunnableSequence`，按以下顺序执行全部已登记场景：
+
+```text
+持久运行初始化 → intake → analysis → evidence → decision → verification → 原子封存
+```
+
+`audit_core.orchestrator._AuditWorkflow` 为每次运行保存独立状态，五个阶段分别负责材料分流、
+AI 提取、证据校验、确定性核算和报告验证。多个场景先全部提取，再全部验证，最后核算；
+任一阶段失败立即停止后续阶段。材料诊断和名称分类拒绝也经过同一编排。
+场景顺序、Skill 路径及证据 Schema 统一来自 `audit_core.scenario_registry`。
+
+每次 AI 提取实际执行以下 LangChain 链，覆盖十类场景、合同分块、现场照片及材料诊断：
+
+```text
+PromptTemplate → ChatPromptTemplate（当前材料文字与图片）
+               → CodexChatModel → EvidenceOutputParser → 已校验证据
+```
+
+| 框架组件 | 本项目中的职责与实现 |
+| --- | --- |
+| LCEL `RunnableSequence` | [workflow.py](audit_core/workflow.py) 在五个阶段之间传递本次 `_AuditWorkflow` 状态；失败停止后续阶段。 |
+| `PromptTemplate` / `ChatPromptTemplate` | [prompts.py](audit_core/prompts.py) 绑定当前来源、Schema 和业务规则；[extraction_chain.py](audit_core/extraction_chain.py) 构建单批多模态消息。JSON 与文件名作为变量值传入。 |
+| `BaseChatModel` | [CodexChatModel](audit_core/langchain_model.py) 执行一次真实 Codex CLI 请求，保留只读沙箱、超时、Windows 进程树清理和安全计量；拒绝历史消息及清单之外的附件。 |
+| `BaseOutputParser` | [EvidenceOutputParser](audit_core/evidence_parser.py) 严格解析完整 JSON，校验原始 Schema 和来源；不自动补齐残缺 JSON。 |
+| `BaseRetriever` / `Document` | [CatalogProductRetriever](audit_core/product_retriever.py) 用当前现场可见文字检索本次 MySQL 商品快照，逐照片均衡选取最多八个候选，再按原流程读取 OSS 参考图。 |
+| `Runnable.batch` | [display_pipeline.py](audit_core/display_pipeline.py) 有界执行视觉分块，保持原有最多两个工作线程、结果顺序及本次商品快照上下文。 |
+
+这是基于 [LangChain 自定义组件规范](https://docs.langchain.com/oss/python/contributing/implement-langchain)
+的应用框架集成。ZIP、Excel、MySQL/OSS 存取、金额核算和页面封存由项目业务代码负责，纳入上述流程；
+框架不代替这些专业功能。重试仍限当前失败材料块，成功批次不重跑，也不重试整条业务链。
+模型和推理档位仍为 `gpt-6-astra` / `medium`，使用现有 Codex 登录，无需增加模型 API Key 或 LangSmith 账号。
+安装或更新代码后执行 `py -3 -m pip install -e .`。
+
+状态和证据仅在本次本地链中流转。每次调用使用独立回调管理器，并以
+[局部 tracing_context](https://docs.langchain.com/langsmith/conditional-tracing) 关闭 LangSmith 追踪，
+隔离父级回调；模型禁用 LangChain 缓存。框架全局 debug/verbose 开启时停止运行，避免输出业务材料。
+原有安全事件、模型计量、快照和回调契约继续生效。
+
 ## 使用方法
 
 商品名称、编码与69码统一读取 MySQL；参考图片已迁往私有 OSS
@@ -375,6 +415,22 @@ Excel 都没有权威门店列，不能分摊到某一家门店或冒充单店�
 `register_abandoned_legacy_temporary`：先验证实际系统临时路径、全部子项无链接且没有进程引用，
 再同卷移入带登记的临时容器，图片不在迁移时删除，由下一次正式启动补清理；普通启动不会自动接管旧目录。
 
+可以主动预览和清理可再生代码缓存：
+
+```powershell
+py -3 -B scripts/clean_temporary.py
+py -3 -B scripts/clean_temporary.py --apply
+```
+
+默认只预览；`--apply` 清理根目录的标准 Python 检查缓存，以及 `audit_core/skills/scripts/tests`
+中的 `__pycache__`，随后按既有归属登记及占用锁补清理失效运行临时目录。
+含链接或非字节码文件的 `__pycache__` 保留，不能删除的路径报告为 `deferred`。
+`input/`、`input-oss/`、`worktrees/`、诊断记录、数据库及其备份、`.env` 和 `.git` 都不属于代码缓存清理范围。
+
+项目根的 `offline_activity_audit.egg-info/` 是 setuptools 构建产物，已被 Git 忽略；
+仅当已确认当前解释器的安装元数据位于独立 `site-packages/*.dist-info` 时可删除。
+再次构建可能重新生成它，不需要提交；不能删除解释器正在使用的安装元数据。
+
 ## 输出内容
 
 根目录的 `offline-activity-audit.html` 是唯一版本化前端和局域网入口。它不会被普通核销运行
@@ -593,12 +649,10 @@ Windows 每次正式提取先验证只读沙箱可读取隔离材料、不能写
 
 Python 要求 `>=3.11`。项目依赖声明在 `pyproject.toml` 中。
 
-商品参考图和权威样品 Excel 通过 Git LFS 交付。首次克隆或切换到包含知识库的版本后，必须先取得真实 LFS 对象；只有指针文件时，RAG 图片 SHA-256 校验会按设计失败关闭。
+运行所需的商品身份来自数据库，参考图片来自私有 OSS；部署前按商品数据库说明配置访问。
+旧图库只作独立远端灾备，不通过 Git LFS 检出或作为本地回退。测试夹具按各测试的既有条件使用。
 
 ```powershell
-git lfs install
-git lfs pull
-git lfs fsck
 py -3 -m pip install -e .
 py -3 -B -m unittest discover -s tests -v
 ```

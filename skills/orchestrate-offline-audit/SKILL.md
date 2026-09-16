@@ -52,6 +52,18 @@ API `1.25` 拒绝旧 `fileId` 请求（包括混传）；公开状态只读映�
 
 ## 主流程任务清单
 
+正式入口由 LangChain Core 的 LCEL 顺序链编排：`audit_core.workflow` 创建命名节点，
+`audit_core.orchestrator._AuditWorkflow` 保存每次运行的独立状态。框架执行下列五个业务阶段，
+初始化及原子封存由持久 runner 管理；不新建生产入口、不增加整链重试或模型并发。
+所有场景、材料诊断及分类拒绝仍遵守原有边界。节点实际传递本次运行状态。
+全部 AI 调用使用 `PromptTemplate → ChatPromptTemplate → CodexChatModel → EvidenceOutputParser`，
+由 LangChain 模型组件执行现有只读 Codex 传输，由解析器严格校验完整 JSON、原始 Schema 和本批来源。
+`CatalogProductRetriever` 仅用现场可见锚点检索本次 MySQL 快照；候选选定后按原边界读取 OSS 参考图。
+视觉分块通过 `Runnable.batch` 保持原有两个工作线程上限与顺序；失败仅重试当前块。
+局部关闭 LangSmith 追踪、隔离父级回调、禁用模型缓存；全局 debug/verbose 开启时停止，
+业务证据及报告不进入框架追踪载荷。
+场景顺序、Skill 路径与证据 Schema 使用 `audit_core.scenario_registry` 的同一登记表。
+
 每次正式运行严格按以下顺序执行六项主流程任务：
 
 - [ ] `01 bootstrap` — 运行初始化：建立持久化运行目录。

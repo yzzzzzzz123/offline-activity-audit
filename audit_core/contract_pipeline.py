@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from PIL import Image
 
+from .prompts import bound_prompt
 from .common import AuditError
 from .display_chunks import chunk_sequence
 from .model_metrics import save_model_observations
@@ -200,23 +201,11 @@ def extract_contract_chunks(*, original_pdf: Path, page_images: list[Path], full
     images = api._copy_images(page_images, core_root)
     schema = schema_file(core_root, core_schema(full))
     prompt = (
-        f"读取 `{core_skill / 'SKILL.md'}`。只输出 `{schema}` 要求的合同核心和整页清单，不转录门店/销售明细数组。\n"
-        f"原 PDF 文件名必须为 {original_pdf.name}；附图按原始页序为 {json.dumps([p.name for p in images], ensure_ascii=False)}。\n"
-        "逐页查看全部原图。contract 只保留明确合同核心条款：签约方、经销商/客户、期间、活动预算、活动内容、"
-        "准确的核销/结算方式、陈列标准、申报金额、单位费用口径、总堆头数、印章、水印及条件性商品/促销要求。"
-        "不要用结算单中的规则替代合同缺失条款。合同水印仅信息事实。只有明确按门店/堆头的单位费用才用 per_store/per_stack；"
-        "只有总额用 total_only，口径无法确认用 unclear，这两种情况 fee_per_store=0，绝不除算。"
-        "没有明确预算或总堆头数用 null。settlement_method 保留合同原文实质表述，不能只重复 fee_basis；缺失时明确说明。"
-        "仅核心条款中明确的具体商品身份可使 requires_specific_products=true，保留原始 visible_text 与可见标识。"
-        "全品牌/全系列及附加销售表不构成限定 SKU，未限定时两个商品数组为空。只有核心明确要求具名促销机制才设置 requires_promotion，"
-        "否则 required_promotion=null。无法确认不得猜测。\n"
-        "sales_attachment 只输出存在性、原始 PDF 页及可见印刷全文总计，不输出 records。"
-        "不能把页小计/局部合计当全文总计，无法确定总计范围则相应总计为 null；绝不能加总、相乘或从其他文件填值。"
-        "没有销售附件则 present=false、source_pages=[]、两项总计为 null。\n"
-        "page_inventory 必须包含每一页（包括无表页），按原 PDF 页顺序。只盘点两类业务明细表：stores 门店名单和"
-        "sales_attachment 销售明细。不要将核心字段表、费用汇总表当明细。每页按阅读顺序从 1 编 table_no；"
-        "row_count 是实际印刷业务行数，不含表头、空白、合计和小计。不要把表格值放入清单，不得因编号重启或同值交易合并行。"
-        "这是有限输出的总览；禁止输出 stores 或 records，后续在独立上下文逐页、逐块转录。"
+        bound_prompt("""读取 `{skill_path}`。只输出 `{schema}` 要求的合同核心和整页清单，不转录门店/销售明细数组。
+原 PDF 文件名必须为 {source_name}；附图按原始页序为 {image_names_json}。
+逐页查看全部原图。contract 只保留明确合同核心条款：签约方、经销商/客户、期间、活动预算、活动内容、准确的核销/结算方式、陈列标准、申报金额、单位费用口径、总堆头数、印章、水印及条件性商品/促销要求。不要用结算单中的规则替代合同缺失条款。合同水印仅信息事实。只有明确按门店/堆头的单位费用才用 per_store/per_stack；只有总额用 total_only，口径无法确认用 unclear，这两种情况 fee_per_store=0，绝不除算。没有明确预算或总堆头数用 null。settlement_method 保留合同原文实质表述，不能只重复 fee_basis；缺失时明确说明。仅核心条款中明确的具体商品身份可使 requires_specific_products=true，保留原始 visible_text 与可见标识。全品牌/全系列及附加销售表不构成限定 SKU，未限定时两个商品数组为空。只有核心明确要求具名促销机制才设置 requires_promotion，否则 required_promotion=null。无法确认不得猜测。
+sales_attachment 只输出存在性、原始 PDF 页及可见印刷全文总计，不输出 records。不能把页小计/局部合计当全文总计，无法确定总计范围则相应总计为 null；绝不能加总、相乘或从其他文件填值。没有销售附件则 present=false、source_pages=[]、两项总计为 null。
+page_inventory 必须包含每一页（包括无表页），按原 PDF 页顺序。只盘点两类业务明细表：stores 门店名单和sales_attachment 销售明细。不要将核心字段表、费用汇总表当明细。每页按阅读顺序从 1 编 table_no；row_count 是实际印刷业务行数，不含表头、空白、合计和小计。不要把表格值放入清单，不得因编号重启或同值交易合并行。这是有限输出的总览；禁止输出 stores 或 records，后续在独立上下文逐页、逐块转录。""", skill_path=core_skill / 'SKILL.md', schema=schema, source_name=original_pdf.name, image_names_json=json.dumps([p.name for p in images], ensure_ascii=False))
     )
 
     def validate_core(value: dict) -> None:
@@ -232,13 +221,7 @@ def extract_contract_chunks(*, original_pdf: Path, page_images: list[Path], full
         images = api._copy_images([page], root)
         schema = schema_file(root, layout_schema(original_pdf.name, page_no))
         prompt = (
-            f"读取 `{skill / 'SKILL.md'}`，返回 `{schema}`。只查看原 PDF {original_pdf.name} 第 {page_no} 页。"
-            "独立检查完整页面，盘点全部门店名单(stores)和销售明细(sales_attachment)，无这两类表则 tables=[]。"
-            "不要把核心字段表、费用汇总表列为明细。不提供其他提取结果，也不需要转录任何业务单元格。"
-            "每页按阅读顺序从 1 编 table_no。逐行确认 row_count，排除表头、空白、合计和小计，同值交易仍分别计数。"
-            "clockwise_rotation 是从附图顺时针旋转到文字正向的度数；body_bounds 是旋转后完整页面中"
-            "只包含全部明细行的矩形，坐标按页面宽高归一化到 [0,1]（不含表头和合计）。"
-            "必须检查页首、页尾、横向表及盖章覆盖区域，不能省略难读业务行；布局不能建立业务判断。"
+            bound_prompt("""读取 `{skill_path}`，返回 `{schema}`。只查看原 PDF {source_name} 第 {page_no} 页。独立检查完整页面，盘点全部门店名单(stores)和销售明细(sales_attachment)，无这两类表则 tables=[]。不要把核心字段表、费用汇总表列为明细。不提供其他提取结果，也不需要转录任何业务单元格。每页按阅读顺序从 1 编 table_no。逐行确认 row_count，排除表头、空白、合计和小计，同值交易仍分别计数。clockwise_rotation 是从附图顺时针旋转到文字正向的度数；body_bounds 是旋转后完整页面中只包含全部明细行的矩形，坐标按页面宽高归一化到 [0,1]（不含表头和合计）。必须检查页首、页尾、横向表及盖章覆盖区域，不能省略难读业务行；布局不能建立业务判断。""", skill_path=skill / 'SKILL.md', schema=schema, source_name=original_pdf.name, page_no=page_no)
         )
         return run(root, skill, schema, prompt, images, f"合同整页独立盘点 {page_no}/{len(page_images)}",
                    lambda value: validate_layout(value, core["page_inventory"][page_no - 1]))
@@ -254,18 +237,7 @@ def extract_contract_chunks(*, original_pdf: Path, page_images: list[Path], full
         images = _table_views(page_images[page_no - 1], table, rows, root)
         schema = schema_file(root, table_schema(full, table["kind"], original_pdf.name, page_no, table["table_no"], rows))
         prompt = (
-            f"读取 `{skill / 'SKILL.md'}`，返回 `{schema}`。原 PDF {original_pdf.name} 第 {page_no} 页，"
-            f"第 {table['table_no']} 个 {table['kind']} 明细表，共 {table['row_count']} 条印刷业务行。"
-            f"本块只转录物理行 {json.dumps(rows)}，每行恰好一次，保持顺序。编号从本表首条业务行起，不把表头/合计/小计计入。"
-            "原扫描、正向副本、带重叠的阅读辅助裁剪均来自同页像素，不是多份来源。裁剪只是大致定位，"
-            "行高不均或合并单元格跨边界时必须回看完整原页；不能因为裁剪截断而填写缺失。"
-            "相邻可见行只作定位，不得输出。不要合并相同值的交易，不按印刷编号重启而重排。"
-            "只能原样转录当前行可见的名称、地址/数量，或销售客户、日期、商品编码/名称/69码、单位、数量、零售价及金额。"
-            "无法辨认的业务字段使用 schema 允许的 null 并说明，不补值、不计算。只有原图明确合并单元格或表头作用域"
-            "覆盖本行时才允许采用该印刷共同文字，并在 extraction_notes 记录来源关系。"
-            "门店 stack_count 仅明确逐店数量或本页明确每店一个堆头时可填，否则 null。"
-            "barcode_69 只有全部13位印刷可读且 EAN-13 有效时才填，否则 null。"
-            "不要输出印刷合计行，不判断费用口径、促销要求或核销结果，不读取 Excel、目录、其他块输出或历史答案。"
+            bound_prompt("""读取 `{skill_path}`，返回 `{schema}`。原 PDF {source_name} 第 {page_no} 页，第 {table_no} 个 {table_kind} 明细表，共 {row_count} 条印刷业务行。本块只转录物理行 {rows_json}，每行恰好一次，保持顺序。编号从本表首条业务行起，不把表头/合计/小计计入。原扫描、正向副本、带重叠的阅读辅助裁剪均来自同页像素，不是多份来源。裁剪只是大致定位，行高不均或合并单元格跨边界时必须回看完整原页；不能因为裁剪截断而填写缺失。相邻可见行只作定位，不得输出。不要合并相同值的交易，不按印刷编号重启而重排。只能原样转录当前行可见的名称、地址/数量，或销售客户、日期、商品编码/名称/69码、单位、数量、零售价及金额。无法辨认的业务字段使用 schema 允许的 null 并说明，不补值、不计算。只有原图明确合并单元格或表头作用域覆盖本行时才允许采用该印刷共同文字，并在 extraction_notes 记录来源关系。门店 stack_count 仅明确逐店数量或本页明确每店一个堆头时可填，否则 null。barcode_69 只有全部13位印刷可读且 EAN-13 有效时才填，否则 null。不要输出印刷合计行，不判断费用口径、促销要求或核销结果，不读取 Excel、目录、其他块输出或历史答案。""", skill_path=skill / 'SKILL.md', schema=schema, source_name=original_pdf.name, page_no=page_no, table_no=table['table_no'], table_kind=table['kind'], row_count=table['row_count'], rows_json=json.dumps(rows))
         )
         try:
             return [run(root, skill, schema, prompt, images,

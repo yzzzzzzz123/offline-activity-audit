@@ -4,8 +4,9 @@ import hashlib
 import json
 import re
 import unicodedata
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, ROUND_HALF_UP
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -224,3 +225,22 @@ def unique_by(items: Iterable[dict[str, Any]], key: str, label: str) -> dict[Any
             raise AuditError(f"Duplicate {label}: {identity}")
         result[identity] = item
     return result
+
+
+def optional_iso_date(value: Any) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def normalized_name_score(left: Any, right: Any) -> float:
+    a = normalize_text(left)
+    b = normalize_text(right)
+    if not a or not b:
+        return 0.0
+    if a in b or b in a:
+        return 1.0
+    return SequenceMatcher(None, a, b).ratio()

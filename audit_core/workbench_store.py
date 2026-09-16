@@ -674,3 +674,17 @@ def read_json_file(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise AuditError(f"运行数据 {path.name} 顶层必须是对象")
     return value
+
+
+def read_event_records(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    events: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events
