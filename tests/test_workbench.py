@@ -1858,11 +1858,11 @@ class WorkbenchServerTests(unittest.TestCase):
         primary_context = self._script_payload(primary, "audit-workbench-context")
         self.assertEqual(primary_context["mode"], "system")
         self.assertIsNone(primary_context["selected_run"])
-        self.assertEqual(primary_context["system_version"], "2.11.26")
+        self.assertEqual(primary_context["system_version"], "2.11.27")
         self.assertEqual(primary_context["delivery_mode"], "server")
         self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
         self.assertIn("audit-system-extension-script", primary)
-        self.assertIn('content="2.11.26"', primary)
+        self.assertIn('content="2.11.27"', primary)
         self.assertFalse(primary_context["oss_intake_enabled"])
         self.assertEqual(self._script_payload(primary, "audit-data")["sheets"], [])
         self.assertLess(
@@ -1877,7 +1877,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn("全部 worktree 运行记录", primary)
         self.assertNotIn("累计持久化运行次数", primary)
         self.assertIn(
-            'id="as-search" type="search" aria-label="搜索核销运行记录"',
+            'class="as-toolbar" role="group" aria-label="核销记录筛选"',
             primary,
         )
         self.assertNotIn('id="as-status-filter"', primary)
@@ -1907,7 +1907,10 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn("const PRIMARY_LIST_BATCH_SIZE = 100;", primary)
         self.assertIn("recordVisibleCount: 100", primary)
         self.assertIn("const recordListWindow = () => {", primary)
-        self.assertIn('id="as-archive-search" type="search" aria-label="搜索核销技术档案"', primary)
+        for obsolete in ('id="as-search"', 'id="as-archive-search"', 'id="as-refresh"', 'id="as-archive-refresh"'):
+            self.assertNotIn(obsolete, primary)
+        for field in ("date_from", "date_to", "source", "scenario"):
+            self.assertIn(f'data-as-filter="{field}"', primary)
         self.assertIn('id="as-ledger-list" role="list"', primary)
         self.assertIn('id="as-archive-list" role="list"', primary)
         self.assertIn('role="listitem"', primary)
@@ -1974,7 +1977,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.39")
+        self.assertEqual(config["api_version"], "1.40")
         self.assertEqual(config["scenario_classification_policy"], "zip_name")
         self.assertEqual(config["unclassified_archive_policy"], "fail_before_ai_and_callback_reason")
         self.assertEqual(config["error_text_policy"], "reason_and_action_separate")
@@ -1984,14 +1987,18 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(config["result_list_heading_display"], "hidden")
         self.assertEqual(config["filter_header_display"], "hidden")
         self.assertEqual(config["result_filters"], ["audit_type", "category"])
-        self.assertEqual(config["system_version"], "2.11.26")
+        self.assertEqual(config["system_version"], "2.11.27")
         self.assertEqual(config["material_problem_policy"], "analyze_and_report")
         self.assertEqual(config["refresh_policy"]["overview"]["record_count_statuses"], "all")
         self.assertEqual(config["refresh_policy"]["record_lists"], {
             "source": "/api/runs",
             "views": ["overview", "archive"],
             "statuses": "all",
-            "shared_search": True,
+            "shared_filters": True,
+            "filters": ["date_from", "date_to", "input_source", "scenario"],
+            "filter_sources": {"input": "input", "input-oss": "oss"},
+            "date_range_inclusive": True,
+            "manual_refresh": False,
             "shared_visible_count": True,
             "record_selector_uses_same_statuses": True,
             "visible_update_rule": "run_catalog_signature_change",

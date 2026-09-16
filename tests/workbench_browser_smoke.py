@@ -705,8 +705,9 @@ def main() -> None:
         stale_catalog = page.request.get(f"http://127.0.0.1:{PORT}/api/runs").text()
         held_probes = []
         page.route("**/api/runs", lambda route: held_probes.append(route))
-        page.locator("#as-refresh").click()
-        page.wait_for_timeout(200)
+        with page.expect_request("**/api/runs", timeout=20000):
+            pass
+        page.wait_for_timeout(100)
         assert held_probes, "A pre-deletion catalog response must be held for the race check"
         assert any(run["workspace_id"] == workspace_id for run in json.loads(stale_catalog)["runs"])
         page.locator(f'[data-as-delete="{workspace_id}"]').click()
@@ -729,7 +730,7 @@ def main() -> None:
         page.locator("#as-delete-confirm").click()
         page.wait_for_selector("#as-delete-dialog", state="hidden")
         assert page.locator(f'#as-ledger-list [data-run-card="{workspace_id}"]').count() == 0
-        assert page.locator("#as-search").evaluate("node => node === document.activeElement")
+        assert page.locator("#as-overview-date-from").evaluate("node => node === document.activeElement")
         assert all(not path.exists() for path in (ROOT / workspace_id, review_path, receipt, source))
         for route in held_probes:
             route.fulfill(status=200, content_type="application/json", body=stale_catalog)

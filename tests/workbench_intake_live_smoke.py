@@ -33,7 +33,7 @@ def main() -> None:
         expect(page.locator("#as-intake-count")).to_have_text("3")
         assert response is not None and response.status == 200
         config = page.evaluate("async () => (await fetch('/api/config')).json()")
-        assert config["api_version"] == "1.39" and config["system_version"] == "2.11.26"
+        assert config["api_version"] == "1.40" and config["system_version"] == "2.11.27"
         assert config["material_problem_policy"] == "analyze_and_report"
         assert config["oss_intake"]["operations_list_endpoint"] == "/api/intake/jobs?completed=0"
         operations = page.evaluate("async () => (await fetch('/api/intake/jobs?completed=0')).json()")

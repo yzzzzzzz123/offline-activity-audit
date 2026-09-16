@@ -21,7 +21,7 @@ from playwright.sync_api import expect, sync_playwright
 def complete(store: WorkbenchRunStore) -> None:
     store.complete(
         view_payload={"schema_version": "1.1", "title": "同步测试", "sheets": []},
-        scenarios=["promotional_display"], verification={"fixture": True},
+        scenarios=store.manifest["scenarios"], verification={"fixture": True},
     )
 
 
@@ -52,16 +52,22 @@ def main() -> None:
                 workspace = reserve_workspace("20260827-unicode", "codex", root, archive_names=["HX202606040013-核销资料-诚成26年4月【堆头20家】.zip"])
             else:
                 workspace.mkdir(parents=True)
-            run_id = f"20260827-oss-{index:012x}" if oss else f"20260827-{'showcase' if index < 3 else 'sync'}-{index:03d}"
+            run_id = f"20260827-oss-{index:012x}" if oss and index != 107 else f"20260827-{'showcase' if index < 3 else 'sync'}-{index:03d}"
             with patch("audit_core.workbench_store.utc_now", return_value="2026-09-09T15:55:00+00:00"):
                 store = WorkbenchRunStore(
                     workspace, run_id=run_id, producer_model="codex",
                     root_html=PROJECT / "offline-activity-audit.html", workbench_url="http://127.0.0.1/",
                     audit_model="gpt-6-astra", reasoning_effort="ultra",
+                    input_source="oss" if index == 107 else None,
                 )
-            store.observe("cases.prepared", {"scenarios": ["promotional_display"], "cases": {"promotional_display": {"source_archive": "HX202606040013-核销资料-诚成26年4月【堆头20家】.zip"}}})
-            with patch("audit_core.workbench_store.utc_now", return_value="2026-09-09T16:01:00+00:00"):
-                store.observe("scenario.started", {"scenario": "promotional_display"})
+            scenarios = ["entry_fee"] if index == 0 else ["promotional_display", "maintenance_fee"] if index == 2 else ["promotional_display"]
+            store.observe("cases.prepared", {"scenarios": scenarios, "cases": {scenario: {"source_archive": "HX202606040013-核销资料-诚成26年4月【堆头20家】.zip"} for scenario in scenarios}})
+            # Two records fall on Sept 9 in Shanghai: one just before midnight,
+            # and a legacy record with only its creation time available.
+            if index != 4:
+                started = "2026-09-09T15:59:59+00:00" if index == 3 else "2026-09-09T16:01:00+00:00"
+                with patch("audit_core.workbench_store.utc_now", return_value=started):
+                    store.observe("scenario.started", {"scenario": scenarios[0]})
             stores.append(store)
             return store
 
@@ -85,7 +91,7 @@ def main() -> None:
                 page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
                 page.goto(base)
                 config = page.request.get(base + "/api/config").json()
-                assert config["api_version"] == "1.39" and config["system_version"] == "2.11.26"
+                assert config["api_version"] == "1.40" and config["system_version"] == "2.11.27"
                 assert config["material_problem_policy"] == "analyze_and_report"
                 expect(page.locator("#as-nav-overview")).to_have_text("107")
 
@@ -141,36 +147,68 @@ def main() -> None:
                 page.locator(f'[data-as-technical="{stores[1].workspace.name}"]').click()
                 expect(page.locator("#as-tech-panel-summary")).to_contain_text("HX202606040013-核销资料-诚成26年4月【堆头20家】")
                 page.keyboard.press("Escape")
+                assert page.locator("#as-search, #as-archive-search, #as-refresh, #as-archive-refresh").count() == 0
+                assert page.locator("#as-archive-scenario option").count() == 11
+                page.locator("#as-archive-date-from").fill("2026-09-09")
+                page.locator("#as-archive-date-to").fill("2026-09-09")
+                assert set(ids("archive")) == {stores[index].workspace.name for index in (3, 4)}
+                page.locator("#as-archive-date-from").fill("2026-09-10")
+                assert ids("archive") == []
+                expect(page.locator("#as-archive-date-to")).to_have_attribute("aria-invalid", "true")
+                expect(page.locator("#as-archive-filter-note")).to_contain_text("结束日期不能早于开始日期")
+                page.locator("#as-archive-date-to").fill("2026-09-10")
+                expect(page.locator("#as-archive-count")).to_have_text("105 / 107 条运行记录")
+                assert len(ids("archive")) == 100  # Filter changes reset the shared window.
+                page.locator("#as-archive-source").select_option("input-oss")
+                assert ids("archive") == [stores[104].workspace.name]
+                page.locator("#as-archive-scenario").select_option("maintenance_fee")
+                assert ids("archive") == []
+                page.locator("#as-archive-scenario").select_option("promotional_display")
+                assert ids("archive") == [stores[104].workspace.name]
+                page.locator("#as-archive-source").select_option("input")
+                assert stores[104].workspace.name not in ids("archive")
+                page.locator("#as-archive-scenario").select_option("maintenance_fee")
+                assert ids("archive") == [stores[2].workspace.name]  # A multi-scenario run matches either type.
+                select("overview")
+                expect(page.locator("#as-overview-date-from")).to_have_value("2026-09-10")
+                expect(page.locator("#as-overview-date-to")).to_have_value("2026-09-10")
+                expect(page.locator("#as-overview-source")).to_have_value("input")
+                expect(page.locator("#as-overview-scenario")).to_have_value("maintenance_fee")
+                assert ids("overview") == [stores[2].workspace.name]
+                page.locator("#as-view-overview [data-as-clear-filters]").click()
+                assert len(ids("overview")) == 100
+                select("archive")
                 target = stores[0].workspace.name
-                page.locator("#as-archive-search").fill(target)
+                page.locator("#as-archive-scenario").select_option("entry_fee")
                 assert ids("archive") == [target]
                 select("overview")
-                expect(page.locator("#as-search")).to_have_value(target)
+                expect(page.locator("#as-overview-scenario")).to_have_value("entry_fee")
                 assert ids("overview") == [target]
-                select("overview")
-                expect(page.locator("#as-search")).to_have_value(target)
+                page.locator(f'[data-as-open="{target}"]').click()
+                page.locator("#as-back-ledger").click()
+                expect(page.locator("#as-overview-scenario")).to_have_value("entry_fee")
+                expect(page.locator(f'[data-run-card="{target}"]')).to_be_visible()
                 assert ids("overview") == [target]
                 before = {name: (stores[0].workspace / name).read_bytes() for name in ("manifest.json", "snapshot.json")}
                 page.locator(f'[data-as-review="{target}"]').check()
                 expect(page.locator(f'[data-run-card="{target}"]')).to_contain_text("已人工核验")
                 select("archive")
                 expect(page.locator("#as-archive-list")).to_contain_text("已人工核验")
-                page.locator("#as-archive-refresh").click()
+                page.wait_for_timeout(3200)
                 expect(page.locator("#as-archive-list")).to_contain_text("已人工核验")
                 assert all((stores[0].workspace / name).read_bytes() == value for name, value in before.items())
-                page.locator("#as-archive-search").fill("SYNC-NO-MATCH")
+                page.locator("#as-archive-scenario").select_option("personnel_incentive")
                 for view in ("overview", "archive"):
                     select(view)
                     assert ids(view) == []
                     counts(107)
                 select("overview")
-                page.locator("#as-search").fill("")
+                page.locator("#as-view-overview [data-as-clear-filters]").click()
                 assert len(ids("overview")) == 100
                 select("archive")
                 assert len(ids("archive")) == 100
                 complete(stores[105])
-                page.locator("#as-archive-refresh").click()
-                expect(page.locator('#as-intake-panel')).to_be_hidden()
+                expect(page.locator('#as-intake-list')).to_have_text("", timeout=20000)
                 counts(107)
                 select("overview")
                 expect(page.locator("#as-ledger-count")).to_have_text("107 / 107 条运行记录")
@@ -187,7 +225,7 @@ def main() -> None:
                 assert len(archive_ids) == 108
                 select("overview")
                 assert ids("overview") == archive_ids
-                page.locator("#as-search").fill(target)
+                page.locator("#as-overview-scenario").select_option("entry_fee")
                 page.locator(f'[data-as-delete="{target}"]').click()
                 page.locator("#as-delete-confirm").click()
                 expect(page.locator("#as-delete-dialog")).not_to_be_visible()
@@ -196,7 +234,9 @@ def main() -> None:
                     select(view)
                     assert ids(view) == []
                 counts(107)
-                page.locator("#as-archive-search").fill("showcase")
+                page.locator("#as-view-archive [data-as-clear-filters]").click()
+                page.locator("#as-archive-source").select_option("input-oss")
+                assert set(ids("archive")) == {stores[index].workspace.name for index in (104, 107)}
                 for width in (1440, 1280):
                     page.set_viewport_size({"width": width, "height": 960})
                     for view in ("overview", "archive"):
@@ -232,10 +272,10 @@ def main() -> None:
     assert not errors, errors
     assert not server_errors, server_errors
     report = {
-        "status": "passed", "system_version": "2.11.26", "api_version": "1.39",
-        "checks": ["all worktrees in ledger/archive with identical order/search/pagination", "overview contains the complete ledger and its actions",
+        "status": "passed", "system_version": "2.11.27", "api_version": "1.40",
+        "checks": ["all worktrees in ledger/archive with identical order/filters/pagination", "overview contains the complete ledger and its actions",
                    "active input and OSS records with source tags", "creation changes total; completion keeps total and updates status", "failure preserves the run in the overview ledger",
-                   "shared search across two lists", "pagination beyond 100", "inactive DOM released", "manual review/refresh/delete synchronized",
+                   "shared date/source/scenario filters and clear action", "inclusive Shanghai dates and creation fallback", "invalid date range", "combined filters and multiple scenarios", "legacy and explicit OSS source", "filter persistence after opening a record", "pagination beyond 100", "inactive DOM released", "manual review/automatic refresh/delete synchronized",
                    "business bytes unchanged by annotation", "three distinct status colors and text", "analysis date uses Shanghai timezone, not business date or creation when analysis time exists",
                    "static completed/failed list parity and reachable diagnosis", "1440/1280 desktop layout"],
         "screenshots": screenshots, "console_and_page_errors": errors, "http_errors": server_errors,

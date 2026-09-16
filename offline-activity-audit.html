@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="canban-template-version" content="3.2.0">
-  <meta name="offline-audit-system-version" content="2.11.26">
+  <meta name="offline-audit-system-version" content="2.11.27">
   <link rel="icon" href="data:,">
   <script>
     if (window.location.protocol === 'file:') {
@@ -3270,7 +3270,12 @@
     @keyframes as-intake-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
     .as-intake-actions { display: grid; min-width: 116px; gap: 6px; }
     .as-intake-actions .as-button { width: 100%; }
-    .as-toolbar { display: grid; padding: 12px; background: #f5f8f9; border-bottom: 1px solid var(--eo-line); grid-template-columns: minmax(220px, 1fr) auto; gap: 9px; }
+    .as-toolbar { display: grid; padding: 12px; background: #f5f8f9; border-bottom: 1px solid var(--eo-line); grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .as-filter { display: grid; min-width: 0; gap: 6px; color: var(--eo-muted); font-size: 12px; font-weight: 700; }
+    .as-filter-footer { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .as-filter-note { color: var(--eo-muted); font-size: 12px; }
+    .as-filter-note[data-invalid="true"] { color: #b1372d; }
+    .as-filter [aria-invalid="true"] { border-color: #b1372d; }
     .as-input, .as-select {
       width: 100%;
       min-height: 38px;
@@ -3472,6 +3477,7 @@
       .as-archive-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
     }
     @media (max-width: 880px) {
+      .as-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .as-app-grid { grid-template-columns: 1fr; }
       .as-rail { position: relative; top: auto; min-height: 0; clip-path: none; }
       .as-rail-head { display: flex; padding: 15px 16px; align-items: center; justify-content: space-between; gap: 14px; }
@@ -3581,7 +3587,7 @@
         runs: [],
         intakeJobs: [],
         primaryView: 'overview',
-        query: '',
+        filters: { date_from: '', date_to: '', source: '', scenario: '' },
         currentTechnical: '',
         technicalSnapshot: null,
         technicalTab: 'summary',
@@ -3769,7 +3775,7 @@
           try {
             sessionStorage.setItem('offline-audit-primary-state', JSON.stringify({
               view: state.primaryView,
-              query: state.query,
+              filters: state.filters,
               scrollY: window.scrollY,
             }));
           } catch (error) {}
@@ -3929,16 +3935,51 @@
           if (navigationType === 'reload') {
             sessionStorage.removeItem(storageKey);
             state.primaryView = 'overview';
-            state.query = '';
+            state.filters = normalizeRecordFilters();
             return 0;
           }
           const saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
           sessionStorage.removeItem(storageKey);
           const restoredView = saved.view === 'ledger' ? 'overview' : saved.view;
           if (['overview', 'archive'].includes(restoredView)) state.primaryView = restoredView;
-          state.query = String(saved.query || '');
+          state.filters = normalizeRecordFilters(saved.filters);
           return Number(saved.scrollY || 0);
         } catch (error) { return 0; }
+      };
+      const normalizeRecordFilters = (filters = {}) => {
+        const dateValue = (value) => {
+          if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
+          const date = new Date(`${value}T00:00:00Z`);
+          return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : '';
+        };
+        return {
+          date_from: dateValue(filters?.date_from), date_to: dateValue(filters?.date_to),
+          source: ['input', 'input-oss'].includes(filters?.source) ? filters.source : '',
+          scenario: Object.hasOwn(scenarioLabels, filters?.scenario) ? filters.scenario : '',
+        };
+      };
+      const recordFiltersMarkup = (view) => {
+        const selectOptions = (values, selected) => values.map(([value, label]) => `<option value="${escapeHtml(value)}"${value === selected ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('');
+        return `<div class="as-toolbar" role="group" aria-label="核销记录筛选">
+          <label class="as-filter" for="as-${view}-date-from">开始日期<input class="as-input" id="as-${view}-date-from" data-as-filter="date_from" type="date" value="${escapeHtml(state.filters.date_from)}" aria-describedby="as-${view}-filter-note"></label>
+          <label class="as-filter" for="as-${view}-date-to">结束日期<input class="as-input" id="as-${view}-date-to" data-as-filter="date_to" type="date" value="${escapeHtml(state.filters.date_to)}" aria-describedby="as-${view}-filter-note"></label>
+          <label class="as-filter" for="as-${view}-source">资料来源<select class="as-select" id="as-${view}-source" data-as-filter="source">${selectOptions([['', '全部来源'], ['input', 'input'], ['input-oss', 'input-oss']], state.filters.source)}</select></label>
+          <label class="as-filter" for="as-${view}-scenario">核销方式<select class="as-select" id="as-${view}-scenario" data-as-filter="scenario">${selectOptions([['', '全部核销方式'], ...Object.entries(scenarioLabels)], state.filters.scenario)}</select></label>
+          <div class="as-filter-footer"><span class="as-filter-note" id="as-${view}-filter-note" role="status" aria-live="polite"></span><button class="as-button secondary" data-as-clear-filters type="button">清除筛选</button></div>
+        </div>`;
+      };
+      const syncRecordFilters = () => {
+        const invalidRange = Boolean(state.filters.date_from && state.filters.date_to && state.filters.date_from > state.filters.date_to);
+        document.querySelectorAll('[data-as-filter]').forEach((control) => {
+          const key = control.dataset.asFilter;
+          if (control.value !== state.filters[key]) control.value = state.filters[key];
+          if (key === 'date_to') control.setAttribute('aria-invalid', String(invalidRange));
+        });
+        document.querySelectorAll('.as-filter-note').forEach((note) => {
+          note.dataset.invalid = String(invalidRange);
+          note.textContent = invalidRange ? '结束日期不能早于开始日期，请调整日期范围。' : '按分析开始日期筛选（北京时间），包含起止当天；无分析时间时使用创建日期。';
+        });
+        document.querySelectorAll('[data-as-clear-filters]').forEach((button) => { button.disabled = !Object.values(state.filters).some(Boolean); });
       };
       const renderPrimaryShell = () => {
         const restoreScroll = restorePrimaryState();
@@ -3962,30 +4003,33 @@
               <section class="as-panel as-intake-panel" id="as-intake-failed-panel" hidden><header class="as-panel-head"><div><small>INTAKE FAILURES</small><h2>投递失败</h2></div><p>尚未创建核销运行的失败投递</p></header><div class="as-panel-body"><div class="as-intake-list" id="as-intake-failed-list" role="list" aria-label="投递失败记录"></div></div></section>
               <section class="as-panel">
               <header class="as-panel-head"><div><small>AUDIT LEDGER</small><h2>核销台账</h2></div><p id="as-ledger-count" aria-live="polite">0 条记录</p></header>
-              <div class="as-toolbar"><input class="as-input" id="as-search" type="search" aria-label="搜索核销运行记录" placeholder="搜索资料包、运行 ID、模型或核销场景" value="${escapeHtml(state.query)}">
-                <button class="as-button secondary" id="as-refresh" type="button">↻ 刷新记录</button></div>
+              ${recordFiltersMarkup('overview')}
               <div class="as-panel-body"><div class="as-run-list" id="as-ledger-list" role="list" aria-label="核销台账记录"></div><div class="as-list-window" id="as-ledger-window"></div></div>
               </section>
             </div></section>
             <section class="as-view" id="as-view-archive" role="tabpanel" aria-labelledby="as-tab-archive" tabindex="0" hidden><section class="as-panel">
               <header class="as-panel-head"><div><small>TECHNICAL ARCHIVE</small><h2>分析与断点档案</h2></div><p id="as-archive-count" aria-live="polite">0 条记录</p></header>
-              <div class="as-toolbar"><input class="as-input" id="as-archive-search" type="search" aria-label="搜索核销技术档案" placeholder="搜索资料包、运行 ID、模型或核销场景" value="${escapeHtml(state.query)}">
-                <button class="as-button secondary" id="as-archive-refresh" type="button">↻ 刷新档案</button></div>
+              ${recordFiltersMarkup('archive')}
               <div class="as-panel-body"><div class="as-archive-grid" id="as-archive-list" role="list" aria-label="技术档案记录"></div><div class="as-list-window" id="as-archive-window"></div></div>
             </section></section>
           </div>
         </div></main>`;
         ensureTechnicalDrawer();
+        syncRecordFilters();
         bindPrimaryEvents();
         setPrimaryView(state.primaryView);
         if (restoreScroll) requestAnimationFrame(() => window.scrollTo(0, restoreScroll));
       };
       const filteredRuns = () => {
-        const needle = state.query.trim().toLocaleLowerCase('zh-CN');
+        const { date_from, date_to, source, scenario } = state.filters;
         return state.runs.filter((run) => {
-          if (!needle) return true;
-          const haystack = [runTitle(run), ...(run.source_archives || []), modelLabel(run), runSource(run), run.workspace_id, run.run_id, run.producer_model, run.audit_model, run.reasoning_effort, ...(run.scenarios || []).map(scenarioName)].join(' ').toLocaleLowerCase('zh-CN');
-          return haystack.includes(needle);
+          if (source && runSource(run) !== (source === 'input-oss' ? 'oss' : 'input')) return false;
+          if (scenario && !(run.scenarios || []).includes(scenario)) return false;
+          if (date_from || date_to) {
+            const date = runDate(run);
+            if (date === '日期未知' || (date_from && date < date_from) || (date_to && date > date_to)) return false;
+          }
+          return true;
         });
       };
       const renderPrimaryData = () => {
@@ -4050,7 +4094,7 @@
       const recordListWindow = () => {
         const values = filteredRuns();
         const total = state.runs.length;
-        const windowKey = state.query.trim().toLocaleLowerCase('zh-CN');
+        const windowKey = JSON.stringify(state.filters);
         if (state.recordWindowKey !== windowKey) {
           state.recordWindowKey = windowKey;
           state.recordVisibleCount = PRIMARY_LIST_BATCH_SIZE;
@@ -4063,7 +4107,7 @@
         document.getElementById('as-archive-count').textContent = `${values.length} / ${total} 条运行记录`;
         document.getElementById('as-archive-list').innerHTML = visible
           ? values.slice(0, visible).map(archiveCard).join('')
-          : emptyMarkup(total ? '没有匹配的技术档案' : '技术档案为空', total ? '请调整搜索词；台账与技术档案的搜索条件同步' : '创建运行后，技术档案会与台账同步显示');
+          : emptyMarkup(total ? '没有匹配的技术档案' : '技术档案为空', total ? '请调整筛选条件；台账与技术档案的筛选条件同步' : '创建运行后，技术档案会与台账同步显示');
         document.getElementById('as-archive-window').innerHTML = listWindowMarkup('archive', visible, values.length);
         state.archiveRenderRevision = state.primaryRenderRevision;
       };
@@ -4072,7 +4116,7 @@
         if (!root) return;
         const { values, total, visible } = recordListWindow();
         document.getElementById('as-ledger-count').textContent = `${values.length} / ${total} 条运行记录`;
-        root.innerHTML = visible ? values.slice(0, visible).map(runCard).join('') : emptyMarkup(total ? '没有匹配的核销记录' : '还没有核销记录', total ? '请调整搜索词' : '开始核销后，记录会自动出现在这里');
+        root.innerHTML = visible ? values.slice(0, visible).map(runCard).join('') : emptyMarkup(total ? '没有匹配的核销记录' : '还没有核销记录', total ? '请调整筛选条件' : '开始核销后，记录会自动出现在这里');
         document.getElementById('as-ledger-window').innerHTML = listWindowMarkup('overview', visible, values.length);
         state.ledgerRenderRevision = state.primaryRenderRevision;
       };
@@ -4133,19 +4177,21 @@
           if (open) { routeToRecord(open.dataset.asOpen); return; }
           const technical = event.target.closest('[data-as-technical]');
           if (technical) { openTechnical(technical.dataset.asTechnical); return; }
-          if (event.target.closest('#as-refresh, #as-archive-refresh')) {
-            clearTimeout(primaryProbeTimer);
-            loadPrimaryRuns(true).finally(schedulePrimaryProbe);
+          if (event.target.closest('[data-as-clear-filters]')) {
+            state.filters = normalizeRecordFilters();
+            syncRecordFilters();
+            state.primaryRenderRevision += 1;
+            ensurePrimaryViewData(state.primaryView);
+            document.getElementById(`as-${state.primaryView}-date-from`)?.focus();
           }
         });
         document.body.addEventListener('change', (event) => {
           const review = event.target.closest('[data-as-review]');
           if (review) setManualReview(review.dataset.asReview, review.checked, review);
         });
-        const searches = [...document.querySelectorAll('#as-search, #as-archive-search')];
-        searches.forEach((input) => input.addEventListener('input', (event) => {
-          state.query = event.target.value;
-          searches.forEach((search) => { if (search !== event.target) search.value = state.query; });
+        document.querySelectorAll('[data-as-filter]').forEach((control) => control.addEventListener('input', (event) => {
+          state.filters = normalizeRecordFilters({ ...state.filters, [event.target.dataset.asFilter]: event.target.value });
+          syncRecordFilters();
           state.primaryRenderRevision += 1;
           ensurePrimaryViewData(state.primaryView);
         }));
@@ -4183,7 +4229,7 @@
           state.deleteKind = '';
           state.deleteTrigger = null;
           if (trigger?.isConnected) trigger.focus();
-          else document.getElementById('as-search')?.focus();
+          else document.getElementById(`as-${state.primaryView}-date-from`)?.focus();
         });
         return dialog;
       };
@@ -4417,11 +4463,10 @@
         state.intakeSignature = next.intakeSignature;
         renderPrimaryData();
       };
-      const loadPrimaryRuns = async (announce = false) => {
+      const loadPrimaryRuns = async () => {
         try {
           const next = await fetchPrimaryState(false);
           if (!next.unchanged) commitPrimaryState(next);
-          if (announce) toast('核销台账与技术档案已同步刷新');
         } catch (error) {
           document.getElementById(state.primaryView === 'archive' ? 'as-archive-list' : 'as-ledger-list').innerHTML = emptyMarkup('核销服务暂不可用', error.message);
           toast(error.message);
