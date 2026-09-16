@@ -911,7 +911,7 @@
           <aside class="sequence-side"><small>CALLBACK</small><h3>只回结论</h3><p><code>POST /api/v1/ai/analyze/callback</code><br>不回传下载地址、本地绝对路径或密钥。</p></aside>
         </div>
         <details><summary>失败如何留痕？</summary><div>下载或核销失败写入任务 failure，并在 OSS 投递区显示“失败”和安全原因；核销已经完成但回调失败时保留正式 worktree、原始 ZIP 与结果收据，并标记 <code>callback_failed</code>。失败不混入核销台账，底层记录仍留在技术档案；服务重启会把未完成入站任务安全终止为失败，不伪装为完成。</div></details>
-        <details><summary>连续投递如何展示和取消？</summary><div>一级页面逐条显示全部未完成或失败 attempt：接收、下载和已落盘等待统一标为“排队中”，正式核销和回调标为“运行中”，失败标为“失败”。三类卡片都有“删除记录”；同源确认后，排队项从 worker 跳过，运行项先终止专属 runner 并阻止尚未发出的回调，再清理唯一归属的收据、ZIP 与未完成档案。最近记录和核销台账都只展示已完成运行。</div></details>
+        <details><summary>连续投递如何展示和取消？</summary><div>一级页面逐条显示全部未完成或失败 attempt：接收、下载和已落盘等待统一标为“排队中”，正式核销和回调标为“运行中”，失败标为“失败”。三类卡片都有“删除记录”；同源确认后，排队项从 worker 跳过，运行项先终止专属 runner 并阻止尚未发出的回调，再清理唯一归属的收据、ZIP 与未完成档案。系统总览直接展示全部状态的核销台账，技术档案使用相同记录集合。</div></details>
         <div class="sources" aria-label="OSS 来源"><span class="source-path">audit_core/oss_intake.py</span><span class="source-path">audit_core/workbench_server.py</span><span class="source-path">tests/test_oss_intake.py</span></div>
       </section>
 
@@ -985,7 +985,7 @@
           </table>
         </div>
         <div class="boundary-strip">
-          <div class="boundary"><strong>一级：核销管理中心</strong><span>系统概览、仅已完成核销台账和全状态技术档案；首页不加载全部历史卡片。</span></div>
+          <div class="boundary"><strong>一级：核销管理中心</strong><span>系统总览合并完整核销台账，技术档案独立；两个列表按每批 100 条加载历史记录。</span></div>
           <div class="boundary"><strong>二级：单次核销结果</strong><span>默认错误总览；正确检查项作为独立日志视图，底层快照不因筛选改变。</span></div>
           <div class="boundary"><strong>离线：同源静态档案</strong><span>页面、结果和受控技术资源内嵌在一个 HTML 中，直接双击也可复核。</span></div>
         </div>

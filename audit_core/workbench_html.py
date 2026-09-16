@@ -13,8 +13,8 @@ from .pass_check_log import attach_pass_check_log, load_workspace_results
 from .workbench_store import read_event_records, atomic_write_text, main_flow_task_list, project_run_status, read_json_file
 
 
-API_VERSION = "1.38"
-SYSTEM_VERSION = "2.11.25"
+API_VERSION = "1.39"
+SYSTEM_VERSION = "2.11.26"
 STATIC_ARCHIVE_FILENAME = "offline-activity-audit.html"
 WORKBENCH_CONTEXT_ID = "audit-workbench-context"
 STATIC_ARCHIVE_ID = "audit-static-archive"

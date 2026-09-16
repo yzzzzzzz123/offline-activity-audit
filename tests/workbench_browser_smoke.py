@@ -294,7 +294,7 @@ def main() -> None:
         assert page.locator(".as-rail").evaluate(
             "node => getComputedStyle(node).backgroundColor"
         ) == "rgb(16, 39, 49)"
-        page.wait_for_selector("#as-recent-list .as-run-card")
+        page.wait_for_selector("#as-ledger-list .as-run-card")
         assert page.get_by_role("heading", name="核销管理中心").first.is_visible()
         overview_completed_metric = page.locator("#as-metrics .as-metric").filter(
             has_text="核销完成"
@@ -302,23 +302,24 @@ def main() -> None:
         assert overview_completed_metric.count() == 1
         assert overview_completed_metric.locator("small").inner_text() == "最近一次 input 的 ZIP 总数"
         assert overview_completed_metric.locator(":scope > strong").inner_text() == "2"
-        assert page.locator("[data-as-view]").count() == 3
+        assert page.locator("[data-as-view]").count() == 2
         assert page.locator('.as-nav[role="tablist"]').count() == 1
-        assert page.locator('.as-nav [role="tab"]').count() == 3
-        assert page.locator('.as-view[role="tabpanel"]').count() == 3
+        assert page.locator('.as-nav [role="tab"]').count() == 2
+        assert page.locator('.as-view[role="tabpanel"]').count() == 2
         assert page.locator('.as-nav [role="tab"]').evaluate_all(
             "nodes => nodes.map(node => node.tabIndex)"
-        ) == [0, -1, -1]
-        assert page.locator("#as-ledger-list .as-run-card").count() == 0
+        ) == [0, -1]
+        assert page.locator("#as-ledger-list .as-run-card").count() == 2
         assert page.locator("#as-archive-list .as-archive-card").count() == 0
         overview_tab = page.locator('[data-as-view="overview"]')
         overview_tab.focus()
         overview_tab.press("ArrowDown")
-        assert page.locator('[data-as-view="ledger"]').get_attribute(
+        assert page.locator('[data-as-view="archive"]').get_attribute(
             "aria-selected"
         ) == "true"
-        assert page.locator("#as-view-ledger").is_visible()
-        page.locator('[data-as-view="ledger"]').press("Home")
+        assert page.locator("#as-view-archive").is_visible()
+        assert page.locator("#as-ledger-list .as-run-card").count() == 0
+        page.locator('[data-as-view="archive"]').press("Home")
         assert page.locator('[data-as-view="overview"]').get_attribute(
             "aria-selected"
         ) == "true"
@@ -327,15 +328,15 @@ def main() -> None:
         assert page.locator("#as-monitor-list").count() == 0
         assert page.locator("[data-runtime-stage]").count() == 0
         assert page.get_by_role("heading", name="核销运行链路").count() == 0
-        assert page.get_by_role("heading", name="最近核销记录").is_visible()
-        assert page.locator("#as-recent-list button").count() == 0
-        assert page.locator("#as-recent-list [data-as-review]").count() == 0
+        assert page.get_by_role("heading", name="核销台账", exact=True).is_visible()
+        assert page.get_by_role("heading", name="最近核销记录").count() == 0
+        assert page.locator("#as-tab-ledger, #as-view-ledger, #as-recent-list").count() == 0
         assert page.locator("#as-archive-list [data-as-open]").count() == 0
-        assert page.locator("#as-ledger-list .as-run-card").count() == 0
+        assert page.locator("#as-ledger-list .as-run-card").count() == 2
         assert page.locator("#as-archive-list button").count() == 0
         page.locator('[data-as-view="archive"]').click()
         assert page.locator("#as-archive-list button").count() == 2
-        assert page.locator("#as-nav-archive").inner_text() == page.locator("#as-nav-ledger").inner_text() == "2"
+        assert page.locator("#as-nav-archive").inner_text() == page.locator("#as-nav-overview").inner_text() == "2"
         assert page.locator('#as-archive-list[role="list"]').count() == 1
         page.locator('[data-as-view="overview"]').click()
         assert page.locator("#as-archive-list .as-archive-card").count() == 0
@@ -365,7 +366,7 @@ def main() -> None:
         )
         page.screenshot(path=str(screenshot_root / "desktop.png"), full_page=True)
 
-        page.locator('[data-as-view="ledger"]').click()
+        page.locator('[data-as-view="overview"]').click()
         page.wait_for_selector(f'#as-ledger-list [data-as-open="{workspace_id}"]')
         assert page.locator('#as-ledger-list[role="list"]').count() == 1
         assert page.locator("#as-ledger-list [data-as-technical]").count() == 0
@@ -616,10 +617,10 @@ def main() -> None:
         page.get_by_role("button", name="关闭").click()
         assert technical_trigger.evaluate("node => node === document.activeElement")
 
-        page.get_by_role("button", name="← 返回核销台账").click()
+        page.get_by_role("button", name="← 返回系统总览").click()
         page.wait_for_load_state("networkidle")
         page.wait_for_selector("body.audit-system-page")
-        assert page.locator("#as-view-ledger").is_visible()
+        assert page.locator("#as-view-overview").is_visible()
 
         page.reload()
         page.wait_for_load_state("networkidle")
@@ -627,7 +628,7 @@ def main() -> None:
         assert page.locator('[data-as-view="overview"]').get_attribute(
             "aria-selected"
         ) == "true"
-        assert page.locator("#as-view-ledger").is_hidden()
+        assert page.locator("#as-view-archive").is_hidden()
 
         page.goto(f"http://127.0.0.1:{PORT}/?run={running_workspace_id}")
         page.wait_for_load_state("networkidle")
@@ -666,9 +667,9 @@ def main() -> None:
         page.goto(archive.as_uri())
         page.wait_for_selector("#as-view-overview:not([hidden])")
         assert page.locator("body.error-only-page").count() == 0
-        assert page.locator('[data-as-view]').count() == 3
+        assert page.locator('[data-as-view]').count() == 2
         page.screenshot(path=str(screenshot_root / "static-level-one.png"), full_page=True, animations="disabled")
-        page.locator('[data-as-view="ledger"]').click()
+        page.locator('[data-as-view="overview"]').click()
         assert page.locator('[data-as-delete]').count() == 0
         assert page.locator('[data-as-review]').is_disabled()
         page.locator(f'[data-as-open="{workspace_id}"]').click()
@@ -696,7 +697,7 @@ def main() -> None:
 
         page.goto(f"http://127.0.0.1:{PORT}/")
         page.wait_for_load_state("networkidle")
-        page.locator('[data-as-view="ledger"]').click()
+        page.locator('[data-as-view="overview"]').click()
         page.locator(f'[data-as-review="{workspace_id}"]').check()
         review_path = ROOT / ".reviews" / f"{workspace_id}.json"
         page.wait_for_function("() => document.querySelector('#as-metrics .as-metric:last-child > strong')?.textContent === '0'")
@@ -767,7 +768,7 @@ def main() -> None:
         assert not (ROOT / running_workspace_id).exists()
         page.reload()
         page.wait_for_load_state("networkidle")
-        assert page.locator("#as-recent-list .as-run-card").count() == 0
+        assert page.locator("#as-ledger-list .as-run-card").count() == 0
         assert page.locator("#as-metrics .as-metric").first.locator("strong").inner_text() == "0"
         page.screenshot(path=str(screenshot_root / "desktop-after-delete.png"), full_page=True)
         browser.close()

@@ -5,6 +5,7 @@ import json
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import Page, sync_playwright
 
@@ -26,7 +27,7 @@ def wait_for_primary(page: Page) -> None:
 def reveal_ledger_record(page: Page, workspace_id: str) -> None:
     target = page.locator(f'#as-ledger-list [data-as-open="{workspace_id}"]')
     while target.count() == 0:
-        more = page.locator('[data-as-load-more="ledger"]')
+        more = page.locator('[data-as-load-more="overview"]')
         assert more.count() == 1
         more.click()
 
@@ -178,30 +179,30 @@ def main() -> None:
         )
         all_runs = listing["runs"]
         completed_runs = [run for run in all_runs if run["status"] == "completed"]
-        terminal_runs = [run for run in all_runs if run["status"] in ("completed", "failed")]
-        for selector in ("#as-hero-count", "#as-nav-overview", "#as-nav-ledger", "#as-nav-archive"):
+        for selector in ("#as-hero-count", "#as-nav-overview", "#as-nav-archive"):
             assert page.locator(selector).inner_text() == str(len(all_runs))
         assert page.locator("#as-rail-total").inner_text() == f"{len(all_runs)} 条记录"
         assert page.locator("#as-metrics .as-metric:first-child > strong").inner_text() == str(len(all_runs))
-        recent_ids = page.locator("#as-recent-list [data-run-card]").evaluate_all("nodes => nodes.map(node => node.dataset.runCard)")
-        assert recent_ids == [run["workspace_id"] for run in terminal_runs[:PRIMARY_LIST_BATCH_SIZE]]
-        assert page.locator("[data-as-view]").count() == 3
+        overview_ids = page.locator("#as-ledger-list [data-run-card]").evaluate_all("nodes => nodes.map(node => node.dataset.runCard)")
+        assert overview_ids == [run["workspace_id"] for run in all_runs[:PRIMARY_LIST_BATCH_SIZE]]
+        assert page.locator("[data-as-view]").count() == 2
         assert page.locator('.as-nav[role="tablist"]').count() == 1
-        assert page.locator('.as-nav [role="tab"]').count() == 3
-        assert page.locator('.as-view[role="tabpanel"]').count() == 3
+        assert page.locator('.as-nav [role="tab"]').count() == 2
+        assert page.locator('.as-view[role="tabpanel"]').count() == 2
         assert page.locator('.as-nav [role="tab"]').evaluate_all(
             "nodes => nodes.map(node => node.tabIndex)"
-        ) == [0, -1, -1]
-        assert page.locator("#as-ledger-list .as-run-card").count() == 0
+        ) == [0, -1]
+        assert page.locator("#as-ledger-list .as-run-card").count() == min(len(all_runs), PRIMARY_LIST_BATCH_SIZE)
         assert page.locator("#as-archive-list .as-archive-card").count() == 0
         overview_tab = page.locator('[data-as-view="overview"]')
         overview_tab.focus()
         overview_tab.press("ArrowDown")
-        assert page.locator('[data-as-view="ledger"]').get_attribute(
+        assert page.locator('[data-as-view="archive"]').get_attribute(
             "aria-selected"
         ) == "true"
-        assert page.locator("#as-view-ledger").is_visible()
-        page.locator('[data-as-view="ledger"]').press("Home")
+        assert page.locator("#as-view-archive").is_visible()
+        assert page.locator("#as-ledger-list .as-run-card").count() == 0
+        page.locator('[data-as-view="archive"]').press("Home")
         assert page.locator('[data-as-view="overview"]').get_attribute(
             "aria-selected"
         ) == "true"
@@ -210,11 +211,11 @@ def main() -> None:
         assert page.locator("#as-monitor-list").count() == 0
         assert page.locator("[data-runtime-stage]").count() == 0
         assert page.get_by_role("heading", name="核销运行链路").count() == 0
-        assert page.get_by_role("heading", name="最近核销记录").is_visible()
-        assert page.locator("#as-recent-list button").count() == 0
-        assert page.locator("#as-recent-list [data-as-review]").count() == 0
+        assert page.get_by_role("heading", name="核销台账", exact=True).is_visible()
+        assert page.get_by_role("heading", name="最近核销记录").count() == 0
+        assert page.locator("#as-tab-ledger, #as-view-ledger, #as-recent-list").count() == 0
         assert page.locator("#as-archive-list [data-as-open]").count() == 0
-        assert page.locator("#as-ledger-list .as-run-card").count() == 0
+        assert page.locator("#as-ledger-list .as-run-card").count() == min(len(all_runs), PRIMARY_LIST_BATCH_SIZE)
         assert page.locator("#as-archive-list button").count() == 0
         page.locator('[data-as-view="archive"]').click()
         assert page.locator("#as-archive-list button").count() == min(
@@ -223,14 +224,13 @@ def main() -> None:
         assert page.locator('#as-archive-list[role="list"]').count() == 1
         page.locator('[data-as-view="overview"]').click()
         assert page.locator("#as-archive-list .as-archive-card").count() == 0
-        page.locator('[data-as-view="ledger"]').click()
         ledger_ids = page.locator("#as-ledger-list [data-run-card]").evaluate_all(
             "nodes => nodes.map(node => node.dataset.runCard)"
         )
         assert ledger_ids == [
             run["workspace_id"] for run in all_runs[:PRIMARY_LIST_BATCH_SIZE]
         ]
-        assert page.locator("#as-nav-ledger").inner_text() == str(len(all_runs))
+        assert page.locator("#as-nav-overview").inner_text() == str(len(all_runs))
         assert page.get_by_role("heading", name="核销台账").is_visible()
         assert page.locator("#as-status-filter").count() == 0
         assert page.locator("#as-ledger-list .as-status").evaluate_all("nodes => nodes.map(node => node.className.split(' ').pop())") == [run["status"] for run in all_runs[:PRIMARY_LIST_BATCH_SIZE]]
@@ -244,7 +244,7 @@ def main() -> None:
 
         secondary_screenshot_output = None
         if completed_id is not None:
-            page.locator('[data-as-view="ledger"]').click()
+            page.locator('[data-as-view="overview"]').click()
             reveal_ledger_record(page, completed_id)
             visible_ids = page.locator("#as-ledger-list [data-run-card]").evaluate_all(
                 "nodes => nodes.map(node => node.dataset.runCard)"
@@ -265,7 +265,7 @@ def main() -> None:
             page.wait_for_selector("body.error-only-page")
             page.wait_for_selector("#as-back-ledger")
             assert page.locator("#as-record-select option").evaluate_all("nodes => nodes.map(node => node.value)") == [run["workspace_id"] for run in all_runs]
-            assert f"run={completed_id}" in page.url
+            assert parse_qs(urlsplit(page.url).query).get("run") == [completed_id]
             assert page.get_by_role("region", name="筛选错误检查项").is_visible()
             assert page.locator(".eo-queue-head").count() == 0
             assert page.locator(".eo-pass-filter-head, #eoErrorVisible, #eoPassVisible").count() == 0
@@ -347,7 +347,7 @@ def main() -> None:
             assert page.locator("#home").is_visible()
             assert page.locator(".eo-enter").count() == 0
             assert page.locator('[data-open^="scenario-"]').count() == 0
-            assert page.get_by_role("button", name="← 返回核销台账").is_visible()
+            assert page.get_by_role("button", name="← 返回系统总览").is_visible()
             page.screenshot(path=str(secondary_screenshot), full_page=True, animations="disabled")
             secondary_screenshot_output = str(secondary_screenshot)
 
@@ -427,9 +427,9 @@ def main() -> None:
             page.wait_for_selector("#as-drawer-backdrop:not([hidden])")
             assert page.get_by_role("heading", name=completed_id).is_visible()
             page.get_by_role("button", name="关闭").click()
-            page.get_by_role("button", name="← 返回核销台账").click()
+            page.get_by_role("button", name="← 返回系统总览").click()
             wait_for_primary(page)
-            assert page.locator("#as-view-ledger").is_visible()
+            assert page.locator("#as-view-overview").is_visible()
 
         page.reload()
         wait_for_primary(page)
@@ -437,7 +437,7 @@ def main() -> None:
         assert page.locator('[data-as-view="overview"]').get_attribute(
             "aria-selected"
         ) == "true"
-        assert page.locator("#as-view-ledger").is_hidden()
+        assert page.locator("#as-view-archive").is_hidden()
 
         failed_screenshot_output = None
         if failed_id is not None:
@@ -459,7 +459,7 @@ def main() -> None:
                     "document.querySelector('#as-checkpoint-view').textContent.includes('checkpoint_id')"
                 )
             page.get_by_role("button", name="关闭").click()
-            page.get_by_role("button", name="← 返回核销台账").click()
+            page.get_by_role("button", name="← 返回系统总览").click()
             wait_for_primary(page)
 
         running_screenshot_output = None
@@ -486,7 +486,7 @@ def main() -> None:
                 "status": response.status,
                 "completed_run": completed_id,
                 "catalog_count": len(all_runs), "ledger_ids": ledger_ids, "archive_ids": archive_ids,
-                "recent_ids": recent_ids, "active_run_ids": [run["workspace_id"] for run in active_runs],
+                "overview_ids": overview_ids, "active_run_ids": [run["workspace_id"] for run in active_runs],
                 "active_sources": source_counts, "archive": str(archive_screenshot),
                 "primary": str(args.screenshot),
                 "secondary": secondary_screenshot_output,

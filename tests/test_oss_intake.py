@@ -1703,7 +1703,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
 
         with self.opener.open(self.base + "/api/config", timeout=5) as response:
             config = json.load(response)
-        self.assertEqual(config["api_version"], "1.38")
+        self.assertEqual(config["api_version"], "1.39")
         self.assertEqual(config["material_problem_policy"], "analyze_and_report")
         self.assertTrue(config["oss_intake"]["enabled"])
         self.assertEqual(config["oss_intake"]["list_endpoint"], "/api/intake/jobs")

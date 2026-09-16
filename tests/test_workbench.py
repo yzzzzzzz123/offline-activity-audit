@@ -1858,11 +1858,11 @@ class WorkbenchServerTests(unittest.TestCase):
         primary_context = self._script_payload(primary, "audit-workbench-context")
         self.assertEqual(primary_context["mode"], "system")
         self.assertIsNone(primary_context["selected_run"])
-        self.assertEqual(primary_context["system_version"], "2.11.25")
+        self.assertEqual(primary_context["system_version"], "2.11.26")
         self.assertEqual(primary_context["delivery_mode"], "server")
         self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
         self.assertIn("audit-system-extension-script", primary)
-        self.assertIn('content="2.11.25"', primary)
+        self.assertIn('content="2.11.26"', primary)
         self.assertFalse(primary_context["oss_intake_enabled"])
         self.assertEqual(self._script_payload(primary, "audit-data")["sheets"], [])
         self.assertLess(
@@ -1886,8 +1886,8 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn(
             'role="tablist" aria-label="核销管理中心视图"', primary
         )
-        self.assertEqual(primary.count('role="tab" aria-controls="as-view-'), 3)
-        self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tab-'), 3)
+        self.assertEqual(primary.count('role="tab" aria-controls="as-view-'), 2)
+        self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tab-'), 2)
         self.assertIn('role="tablist" aria-label="技术档案分类"', primary)
         self.assertIn("const contextTechnicalSnapshot = () => ({", primary)
         self.assertIn(
@@ -1906,7 +1906,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn("archiveRenderRevision: -1", primary)
         self.assertIn("const PRIMARY_LIST_BATCH_SIZE = 100;", primary)
         self.assertIn("recordVisibleCount: 100", primary)
-        self.assertIn("const recordListWindow = (view) => {", primary)
+        self.assertIn("const recordListWindow = () => {", primary)
         self.assertIn('id="as-archive-search" type="search" aria-label="搜索核销技术档案"', primary)
         self.assertIn('id="as-ledger-list" role="list"', primary)
         self.assertIn('id="as-archive-list" role="list"', primary)
@@ -1938,11 +1938,15 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn("const latestCompletedZipCount", primary)
         self.assertIn("最近一次 input 的 ZIP 总数", primary)
         self.assertGreaterEqual(primary.count("待人工核验"), 2)
-        self.assertIn('id="as-recent-list"', primary)
+        self.assertNotIn('id="as-recent-list"', primary)
+        self.assertNotIn('id="as-tab-ledger"', primary)
+        self.assertNotIn('id="as-view-ledger"', primary)
+        self.assertIn("saved.view === 'ledger' ? 'overview' : saved.view", primary)
         self.assertIn('id="as-intake-list" role="list"', primary)
         self.assertIn("const intakeCard = (job, queuePosition) =>", primary)
-        self.assertIn("const recordRuns = (view = 'ledger') => view === 'overview' ? state.runs.filter(terminalRun) : state.runs;", primary)
-        self.assertIn("const renderOverviewRecords = () => {", primary)
+        self.assertIn("return state.runs.filter((run) => {", primary)
+        self.assertNotIn("renderOverviewRecords", primary)
+        self.assertIn("const renderLedger = () => {", primary)
         self.assertNotIn("slice(0, 5)", primary)
         self.assertIn("if (job?.status === 'failed') return { label: '失败', className: 'failed' };", primary)
         self.assertIn("失败原因：${message}", primary)
@@ -1970,7 +1974,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.38")
+        self.assertEqual(config["api_version"], "1.39")
         self.assertEqual(config["scenario_classification_policy"], "zip_name")
         self.assertEqual(config["unclassified_archive_policy"], "fail_before_ai_and_callback_reason")
         self.assertEqual(config["error_text_policy"], "reason_and_action_separate")
@@ -1980,12 +1984,12 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(config["result_list_heading_display"], "hidden")
         self.assertEqual(config["filter_header_display"], "hidden")
         self.assertEqual(config["result_filters"], ["audit_type", "category"])
-        self.assertEqual(config["system_version"], "2.11.25")
+        self.assertEqual(config["system_version"], "2.11.26")
         self.assertEqual(config["material_problem_policy"], "analyze_and_report")
         self.assertEqual(config["refresh_policy"]["overview"]["record_count_statuses"], "all")
         self.assertEqual(config["refresh_policy"]["record_lists"], {
             "source": "/api/runs",
-            "views": ["ledger", "archive"],
+            "views": ["overview", "archive"],
             "statuses": "all",
             "shared_search": True,
             "shared_visible_count": True,
@@ -1997,7 +2001,9 @@ class WorkbenchServerTests(unittest.TestCase):
             "model_display": "tag", "workspace_naming": "archive_stem_timestamp_unique_suffix",
             "status_colors": {"running": "amber", "failed": "red", "completed": "green"},
         })
-        self.assertEqual(config["refresh_policy"]["overview"]["record_list_statuses"], ["completed", "failed"])
+        self.assertEqual(config["refresh_policy"]["overview"]["record_list_statuses"], "all")
+        self.assertEqual(config["refresh_policy"]["overview"]["record_list_scope"], "all_runs")
+        self.assertTrue(config["refresh_policy"]["overview"]["includes_ledger_actions"])
         self.assertEqual(config["refresh_policy"]["overview"]["active_records"]["sources"], ["input", "oss"])
         self.assertFalse(config["read_only"])
         self.assertFalse(config["workbench_read_only"])

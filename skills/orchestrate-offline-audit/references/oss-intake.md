@@ -26,7 +26,7 @@
 6. 已验证原始 ZIP 在成功或失败后仍保留在 `input-oss`，供本地追溯。
    删除不完整或传输无效的下载；解压目录、模型工作区及传输结果文件保持临时。
    成功任务指向普通本地 `worktrees/<YYYYMMDD_HHMM_SS>-<audit-model>_<reasoning-effort>/` 档案；完整时间戳取单核销 worker 实际认领并预留该运行时的上海时间，绝不取 `verifyCode` 中的业务日期。
-7. 一级工作台通过 `GET /api/intake/jobs?completed=0` 展示未完成及失败 attempt：`accepted/downloading/downloaded` 标为“排队中”，`running/callback` 标为“运行中”，`failed` 标为“失败”并显示安全失败原因。完成 attempt 不占用投递区，“最近核销记录”和核销台账都只显示已完成运行，技术档案保留全状态。每张投递卡都提供同源确认的删除操作。
+7. 一级工作台通过 `GET /api/intake/jobs?completed=0` 展示未完成及失败 attempt：`accepted/downloading/downloaded` 标为“排队中”，`running/callback` 标为“运行中”，`failed` 标为“失败”并显示安全失败原因。完成 attempt 不占用投递区，系统总览台账和技术档案均保留全部状态的 worktree。每张投递卡都提供同源确认的删除操作。
    删除排队任务会让 worker 跳过后续阶段；删除运行任务会先取消正式 runner、阻止尚未发出的回调，再删除该 job 的收据、专属 ZIP 和唯一关联未完成 worktree；删除失败任务会清除其收据、ZIP 和唯一关联运行 worktree（如有）。已经发送的回调不能撤回。
 
 必须使用子进程边界，因为 CLI runner 会把进程范围的 stdout/stderr 重定向到运行日志；

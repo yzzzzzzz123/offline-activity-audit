@@ -1549,7 +1549,7 @@ class Handler(BaseHTTPRequestHandler):
             "refresh_policy": {
                 "record_lists": {
                     "source": "/api/runs",
-                    "views": ["ledger", "archive"],
+                    "views": ["overview", "archive"],
                     "statuses": "all",
                     "shared_search": True,
                     "shared_visible_count": True,
@@ -1567,9 +1567,10 @@ class Handler(BaseHTTPRequestHandler):
                 "overview": {
                     "mode": "catalog_signature",
                     "record_count_statuses": "all",
-                    "record_list_scope": "terminal_runs",
-                    "record_list_statuses": ["completed", "failed"],
+                    "record_list_scope": "all_runs",
+                    "record_list_statuses": "all",
                     "record_list_page_size": 100,
+                    "includes_ledger_actions": True,
                     "active_records": {
                         "title": "运行中的记录",
                         "sources": ["input", "oss"],

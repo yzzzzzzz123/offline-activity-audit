@@ -85,12 +85,12 @@ def main() -> None:
                 page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
                 page.goto(base)
                 config = page.request.get(base + "/api/config").json()
-                assert config["api_version"] == "1.38" and config["system_version"] == "2.11.25"
+                assert config["api_version"] == "1.39" and config["system_version"] == "2.11.26"
                 assert config["material_problem_policy"] == "analyze_and_report"
-                expect(page.locator("#as-nav-ledger")).to_have_text("107")
+                expect(page.locator("#as-nav-overview")).to_have_text("107")
 
                 def counts(expected: int) -> None:
-                    for selector in ("#as-hero-count", "#as-nav-overview", "#as-nav-ledger", "#as-nav-archive"):
+                    for selector in ("#as-hero-count", "#as-nav-overview", "#as-nav-archive"):
                         expect(page.locator(selector)).to_have_text(str(expected))
                     expect(page.locator("#as-rail-total")).to_have_text(f"{expected} 条记录")
                     expect(page.locator("#as-metrics .as-metric:first-child > strong")).to_have_text(str(expected))
@@ -100,13 +100,14 @@ def main() -> None:
                     expect(page.locator(f"#as-view-{view}")).to_be_visible()
 
                 def ids(view: str) -> list[str]:
-                    selector, attribute = ("#as-recent-list [data-run-card]", "data-run-card") if view == "overview" else (
-                        f"#as-{view}-list [data-as-{'open' if view == 'ledger' else 'technical'}]",
-                        f"data-as-{'open' if view == 'ledger' else 'technical'}",
+                    selector, attribute = ("#as-ledger-list [data-run-card]", "data-run-card") if view == "overview" else (
+                        "#as-archive-list [data-as-technical]", "data-as-technical",
                     )
                     return page.locator(selector).evaluate_all("(nodes, attr) => nodes.map(node => node.getAttribute(attr))", attribute)
 
                 counts(107)
+                assert page.locator("[data-as-view]").count() == 2
+                assert page.locator("#as-tab-ledger, #as-view-ledger, #as-recent-list").count() == 0
                 expect(page.get_by_role("heading", name="运行中的记录", exact=True)).to_be_visible()
                 active = page.locator(f'[data-active-run="{stores[105].workspace.name}"]')
                 expect(active).to_contain_text("input 导入")
@@ -114,12 +115,10 @@ def main() -> None:
                 assert len(ids("overview")) == 100
                 page.locator('[data-as-load-more="overview"]').click()
                 recent_ids = ids("overview")
-                assert len(recent_ids) == 106 and stores[105].workspace.name not in recent_ids
+                assert len(recent_ids) == 107 and stores[105].workspace.name in recent_ids
                 assert stores[106].workspace.name in recent_ids
-                expect(page.locator("#as-overview-window")).to_contain_text("已显示全部")
-                select("ledger")
-                assert ids("overview") == []
-                ledger_ids = ids("ledger")
+                expect(page.locator("#as-ledger-window")).to_contain_text("已显示全部")
+                ledger_ids = ids("overview")
                 assert ledger_ids == [run["workspace_id"] for run in catalog.list_runs()]
                 assert len(ledger_ids) == 107
                 expect(page.locator(f'[data-as-delete="{stores[105].workspace.name}"]')).to_be_disabled()
@@ -128,7 +127,7 @@ def main() -> None:
                 expect(page.locator('.as-run-main h3').first).to_have_text("HX202606040013-核销资料-诚成26年4月【堆头20家】")
                 expect(page.locator('.as-model-tag').first).to_have_text("gpt6astra_ultra")
                 select("archive")
-                assert ids("archive") == ledger_ids and not ids("ledger")
+                assert ids("archive") == ledger_ids and not ids("overview")
                 colors = {}
                 for status, rgb in (("running", "rgb(215, 154, 32)"), ("failed", "rgb(216, 75, 62)"), ("completed", "rgb(24, 132, 94)")):
                     card = page.locator(f'.as-archive-card[data-run-status="{status}"]').first
@@ -146,11 +145,11 @@ def main() -> None:
                 page.locator("#as-archive-search").fill(target)
                 assert ids("archive") == [target]
                 select("overview")
-                expect(page.locator("#as-overview-search")).to_have_value(target)
-                assert ids("overview") == [target]
-                select("ledger")
                 expect(page.locator("#as-search")).to_have_value(target)
-                assert ids("ledger") == [target]
+                assert ids("overview") == [target]
+                select("overview")
+                expect(page.locator("#as-search")).to_have_value(target)
+                assert ids("overview") == [target]
                 before = {name: (stores[0].workspace / name).read_bytes() for name in ("manifest.json", "snapshot.json")}
                 page.locator(f'[data-as-review="{target}"]').check()
                 expect(page.locator(f'[data-run-card="{target}"]')).to_contain_text("已人工核验")
@@ -160,13 +159,13 @@ def main() -> None:
                 expect(page.locator("#as-archive-list")).to_contain_text("已人工核验")
                 assert all((stores[0].workspace / name).read_bytes() == value for name, value in before.items())
                 page.locator("#as-archive-search").fill("SYNC-NO-MATCH")
-                for view in ("overview", "ledger", "archive"):
+                for view in ("overview", "archive"):
                     select(view)
                     assert ids(view) == []
                     counts(107)
-                select("ledger")
+                select("overview")
                 page.locator("#as-search").fill("")
-                assert len(ids("ledger")) == 100
+                assert len(ids("overview")) == 100
                 select("archive")
                 assert len(ids("archive")) == 100
                 complete(stores[105])
@@ -174,25 +173,25 @@ def main() -> None:
                 expect(page.locator('#as-intake-panel')).to_be_hidden()
                 counts(107)
                 select("overview")
-                expect(page.locator("#as-overview-count")).to_have_text("107 / 107 条已结束记录")
+                expect(page.locator("#as-ledger-count")).to_have_text("107 / 107 条运行记录")
                 create(107, oss=True)
-                expect(page.locator("#as-nav-ledger")).to_have_text("108", timeout=20000)
+                expect(page.locator("#as-nav-overview")).to_have_text("108", timeout=20000)
                 expect(page.locator("#as-intake-list")).to_contain_text("OSS 上传")
-                expect(page.locator("#as-overview-count")).to_have_text("107 / 107 条已结束记录")
+                expect(page.locator("#as-ledger-count")).to_have_text("108 / 108 条运行记录")
                 stores[107].fail(RuntimeError("transition from running to failed"))
-                expect(page.locator("#as-overview-count")).to_have_text("108 / 108 条已结束记录", timeout=20000)
+                expect(page.locator("#as-ledger-count")).to_have_text("108 / 108 条运行记录", timeout=20000)
                 expect(page.locator('#as-intake-panel')).to_be_hidden()
                 select("archive")
                 page.locator('[data-as-load-more="archive"]').click()
                 archive_ids = ids("archive")
                 assert len(archive_ids) == 108
-                select("ledger")
-                assert ids("ledger") == archive_ids
+                select("overview")
+                assert ids("overview") == archive_ids
                 page.locator("#as-search").fill(target)
                 page.locator(f'[data-as-delete="{target}"]').click()
                 page.locator("#as-delete-confirm").click()
                 expect(page.locator("#as-delete-dialog")).not_to_be_visible()
-                assert ids("ledger") == [] and not stores[0].workspace.exists()
+                assert ids("overview") == [] and not stores[0].workspace.exists()
                 for view in ("overview", "archive"):
                     select(view)
                     assert ids(view) == []
@@ -200,7 +199,7 @@ def main() -> None:
                 page.locator("#as-archive-search").fill("showcase")
                 for width in (1440, 1280):
                     page.set_viewport_size({"width": width, "height": 960})
-                    for view in ("overview", "ledger", "archive"):
+                    for view in ("overview", "archive"):
                         select(view)
                         assert len(ids(view)) == 2
                         counts(107)
@@ -214,12 +213,12 @@ def main() -> None:
                     archive = render_static_run_archive(stores[index].workspace, PROJECT / "offline-activity-audit.html")
                     page.goto(archive.as_uri())
                     counts(1)
-                    for view in ("overview", "ledger", "archive"):
+                    for view in ("overview", "archive"):
                         select(view)
                         assert ids(view) == [stores[index].workspace.name]
                     assert page.locator("[data-as-delete]").count() == 0
                     if index == 106:
-                        select("ledger")
+                        select("overview")
                         page.locator('[data-as-open]').click()
                         page.locator("#as-record-technical").click()
                         expect(page.locator("#as-tech-panel-summary .as-status.failed")).to_be_visible()
@@ -233,10 +232,10 @@ def main() -> None:
     assert not errors, errors
     assert not server_errors, server_errors
     report = {
-        "status": "passed", "system_version": "2.11.25", "api_version": "1.38",
-        "checks": ["all worktrees in ledger/archive with identical order/search/pagination", "recent records include completed and failed, exclude running",
-                   "active input and OSS records with source tags", "creation changes total; completion changes partition only", "failure moves run into recent records",
-                   "shared search across three lists", "pagination beyond 100", "inactive DOM released", "manual review/refresh/delete synchronized",
+        "status": "passed", "system_version": "2.11.26", "api_version": "1.39",
+        "checks": ["all worktrees in ledger/archive with identical order/search/pagination", "overview contains the complete ledger and its actions",
+                   "active input and OSS records with source tags", "creation changes total; completion keeps total and updates status", "failure preserves the run in the overview ledger",
+                   "shared search across two lists", "pagination beyond 100", "inactive DOM released", "manual review/refresh/delete synchronized",
                    "business bytes unchanged by annotation", "three distinct status colors and text", "analysis date uses Shanghai timezone, not business date or creation when analysis time exists",
                    "static completed/failed list parity and reachable diagnosis", "1440/1280 desktop layout"],
         "screenshots": screenshots, "console_and_page_errors": errors, "http_errors": server_errors,

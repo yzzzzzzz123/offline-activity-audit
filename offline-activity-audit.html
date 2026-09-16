@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="canban-template-version" content="3.2.0">
-  <meta name="offline-audit-system-version" content="2.11.25">
+  <meta name="offline-audit-system-version" content="2.11.26">
   <link rel="icon" href="data:,">
   <script>
     if (window.location.protocol === 'file:') {
@@ -3344,7 +3344,6 @@
       transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
     }
     .as-run-card:hover { border-color: #b8c8d0; box-shadow: 0 6px 18px rgba(25,55,68,.07); transform: translateY(-1px); }
-    .as-run-card.informational { grid-template-columns: minmax(235px,1.25fr) minmax(210px,1fr) 104px; }
     .as-run-main { min-width: 0; }
     .as-run-main small { display: block; color: var(--run-tone, var(--eo-blue)); font: 800 8px/1 var(--eo-mono); letter-spacing: .1em; }
     .as-run-main h3 { margin: 7px 0 3px; overflow: hidden; font: 800 13px/1.2 var(--eo-mono); text-overflow: ellipsis; white-space: nowrap; }
@@ -3592,7 +3591,6 @@
         intakeSignature: '',
         primaryCatalogEtag: '',
         primaryRenderRevision: 0,
-        overviewRenderRevision: -1,
         ledgerRenderRevision: -1,
         archiveRenderRevision: -1,
         recordVisibleCount: 100,
@@ -3827,7 +3825,7 @@
           ? values.map((item) => `<span class="as-tag">${escapeHtml(scenarioName(item))}</span>`).join('')
           : '<span class="as-tag">场景待识别</span>';
       };
-      const runCard = (run, mode = 'ledger') => {
+      const runCard = (run) => {
         const completed = run.status === 'completed';
         const reviewed = completed && Boolean(run.manual_reviewed);
         const countLabel = completed ? reviewed ? '人工核验' : '待人工核验' : '已识别场景';
@@ -3853,9 +3851,9 @@
             : '非 OSS 运行中的记录暂不能安全终止';
         const deleteControl = isStaticArchive ? ''
           : `<button class="as-button danger" type="button" ${deleteAttribute} aria-label="删除记录 ${escapeHtml(run.workspace_id)}" title="${deleteTitle}" ${deletable ? '' : 'disabled'}>删除记录</button>`;
-        const action = mode === 'overview' ? '' : `<div class="as-run-action">${reviewControl}
+        const action = `<div class="as-run-action">${reviewControl}
             <button class="as-button" type="button" data-as-open="${escapeHtml(run.workspace_id)}">展开核销记录 →</button>${deleteControl}</div>`;
-        return `<article class="as-run-card ${mode === 'overview' ? 'informational' : 'ledger-record'}" style="--run-tone:${runTone(run)}" data-run-card="${escapeHtml(run.workspace_id)}" role="listitem">
+        return `<article class="as-run-card ledger-record" style="--run-tone:${runTone(run)}" data-run-card="${escapeHtml(run.workspace_id)}" role="listitem">
           <div class="as-run-main"><small>${escapeHtml(runDate(run))}</small>
             <h3 title="${escapeHtml(run.workspace_id)}">${escapeHtml(runTitle(run))}</h3><p>${statusBadge(run)} · ${Number(run.scenario_count || 0)} 个核销场景</p></div>
           <div class="as-run-tags">${sourceTag(runSource(run))}${scenarioTags(run)}${modelTag(run)}</div>
@@ -3936,8 +3934,8 @@
           }
           const saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
           sessionStorage.removeItem(storageKey);
-          const restoredView = saved.view;
-          if (['overview','ledger','archive'].includes(restoredView)) state.primaryView = restoredView;
+          const restoredView = saved.view === 'ledger' ? 'overview' : saved.view;
+          if (['overview', 'archive'].includes(restoredView)) state.primaryView = restoredView;
           state.query = String(saved.query || '');
           return Number(saved.scrollY || 0);
         } catch (error) { return 0; }
@@ -3950,8 +3948,7 @@
           <aside class="as-rail" aria-label="核销管理中心导航">
             <div class="as-rail-head"><div><div class="as-rail-code">CB / AUDIT LEDGER</div><h2>核销管理中心</h2></div><p>一级系统工作台</p></div>
             <nav class="as-nav" role="tablist" aria-label="核销管理中心视图" aria-orientation="vertical">
-              <button class="as-nav-button" id="as-tab-overview" data-as-view="overview" role="tab" aria-controls="as-view-overview" aria-selected="true" aria-current="page" tabindex="0" type="button"><span class="as-nav-code">OV</span><span class="as-nav-copy"><strong>系统总览</strong><small>运行规模与最新记录</small></span><em id="as-nav-overview">0</em></button>
-              <button class="as-nav-button" id="as-tab-ledger" data-as-view="ledger" role="tab" aria-controls="as-view-ledger" aria-selected="false" tabindex="-1" type="button"><span class="as-nav-code">LD</span><span class="as-nav-copy"><strong>核销台账</strong><small>全部核销运行记录</small></span><em id="as-nav-ledger">0</em></button>
+              <button class="as-nav-button" id="as-tab-overview" data-as-view="overview" role="tab" aria-controls="as-view-overview" aria-selected="true" aria-current="page" tabindex="0" type="button"><span class="as-nav-code">OV</span><span class="as-nav-copy"><strong>系统总览</strong><small>运行概况与核销台账</small></span><em id="as-nav-overview">0</em></button>
               <button class="as-nav-button" id="as-tab-archive" data-as-view="archive" role="tab" aria-controls="as-view-archive" aria-selected="false" tabindex="-1" type="button"><span class="as-nav-code">AR</span><span class="as-nav-copy"><strong>技术档案</strong><small>分析、日志与DOM断点</small></span><em id="as-nav-archive">0</em></button>
             </nav>
             <div class="as-rail-foot"><span>核销运行记录</span><strong id="as-rail-total">读取中</strong><em id="as-rail-note">AI 仅写入 worktrees</em></div>
@@ -3963,19 +3960,16 @@
               <section class="as-metric-grid" id="as-metrics"></section>
               <section class="as-panel as-intake-panel" id="as-intake-panel" hidden><header class="as-panel-head"><div><small>ACTIVE AUDIT RECORDS</small><h2>运行中的记录</h2></div><p><span class="as-intake-count" id="as-intake-count">0</span> 条运行或排队记录</p></header><div class="as-panel-body"><div class="as-intake-list" id="as-intake-list" role="list" aria-label="运行中的记录"></div></div></section>
               <section class="as-panel as-intake-panel" id="as-intake-failed-panel" hidden><header class="as-panel-head"><div><small>INTAKE FAILURES</small><h2>投递失败</h2></div><p>尚未创建核销运行的失败投递</p></header><div class="as-panel-body"><div class="as-intake-list" id="as-intake-failed-list" role="list" aria-label="投递失败记录"></div></div></section>
-              <section class="as-panel"><header class="as-panel-head"><div><small>AUDIT RECORDS</small><h2>最近核销记录</h2></div><p id="as-overview-count" aria-live="polite">0 条记录</p></header>
-                <div class="as-toolbar"><input class="as-input" id="as-overview-search" type="search" aria-label="搜索最近核销记录" placeholder="同步搜索运行ID、模型或核销场景" value="${escapeHtml(state.query)}"><button class="as-button secondary" id="as-overview-refresh" type="button">↻ 刷新记录</button></div>
-                <div class="as-panel-body"><div class="as-run-list" id="as-recent-list" role="list" aria-label="最近核销记录">${emptyMarkup('正在读取核销运行记录','请稍候')}</div><div class="as-list-window" id="as-overview-window"></div></div></section>
-            </div></section>
-            <section class="as-view" id="as-view-ledger" role="tabpanel" aria-labelledby="as-tab-ledger" tabindex="0" hidden><section class="as-panel">
+              <section class="as-panel">
               <header class="as-panel-head"><div><small>AUDIT LEDGER</small><h2>核销台账</h2></div><p id="as-ledger-count" aria-live="polite">0 条记录</p></header>
-              <div class="as-toolbar"><input class="as-input" id="as-search" type="search" aria-label="搜索核销运行记录" placeholder="同步搜索运行ID、模型或核销场景" value="${escapeHtml(state.query)}">
-                <button class="as-button secondary" id="as-refresh" type="button">↻ 刷新台账</button></div>
+              <div class="as-toolbar"><input class="as-input" id="as-search" type="search" aria-label="搜索核销运行记录" placeholder="搜索资料包、运行 ID、模型或核销场景" value="${escapeHtml(state.query)}">
+                <button class="as-button secondary" id="as-refresh" type="button">↻ 刷新记录</button></div>
               <div class="as-panel-body"><div class="as-run-list" id="as-ledger-list" role="list" aria-label="核销台账记录"></div><div class="as-list-window" id="as-ledger-window"></div></div>
-            </section></section>
+              </section>
+            </div></section>
             <section class="as-view" id="as-view-archive" role="tabpanel" aria-labelledby="as-tab-archive" tabindex="0" hidden><section class="as-panel">
               <header class="as-panel-head"><div><small>TECHNICAL ARCHIVE</small><h2>分析与断点档案</h2></div><p id="as-archive-count" aria-live="polite">0 条记录</p></header>
-              <div class="as-toolbar"><input class="as-input" id="as-archive-search" type="search" aria-label="搜索核销技术档案" placeholder="同步搜索运行ID、模型或核销场景" value="${escapeHtml(state.query)}">
+              <div class="as-toolbar"><input class="as-input" id="as-archive-search" type="search" aria-label="搜索核销技术档案" placeholder="搜索资料包、运行 ID、模型或核销场景" value="${escapeHtml(state.query)}">
                 <button class="as-button secondary" id="as-archive-refresh" type="button">↻ 刷新档案</button></div>
               <div class="as-panel-body"><div class="as-archive-grid" id="as-archive-list" role="list" aria-label="技术档案记录"></div><div class="as-list-window" id="as-archive-window"></div></div>
             </section></section>
@@ -3986,10 +3980,9 @@
         setPrimaryView(state.primaryView);
         if (restoreScroll) requestAnimationFrame(() => window.scrollTo(0, restoreScroll));
       };
-      const recordRuns = (view = 'ledger') => view === 'overview' ? state.runs.filter(terminalRun) : state.runs;
-      const filteredRuns = (view) => {
+      const filteredRuns = () => {
         const needle = state.query.trim().toLocaleLowerCase('zh-CN');
-        return recordRuns(view).filter((run) => {
+        return state.runs.filter((run) => {
           if (!needle) return true;
           const haystack = [runTitle(run), ...(run.source_archives || []), modelLabel(run), runSource(run), run.workspace_id, run.run_id, run.producer_model, run.audit_model, run.reasoning_effort, ...(run.scenarios || []).map(scenarioName)].join(' ').toLocaleLowerCase('zh-CN');
           return haystack.includes(needle);
@@ -4011,7 +4004,6 @@
         document.getElementById('as-hero-count').textContent = state.runs.length;
         document.getElementById('as-rail-total').textContent = `${state.runs.length} 条记录`;
         document.getElementById('as-nav-overview').textContent = state.runs.length;
-        document.getElementById('as-nav-ledger').textContent = state.runs.length;
         document.getElementById('as-nav-archive').textContent = state.runs.length;
         document.getElementById('as-metrics').innerHTML = [
           ['核销记录', state.runs.length, '全部 worktree 运行记录', '#159edb'],
@@ -4055,18 +4047,9 @@
           || document.getElementById(`as-${view}-window-status`);
         target?.focus({ preventScroll: true });
       });
-      const renderOverviewRecords = () => {
-        const { values, total, visible } = recordListWindow('overview');
-        document.getElementById('as-overview-count').textContent = `${values.length} / ${total} 条已结束记录`;
-        document.getElementById('as-recent-list').innerHTML = visible
-          ? values.slice(0, visible).map((run) => runCard(run, 'overview')).join('')
-          : emptyMarkup(total ? '没有匹配的核销记录' : '还没有已结束的核销记录', total ? '请调整搜索词；三个列表的搜索条件同步' : '运行结束后，记录会自动出现在这里');
-        document.getElementById('as-overview-window').innerHTML = listWindowMarkup('overview', visible, values.length);
-        state.overviewRenderRevision = state.primaryRenderRevision;
-      };
-      const recordListWindow = (view) => {
-        const values = filteredRuns(view);
-        const total = recordRuns(view).length;
+      const recordListWindow = () => {
+        const values = filteredRuns();
+        const total = state.runs.length;
         const windowKey = state.query.trim().toLocaleLowerCase('zh-CN');
         if (state.recordWindowKey !== windowKey) {
           state.recordWindowKey = windowKey;
@@ -4080,7 +4063,7 @@
         document.getElementById('as-archive-count').textContent = `${values.length} / ${total} 条运行记录`;
         document.getElementById('as-archive-list').innerHTML = visible
           ? values.slice(0, visible).map(archiveCard).join('')
-          : emptyMarkup(total ? '没有匹配的技术档案' : '技术档案为空', total ? '请调整搜索词；三个列表的搜索条件同步' : '创建运行后，技术档案会与台账同步显示');
+          : emptyMarkup(total ? '没有匹配的技术档案' : '技术档案为空', total ? '请调整搜索词；台账与技术档案的搜索条件同步' : '创建运行后，技术档案会与台账同步显示');
         document.getElementById('as-archive-window').innerHTML = listWindowMarkup('archive', visible, values.length);
         state.archiveRenderRevision = state.primaryRenderRevision;
       };
@@ -4089,17 +4072,13 @@
         if (!root) return;
         const { values, total, visible } = recordListWindow();
         document.getElementById('as-ledger-count').textContent = `${values.length} / ${total} 条运行记录`;
-        root.innerHTML = visible ? values.slice(0, visible).map((run) => runCard(run, 'ledger')).join('') : emptyMarkup('没有匹配的核销记录','请调整搜索词');
-        document.getElementById('as-ledger-window').innerHTML = listWindowMarkup('ledger', visible, values.length);
+        root.innerHTML = visible ? values.slice(0, visible).map(runCard).join('') : emptyMarkup(total ? '没有匹配的核销记录' : '还没有核销记录', total ? '请调整搜索词' : '开始核销后，记录会自动出现在这里');
+        document.getElementById('as-ledger-window').innerHTML = listWindowMarkup('overview', visible, values.length);
         state.ledgerRenderRevision = state.primaryRenderRevision;
       };
       const ensurePrimaryViewData = (view) => {
         if (
           view === 'overview'
-          && state.overviewRenderRevision !== state.primaryRenderRevision
-        ) renderOverviewRecords();
-        if (
-          view === 'ledger'
           && state.ledgerRenderRevision !== state.primaryRenderRevision
         ) renderLedger();
         if (
@@ -4108,12 +4087,7 @@
         ) renderArchive();
       };
       const releaseInactivePrimaryViewData = (view) => {
-        if (view !== 'overview' && state.overviewRenderRevision >= 0) {
-          document.getElementById('as-recent-list')?.replaceChildren();
-          document.getElementById('as-overview-window')?.replaceChildren();
-          state.overviewRenderRevision = -1;
-        }
-        if (view !== 'ledger' && state.ledgerRenderRevision >= 0) {
+        if (view !== 'overview' && state.ledgerRenderRevision >= 0) {
           document.getElementById('as-ledger-list')?.replaceChildren();
           document.getElementById('as-ledger-window')?.replaceChildren();
           state.ledgerRenderRevision = -1;
@@ -4144,7 +4118,7 @@
           const view = event.target.closest('[data-as-view]');
           if (view) { setPrimaryView(view.dataset.asView); return; }
           const loadMore = event.target.closest('[data-as-load-more]');
-          if (loadMore && ['overview', 'ledger', 'archive'].includes(loadMore.dataset.asLoadMore)) {
+          if (loadMore && ['overview', 'archive'].includes(loadMore.dataset.asLoadMore)) {
             state.recordVisibleCount += PRIMARY_LIST_BATCH_SIZE;
             state.primaryRenderRevision += 1;
             ensurePrimaryViewData(state.primaryView);
@@ -4159,7 +4133,7 @@
           if (open) { routeToRecord(open.dataset.asOpen); return; }
           const technical = event.target.closest('[data-as-technical]');
           if (technical) { openTechnical(technical.dataset.asTechnical); return; }
-          if (event.target.closest('#as-refresh, #as-archive-refresh, #as-overview-refresh')) {
+          if (event.target.closest('#as-refresh, #as-archive-refresh')) {
             clearTimeout(primaryProbeTimer);
             loadPrimaryRuns(true).finally(schedulePrimaryProbe);
           }
@@ -4168,7 +4142,7 @@
           const review = event.target.closest('[data-as-review]');
           if (review) setManualReview(review.dataset.asReview, review.checked, review);
         });
-        const searches = [...document.querySelectorAll('#as-search, #as-archive-search, #as-overview-search')];
+        const searches = [...document.querySelectorAll('#as-search, #as-archive-search')];
         searches.forEach((input) => input.addEventListener('input', (event) => {
           state.query = event.target.value;
           searches.forEach((search) => { if (search !== event.target) search.value = state.query; });
@@ -4342,7 +4316,7 @@
       const legacyLabelKey = (run) => `${run.workspace_id}:${run.created_at || ''}`;
       const queueLegacyRecordLabels = () => {
         if (isStaticArchive || contextApiMajor > 1 || contextApiMinor >= 24 || legacyLabelsBusy || !state.runs.length) return;
-        const { values, visible } = recordListWindow(state.primaryView);
+        const { values, visible } = recordListWindow();
         const candidates = [...new Set([...values.slice(0, visible), ...state.runs.filter((run) => !terminalRun(run))])]
           .filter((run) => Number(run.scenario_count || 0) > 0 && !legacyRecordLabels.has(legacyLabelKey(run)));
         if (!candidates.length) return;
@@ -4447,9 +4421,9 @@
         try {
           const next = await fetchPrimaryState(false);
           if (!next.unchanged) commitPrimaryState(next);
-          if (announce) toast('核销记录、台账与技术档案已同步刷新');
+          if (announce) toast('核销台账与技术档案已同步刷新');
         } catch (error) {
-          document.getElementById('as-recent-list').innerHTML = emptyMarkup('核销服务暂不可用', error.message);
+          document.getElementById(state.primaryView === 'archive' ? 'as-archive-list' : 'as-ledger-list').innerHTML = emptyMarkup('核销服务暂不可用', error.message);
           toast(error.message);
         }
       };
@@ -4669,7 +4643,7 @@
         if (!topbar) return;
         const tools = document.createElement('div');
         tools.className = 'as-record-toolbar';
-        tools.innerHTML = `<button class="as-button secondary" id="as-back-ledger" type="button">← 返回核销台账</button>
+        tools.innerHTML = `<button class="as-button secondary" id="as-back-ledger" type="button">← 返回系统总览</button>
           <select class="as-record-select" id="as-record-select" aria-label="切换核销记录"><option value="${escapeHtml(context.selected_run)}">${escapeHtml(context.selected_run)} · ${escapeHtml(runStatus(run))}</option></select>
           <button class="as-button" id="as-record-technical" type="button">技术档案</button>`;
         topbar.appendChild(tools);
@@ -4696,7 +4670,7 @@
         document.body.className = 'audit-system-page';
         document.title = `参半渠道活动核销｜${context.selected_run}`;
         document.body.innerHTML = `${primaryHeader()}<main class="as-record-page"><div class="as-stack">
-          <div class="as-record-context"><button class="as-button secondary" id="as-back-ledger" type="button">← 返回核销台账</button>
+          <div class="as-record-context"><button class="as-button secondary" id="as-back-ledger" type="button">← 返回系统总览</button>
             <span>当前二级运行档案：<strong>${escapeHtml(context.selected_run)}</strong></span>
             <button class="as-button" id="as-record-technical" type="button">打开技术档案</button></div>
           <header class="as-record-status-hero" style="--run-tone:${runTone(run)}"><small>RUN RECORD / ${escapeHtml(String(run.status || 'unknown').toUpperCase())}</small>
