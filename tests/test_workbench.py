@@ -28,6 +28,7 @@ from audit_core.workbench_store import (
     WorkbenchRunStore,
     atomic_write_json,
     main_flow_task_list,
+    project_run_status,
     read_json_file,
     render_analysis_summary_markdown,
     reserve_workspace,
@@ -202,7 +203,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             self.assertEqual(record_labels(dict(manifest, input_source="input"), workspace)["input_source"], "input")
             self.assertEqual({path: path.read_bytes() for path in before}, before)
 
-    def test_selected_scenario_names_workspace_for_its_archive(self) -> None:
+    def test_selected_scenario_names_workspace_for_all_unclassified_archives(self) -> None:
         from audit_core.workbench_runtime import _input_archive_names
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -210,7 +211,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             for name in ("A-其他.zip", "B-堆头.zip"):
                 (root / name).touch()
             with mock.patch("audit_core.workbench_runtime.discover_archives", return_value={"promotional_display": {"path": root / "B-堆头.zip"}}):
-                self.assertEqual(_input_archive_names(root, "promotional_display"), ["B-堆头.zip"])
+                self.assertEqual(_input_archive_names(root, "promotional_display"), ["A-其他.zip", "B-堆头.zip"])
             self.assertEqual(_input_archive_names(root, None), ["A-其他.zip", "B-堆头.zip"])
 
     def test_analysis_start_uses_first_analysis_event_and_survives_completion(self) -> None:
@@ -232,66 +233,22 @@ class WorkbenchStoreTests(unittest.TestCase):
             self.assertEqual(manifest["business_date"], "20260827")
             self.assertEqual(WorkbenchCatalog(workspace.parent).list_runs()[0]["analysis_started_at"], manifest["analysis_started_at"])
 
-    def test_orchestrator_groups_all_scenarios_into_monotonic_main_flow_stages(self) -> None:
-        observed: list[tuple[str, str | None]] = []
-        cases = {
-            "maintenance_fee": {"scenario": "maintenance_fee"},
-            "entry_fee": {"scenario": "entry_fee"},
-        }
-
-        def provider(case: dict, _temporary_root: Path) -> dict:
-            return {"scenario": case["scenario"]}
-
-        def audit_case(case: dict, _evidence: dict) -> dict:
-            return {"scenario": case["scenario"], "summary": {}}
-
-        def observer(event_type: str, payload: dict) -> None:
-            observed.append((event_type, payload.get("scenario")))
-
+    def test_orchestrator_groups_all_scenarios_into_monotonic_main_flow_stages(self):
+        from tests.pdf_test_support import bundle, PolicyProvider
+        observed = []
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            with (
-                mock.patch("audit_core.orchestrator.prepare_cases", return_value=cases),
-                mock.patch("audit_core.orchestrator.validate_json"),
-                mock.patch(
-                    "audit_core.orchestrator.audit_maintenance_fee_case",
-                    side_effect=audit_case,
-                ),
-                mock.patch(
-                    "audit_core.orchestrator.audit_entry_fee_case",
-                    side_effect=audit_case,
-                ),
-                mock.patch("audit_core.orchestrator.create_combined_report"),
-                mock.patch("audit_core.orchestrator.verify_workbook", return_value={}),
-                mock.patch("audit_core.orchestrator.create_html_report_from_workbook"),
-                mock.patch("audit_core.orchestrator.verify_html_report", return_value={}),
-                mock.patch(
-                    "audit_core.orchestrator._publish_html_without_overwrite",
-                    return_value=root / "published.html",
-                ),
-            ):
-                run_audit(
-                    "20260831-stage-flow",
-                    producer_model="codex",
-                    input_dir=root / "input",
-                    output_dir=root,
-                    evidence_provider=provider,
-                    observer=observer,
-                )
-
-        self.assertEqual(
-            observed,
-            [
-                ("cases.prepared", None),
-                ("scenario.started", "maintenance_fee"),
-                ("scenario.started", "entry_fee"),
-                ("evidence.validated", "maintenance_fee"),
-                ("evidence.validated", "entry_fee"),
-                ("result.validated", "maintenance_fee"),
-                ("result.validated", "entry_fee"),
-                ("report.verified", None),
-            ],
-        )
+            bundle(root / "input", "A.zip")
+            bundle(root / "input", "B.zip")
+            run_audit("20260917-stage-flow", producer_model="codex", input_dir=root / "input",
+                      output_dir=root, evidence_provider=PolicyProvider(("poster_material", "entry_fee")),
+                      observer=lambda event, payload: observed.append((event, payload.get("scenario"))))
+        self.assertEqual(observed, [
+            ("cases.prepared", None), ("material_classification.started", None),
+            ("scenario.started", "poster_material"), ("scenario.started", "entry_fee"),
+            ("pdf_materials.validated", None), ("result.validated", "poster_material"),
+            ("result.validated", "entry_fee"), ("report.verified", None),
+        ])
 
     def test_main_flow_checklist_stays_aligned_with_skill_contract(self) -> None:
         tasks = main_flow_task_list()
@@ -457,6 +414,50 @@ class WorkbenchStoreTests(unittest.TestCase):
             {"scenario_count": 1, "error_count": 0},
         )
         self.assertEqual(summary, "未发现错误。")
+
+    def test_classification_failure_projection_preserves_saved_details(self) -> None:
+        manifest = {"status": "failed", "failure": {"code": "classification_failed", "message": "完整逐类比对详情"}}
+        original = json.dumps(manifest)
+        self.assertEqual(project_run_status(manifest)["failure"]["message"], "核销方式无法确认")
+        self.assertEqual(json.dumps(manifest), original)
+        execution_failure = {"status": "failed", "failure": {"message": "模型连接失败"}}
+        self.assertEqual(project_run_status(execution_failure), execution_failure)
+
+    def test_single_classification_summary_refresh_preserves_business_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("selected", "untouched"):
+                workspace = root / name
+                manifest = {"workspace_id": name, "status": "failed", "error_count": 7,
+                            "failure": {"code": "classification_failed", "message": "完整逐类比对详情"}}
+                snapshot = {"run": dict(manifest), "view": {"sheets": [{
+                    "projection_kind": "classification_rejection", "rows": [
+                        {"status": "issue", "error_reason": "缺少促销合同", "values": []}]}]}}
+                atomic_write_json(workspace / "snapshot.json", snapshot)
+                manifest["snapshot_sha256"] = hashlib.sha256((workspace / "snapshot.json").read_bytes()).hexdigest()
+                atomic_write_json(workspace / "manifest.json", manifest)
+                (workspace / ANALYSIS_SUMMARY_FILENAME).write_text("旧版长小结", encoding="utf-8")
+            untouched = {p.name: p.read_bytes() for p in (root / "untouched").iterdir()}
+            workspace = root / "selected"
+            before_snapshot = read_json_file(workspace / "snapshot.json")
+            before_manifest = read_json_file(workspace / "manifest.json")
+            preview = backfill_analysis_summaries(root, workspace_id="selected")
+            self.assertEqual(preview["would_update"], 1)
+            self.assertEqual((workspace / ANALYSIS_SUMMARY_FILENAME).read_text(encoding="utf-8"), "旧版长小结")
+            result = backfill_analysis_summaries(root, workspace_id="selected", apply=True)
+            self.assertEqual(result["updated"], 1)
+            self.assertEqual((workspace / ANALYSIS_SUMMARY_FILENAME).read_text(encoding="utf-8"), "核销方式无法确认")
+            snapshot = read_json_file(workspace / "snapshot.json")
+            manifest = read_json_file(workspace / "manifest.json")
+            self.assertEqual(manifest["analysis_summary"], snapshot["run"]["analysis_summary"])
+            self.assertEqual(manifest.pop("snapshot_sha256"), hashlib.sha256((workspace / "snapshot.json").read_bytes()).hexdigest())
+            snapshot["run"].pop("analysis_summary")
+            manifest.pop("analysis_summary")
+            before_manifest.pop("snapshot_sha256")
+            self.assertEqual(snapshot, before_snapshot)
+            self.assertEqual(manifest, before_manifest)
+            self.assertEqual({p.name: p.read_bytes() for p in (root / "untouched").iterdir()}, untouched)
+            self.assertEqual(backfill_analysis_summaries(root, workspace_id="selected", apply=True)["unchanged"], 1)
 
     def test_completed_worktree_summaries_can_be_backfilled_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1858,11 +1859,11 @@ class WorkbenchServerTests(unittest.TestCase):
         primary_context = self._script_payload(primary, "audit-workbench-context")
         self.assertEqual(primary_context["mode"], "system")
         self.assertIsNone(primary_context["selected_run"])
-        self.assertEqual(primary_context["system_version"], "2.11.27")
+        self.assertEqual(primary_context["system_version"], "2.12.3")
         self.assertEqual(primary_context["delivery_mode"], "server")
         self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
         self.assertIn("audit-system-extension-script", primary)
-        self.assertIn('content="2.11.27"', primary)
+        self.assertIn('content="2.12.3"', primary)
         self.assertFalse(primary_context["oss_intake_enabled"])
         self.assertEqual(self._script_payload(primary, "audit-data")["sheets"], [])
         self.assertLess(
@@ -1977,9 +1978,11 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.40")
-        self.assertEqual(config["scenario_classification_policy"], "zip_name")
-        self.assertEqual(config["unclassified_archive_policy"], "fail_before_ai_and_callback_reason")
+        self.assertEqual(config["api_version"], "1.44")
+        self.assertEqual(config["audit_policy_source"], "费用核销类型-资料与标准清单-20260918.pdf")
+        self.assertEqual(config["scenario_classification_policy"], "material_content")
+        self.assertEqual(config["unclassified_archive_policy"], "fail_after_ai_and_callback_reason")
+        self.assertEqual(config["classification_failure_message"], "核销方式无法确认")
         self.assertEqual(config["error_text_policy"], "reason_and_action_separate")
         self.assertEqual(config["business_file_display"], "filenames_only")
         self.assertEqual(config["confidence_badge_display"], "hidden")
@@ -1987,8 +1990,8 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(config["result_list_heading_display"], "hidden")
         self.assertEqual(config["filter_header_display"], "hidden")
         self.assertEqual(config["result_filters"], ["audit_type", "category"])
-        self.assertEqual(config["system_version"], "2.11.27")
-        self.assertEqual(config["material_problem_policy"], "analyze_and_report")
+        self.assertEqual(config["system_version"], "2.12.3")
+        self.assertEqual(config["material_problem_policy"], "require_exact_material_items_before_audit")
         self.assertEqual(config["refresh_policy"]["overview"]["record_count_statuses"], "all")
         self.assertEqual(config["refresh_policy"]["record_lists"], {
             "source": "/api/runs",

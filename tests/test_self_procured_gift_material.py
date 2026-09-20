@@ -20,8 +20,9 @@ from audit_core.self_procured_gift_material import audit_self_procured_gift_mate
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE_SCHEMA = (
     ROOT
-    / "skills"
-    / "audit-self-procured-gift-material"
+    / "contracts"
+    / "legacy"
+    / "self_procured_gift_material"
     / "references"
     / "evidence.schema.json"
 )

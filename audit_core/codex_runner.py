@@ -28,7 +28,7 @@ from .model_metrics import record_model_attempt, summarize_codex_events, save_mo
 from .model_process import run_model_process, configured_timeout, TRANSPORT_FAILURE_TIMEOUT_SECONDS
 from .product_database import load_product_catalog, PRODUCT_KNOWLEDGE_RULES
 from .product_images import attach_product_reference_images
-from .scenario_registry import SKILL_BY_SCENARIO
+from .legacy_resources import LEGACY_SKILL_BY_SCENARIO as SKILL_BY_SCENARIO
 from .product_retriever import (
     MAX_PRODUCT_REFERENCE_CANDIDATES, MAX_PRODUCT_REFERENCE_CANDIDATES_PER_PHOTO,
     _product_candidate_score,

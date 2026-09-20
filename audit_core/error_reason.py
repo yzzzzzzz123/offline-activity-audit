@@ -381,7 +381,10 @@ def attach_error_reasons(view_payload: dict[str, Any] | None) -> dict[str, Any] 
             if not isinstance(row, dict) or row.get("status") != "issue":
                 continue
             issue = diagnostic[index] if index < len(diagnostic) and isinstance(diagnostic[index], dict) else None
-            reasons = project_error_reasons(sheet, row, issue)
+            if sheet.get("projection_kind") == "pdf_policy" or sheet.get("decision_source") == "material_content":
+                reasons = list(row.get("error_reasons") or [])
+            else:
+                reasons = project_error_reasons(sheet, row, issue)
             if len(archive_names) > 1 and sheet.get("source_archive"):
                 archive = _basename(_text(sheet["source_archive"]))
                 reasons = [reason if archive in reason else f"{archive}：{reason}" for reason in reasons]

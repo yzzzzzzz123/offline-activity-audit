@@ -101,6 +101,8 @@ def run_checks(
     checks: list[Check] = []
     if not root.is_dir():
         return [Check("project_root", False, str(root), "项目根目录不存在")]
+    if (root / "shared/pdf-audit-policy/catalogue.json").is_file():
+        return _pdf_policy_checks(root, scenario, skill_name, audit_module, sheet_name)
     if not SCENARIO_PATTERN.fullmatch(scenario):
         checks.append(Check("scenario_id", False, scenario, "必须是 snake_case"))
     else:
@@ -309,14 +311,57 @@ def run_checks(
     return checks
 
 
+def _pdf_policy_checks(root: Path, scenario: str, skill_name: str, audit_module: str, sheet_name: str) -> list[Check]:
+    """Check the current declarative policy without reconnecting old handlers."""
+    checks = []
+    if not SCENARIO_PATTERN.fullmatch(scenario) or not SKILL_PATTERN.fullmatch(skill_name):
+        return [Check("identity", False, scenario, "类型或Skill名称格式错误")]
+    skill = root / "skills" / skill_name
+    try:
+        catalogue = _read_json(root / "shared/pdf-audit-policy/catalogue.json")
+        entry = catalogue["types"][scenario]
+        manifest = _read_json(skill / "references/scenario-manifest.json")
+        checks.append(Check("policy_manifest", all((
+            manifest.get("schema_version") == "2.0", manifest.get("scenario_id") == scenario,
+            manifest.get("skill_name") == skill_name, manifest.get("policy_version") == catalogue["version"],
+            manifest.get("classification_policy") == "material_content",
+            manifest.get("materials") == entry["materials"], manifest.get("audit_points") == entry["audit_points"],
+        )), str(skill), "类型、资料、条件和审核要点须与PDF清单完全一致"))
+        metadata = _frontmatter(_read_utf8(skill / "SKILL.md"))
+        checks.append(Check("skill_frontmatter", metadata.get("name") == skill_name and bool(metadata.get("description")),
+                            str(skill / "SKILL.md"), "校验Skill名称与描述"))
+        schema = _read_json(skill / "references/evidence.schema.json")
+        Draft202012Validator.check_schema(schema)
+        expected_schema = _read_json(root / "contracts/pdf-policy-audit.schema.json")
+        rule_ids = [rule["id"] for rule in entry["audit_points"]]
+        expected_schema["properties"]["checks"].update(minItems=len(rule_ids), maxItems=len(rule_ids))
+        expected_schema["properties"]["checks"]["items"]["properties"]["rule_id"] = {"type": "string", "enum": rule_ids}
+        checks.append(Check("evidence_schema", schema == expected_schema,
+                            str(skill), "统一证据结构严格限定本类型的PDF审核项与准确项数"))
+        classification = _read_json(root / "contracts/pdf-material-classification.schema.json")
+        Draft202012Validator.check_schema(classification)
+        checks.append(Check("classification_types", set(classification["properties"]["candidate_scenarios"]["items"]["enum"]) == set(catalogue["types"]),
+                            str(root / "contracts"), "内容分类候选与清单类型完全一致"))
+        checks.append(Check("workflow", audit_module == "pdf_workflow.py" and (root / "audit_core" / audit_module).is_file(),
+                            str(root / "audit_core"), "正式审核使用PdfWorkflow，不接回历史处理器"))
+        checks.append(Check("sheet_name", not sheet_name or sheet_name == entry["label"] + "核销", str(skill), "按当前类型标签展示"))
+        _mention_check(checks, name="agent_prompt", path=skill / "agents/openai.yaml", needles=(f"${skill_name}",))
+        _mention_check(checks, name="rule_coverage", path=skill / "references/audit-rules.md",
+                       needles=tuple(f"`{r['id']}`" for r in entry["audit_points"]))
+        _mention_check(checks, name="parent_skill", path=root / "skills/orchestrate-offline-audit/SKILL.md", needles=(scenario, skill_name))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        checks.append(Check("pdf_policy", False, str(skill), f"清单检查失败：{type(exc).__name__}"))
+    return checks
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="检查新核销场景是否已从 Skill 到唯一 HTML 完整接入主流程。"
     )
     parser.add_argument("--scenario", required=True, help="snake_case 场景 ID")
     parser.add_argument("--skill", required=True, help="audit-kebab-case Skill 目录名")
-    parser.add_argument("--audit-module", required=True, help="audit_core 下的确定性处理模块文件")
-    parser.add_argument("--sheet-name", required=True, help="六列表中该场景的工作表名")
+    parser.add_argument("--audit-module", default="pdf_workflow.py", help="当前正式处理模块；默认pdf_workflow.py")
+    parser.add_argument("--sheet-name", default="", help="可选的核销类型展示标题")
     parser.add_argument(
         "--project-root",
         default=str(Path(__file__).resolve().parents[3]),

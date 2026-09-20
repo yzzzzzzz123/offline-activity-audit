@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "pos_target_incentive",
+  "skill_name": "audit-pos-target-incentive",
+  "display_name": "POS达标激励（激励对象为经销商）",
+  "aliases": ["POS激励达标", "POS达标激励", "满减比例返还"],
+  "order": 8,
+  "provenance": {
+    "source_zip_basename": "SQ202512310105-HX202602050027-POS激励达标(1).zip",
+    "source_zip_sha256": "5778747264d22c7bd91b6943f96e4163455f94d99b2c996890a3f2947e1cc3b6",
+    "source_zip_size": 763331,
+    "generator_skill_version": "1.0",
+    "business_requirements_summary": ["激励对象为经销商。", "经销商盖章POS及电子表必须同时提供。", "满减须有水印照片、小票或其他活动存在证明。", "结算单使用公司统一模板并盖章。", "比例、档位和上限由签章促销合同建立。"]
+  },
+  "scope": {"in_scope": ["战略或批准特殊渠道按POS目标达成比例向经销商返还费用"], "excluded": ["人员激励", "价格补差", "额外搭赠", "直营"], "audit_object": "一份POS达标激励申报包及其分组阻断问题"},
+  "evidence_roles": [
+    {"role_id": "stamped_pos_data", "description": "经销商盖章逐门店POS汇总", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": null, "nested_in": null, "name_markers": ["POS", "数据", "销售"], "ai_visible": true, "required": true, "binding_rule": "名称明确的外层POS/数据视觉文件全部绑定。"},
+    {"role_id": "pos_data_spreadsheet", "description": "POS电子表", "extensions": [".xlsx", ".xlsm"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["POS", "销售"], "ai_visible": false, "required": true, "binding_rule": "唯一Excel由确定性代码读取。"},
+    {"role_id": "signed_promotional_contract", "description": "签章促销合同", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["促销合同", "促销协议"], "ai_visible": true, "required": true, "binding_rule": "零或一份候选；缺失报错，多份停止。"},
+    {"role_id": "settlement", "description": "统一模板经销商盖章结算单", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["结算单", "结算表"], "ai_visible": true, "required": true, "binding_rule": "零或一份候选；缺失报错，多份停止。"},
+    {"role_id": "activity_proof", "description": "满减活动照片、小票或其他存在证明", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": null, "nested_in": null, "name_markers": ["照片", "小票", "现场", "活动"], "ai_visible": true, "required": true, "binding_rule": "排除合同、结算、POS后逐文件按名称绑定活动证明角色。"}
+  ],
+  "ai_stages": [{"stage_id": "pos_target_visual_facts", "input_roles": ["stamped_pos_data", "signed_promotional_contract", "settlement", "activity_proof"], "reference_scope": [], "schema_file": "references/evidence.schema.json", "source_coverage_rule": "每个视觉源必须且只能返回一次，来源名和角色不得改写。"}],
+  "authority_edges": [
+    {"from": "signed_promotional_contract", "to": "pos_data_spreadsheet", "purpose": "限定渠道、经销商、周期、POS范围、档位、比例和上限"},
+    {"from": "stamped_pos_data", "to": "pos_data_spreadsheet", "purpose": "逐门店和合计金额对应"},
+    {"from": "activity_proof", "to": "signed_promotional_contract", "purpose": "证明满减活动存在"},
+    {"from": "settlement", "to": "claim_amount", "purpose": "确定申报金额"}
+  ],
+  "forbidden_edges": [
+    {"from": "settlement", "to": "missing_contract_tiers", "purpose": "结算不能替代合同档位和比例权威"},
+    {"from": "stamped_pos_data", "to": "missing_spreadsheet", "purpose": "盖章图片不能替代电子表"},
+    {"from": "pos_sales", "to": "activity_existence", "purpose": "POS达标不能单独证明满减活动存在"}
+  ],
+  "controls": [
+    {"control_id": "required_materials", "source": "全部角色", "object": "资料完整性", "expectation": "盖章POS、电子表、活动证明、盖章结算和签章合同齐全", "comparison": "deterministic", "blocking": true, "error_group": "资料完整性", "resubmission": "按缺失清单补交。"},
+    {"control_id": "contract_authority", "source": "签章促销合同", "object": "渠道、经销商、档位、比例和上限", "expectation": "合同完整并签章", "comparison": "visible", "blocking": true, "error_group": "促销合同", "resubmission": "补交条款完整的签章合同。"},
+    {"control_id": "pos_correspondence", "source": "盖章POS与电子表", "object": "期间、门店和销售金额", "expectation": "逐店唯一且合计一致", "comparison": "unique_fuzzy", "blocking": true, "error_group": "POS对应", "resubmission": "更正并重交POS两种载体。"},
+    {"control_id": "activity_existence", "source": "照片、小票或其他证明", "object": "满减活动", "expectation": "至少一份活动期内可核验存在证明", "comparison": "visible", "blocking": true, "error_group": "活动证明", "resubmission": "补交水印照片、小票或其他独立证明。"},
+    {"control_id": "settlement", "source": "结算单", "object": "申报", "expectation": "统一模板、经销商盖章且基数、档位、比例、上限和金额完整", "comparison": "visible", "blocking": true, "error_group": "结算单", "resubmission": "补交完整盖章结算单。"},
+    {"control_id": "amount_recalculation", "source": "合同、POS电子表和结算", "object": "申报金额", "expectation": "最高已达合同档位复算并应用上限后与申报一致", "comparison": "deterministic", "blocking": true, "error_group": "金额复算", "resubmission": "补正合同、POS或结算。"}
+  ],
+  "amount_policy": {"claim_source": "经销商盖章结算单", "supported_amount_rule": "合格POS销售额×最高已达合同档位比例并受合同上限约束；全部阻断控制通过且等于申报时支持，否则为0。", "rounding": "人民币元，ROUND_HALF_UP保留两位小数", "blocked_rule": "任一阻断失败全额暂缓", "conclusions": ["pass", "human_review"]},
+  "output": {"sheet_name": "POS达标激励核销", "html_mode": "error_only", "count_unit": "个问题", "required_facts": ["问题来源", "识别内容", "规则", "影响", "补交"], "prohibited_terms": ["prompt", "schema", "临时目录", "系统内部路径"]},
+  "dependencies": [{"name": "openpyxl", "purpose": "确定性读取POS电子表。"}, {"name": "jsonschema", "purpose": "校验证据、manifest和结果。"}]
+}

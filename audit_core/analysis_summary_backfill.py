@@ -34,8 +34,11 @@ def backfill_analysis_summaries(
     refresh_archives: bool = False,
     backup_dir: Path | None = None,
     root_html: Path | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     if refresh_archives:
+        if workspace_id is not None:
+            raise AuditError("--workspace-id 仅用于单条摘要刷新；静态档案另行从规范源码生成")
         from .completed_worktree_refresh import refresh_completed_worktree_archives
 
         return refresh_completed_worktree_archives(
@@ -46,10 +49,16 @@ def backfill_analysis_summaries(
     root = worktrees_root.resolve()
     if not root.is_dir():
         raise AuditError(f"worktrees 目录不存在：{root}")
+    if workspace_id is not None and (
+        WORKSPACE_ID_PATTERN.fullmatch(workspace_id) is None or not (root / workspace_id).is_dir()
+    ):
+        raise AuditError("指定的 worktree 不存在或名称不安全")
 
     prepared: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for workspace in sorted(root.iterdir(), key=lambda path: path.name):
+        if workspace_id is not None and workspace.name != workspace_id:
+            continue
         if (
             workspace.name.startswith(".")
             or not workspace.is_dir()
@@ -67,7 +76,9 @@ def backfill_analysis_summaries(
 
         manifest = read_json_file(manifest_path)
         snapshot = read_json_file(snapshot_path)
-        if str(manifest.get("status") or "") != "completed":
+        classification_failed = (manifest.get("status") == "failed"
+                                 and (manifest.get("failure") or {}).get("code") == "classification_failed")
+        if manifest.get("status") != "completed" and not classification_failed:
             skipped.append({"workspace_id": workspace.name, "reason": "not_completed"})
             continue
         view_payload = snapshot.get("view")
@@ -120,7 +131,7 @@ def backfill_analysis_summaries(
         manifest = item["manifest"]
         snapshot = item["snapshot"]
         manifest["analysis_summary"] = metadata
-        snapshot["run"] = dict(manifest)
+        snapshot["run"]["analysis_summary"] = metadata
         atomic_write_json(item["snapshot_path"], snapshot)
         manifest["snapshot_sha256"] = hashlib.sha256(
             item["snapshot_path"].read_bytes()
@@ -156,6 +167,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="worktrees 根目录；默认使用当前项目 worktrees",
     )
     parser.add_argument(
+        "--workspace-id",
+        help="仅刷新指定终态 worktree 的摘要，包含核销方式无法确认的失败记录",
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="实际写入；省略时只显示将要更新的目录",
@@ -176,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
     result = backfill_analysis_summaries(
         args.worktrees_root, apply=args.apply, refresh_archives=args.refresh_archives,
         backup_dir=args.backup_dir,
+        workspace_id=args.workspace_id,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

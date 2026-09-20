@@ -704,6 +704,27 @@ def _scenario_items(
     return items or _fallback_view_items(sheet)
 
 
+def _pdf_items(sheets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Use the saved PDF checks verbatim, including every packet of one type."""
+    items = []
+    for sheet in sheets:
+        for row in sheet.get("rows") or []:
+            if row.get("status") != "pass":
+                continue
+            evidence = deepcopy(row.get("card_evidence") or {})
+            values = row.get("values") or []
+            category = row.get("check_category") or "PDF审核要点"
+            item = _item(category=category, title=category + "核验通过",
+                         subject=sheet.get("source_archive") or sheet["audit_type_label"],
+                         basis=values[1] if len(values) > 1 else row.get("heading"),
+                         source_files=evidence.get("source_files") or [],
+                         source_file_count=evidence.get("source_file_count"),
+                         scope="amount" if row.get("numeric") else "material")
+            item.update(evidence=evidence, control_id=row.get("rule_id"), archive_id=sheet.get("archive_id"))
+            items.append(item)
+    return items
+
+
 def build_pass_check_log(
     view: dict[str, Any], results_by_scenario: dict[str, dict[str, Any]]
 ) -> dict[str, Any]:
@@ -722,16 +743,21 @@ def build_pass_check_log(
         if not scenario or scenario in seen_scenarios:
             continue
         seen_scenarios.add(scenario)
-        audit_type, title = SCENARIO_PRESENTATION.get(
-            scenario,
-            (_text(sheet.get("name")) or "其他核销", _text(sheet.get("name")) or "其他核销"),
-        )
-        result = results_by_scenario.get(scenario)
-        result = result if isinstance(result, dict) else {}
-        items = _scenario_items(scenario, result, sheet, audit_type)
-        evidence_context = EvidenceContext(scenario, result)
-        for item in items:
-            enrich_pass_item(evidence_context, item)
+        if sheet.get("projection_kind") == "pdf_policy":
+            audit_type, title = sheet["audit_type_label"], sheet["title"]
+            items = _pdf_items([s for s in view["sheets"]
+                                if s.get("scenario") == scenario and s.get("projection_kind") == "pdf_policy"])
+        else:
+            audit_type, title = SCENARIO_PRESENTATION.get(
+                scenario,
+                (_text(sheet.get("name")) or "其他核销", _text(sheet.get("name")) or "其他核销"),
+            )
+            result = results_by_scenario.get(scenario)
+            result = result if isinstance(result, dict) else {}
+            items = _scenario_items(scenario, result, sheet, audit_type)
+            evidence_context = EvidenceContext(scenario, result)
+            for item in items:
+                enrich_pass_item(evidence_context, item)
         category_counts: dict[str, int] = {}
         for item in items:
             sequence += 1
@@ -770,7 +796,7 @@ def attach_pass_check_log(
     enriched = deepcopy(view)
     enriched["pass_check_log"] = build_pass_check_log(enriched, results_by_scenario)
     for sheet in enriched.get("sheets") or []:
-        if sheet.get("projection_kind") == "material_diagnostic":
+        if sheet.get("projection_kind") in {"material_diagnostic", "pdf_policy"} or sheet.get("decision_source") == "material_content":
             continue
         scenario = _text(sheet.get("scenario"))
         attach_sheet_evidence(sheet, EvidenceContext(scenario, results_by_scenario.get(scenario) or {}))

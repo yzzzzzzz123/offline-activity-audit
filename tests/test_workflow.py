@@ -87,37 +87,24 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(seen, [("outer", None)])
 
     def test_invalid_later_evidence_blocks_all_decisions_and_cleans_sources(self):
-        cases = {name: {"scenario": name} for name in ("maintenance_fee", "entry_fee")}
-        extracted = []
-        temporary_roots = []
-
-        def provider(case, root):
-            extracted.append(case["scenario"])
-            temporary_roots.append(root)
-            (root / "temporary-source.png").write_bytes(b"fixture")
-            return {"scenario": case["scenario"]}
-
-        def validate(value, _schema):
-            if value["scenario"] == "entry_fee":
-                raise AuditError("无效证据")
-
-        with (
-            tempfile.TemporaryDirectory() as temporary,
-            patch.object(orchestrator, "prepare_cases", return_value=cases),
-            patch.object(orchestrator, "validate_json", side_effect=validate),
-            patch.object(orchestrator, "audit_maintenance_fee_case") as decide,
-            patch.object(orchestrator, "audit_entry_fee_case") as decide_entry,
-            patch.object(orchestrator, "create_combined_report") as render,
-        ):
-            with self.assertRaisesRegex(AuditError, "无效证据"):
-                orchestrator.run_audit("20260915-chain-validation", producer_model="codex",
-                                       input_dir=temporary, output_dir=temporary,
-                                       evidence_provider=provider)
-            self.assertEqual(extracted, list(cases))
-            decide.assert_not_called()
-            decide_entry.assert_not_called()
-            render.assert_not_called()
-            self.assertTrue(all(not root.exists() for root in temporary_roots))
+        from tests.pdf_test_support import bundle, PolicyProvider
+        events = []
+        def mutate(case, value):
+            if case["kind"] == "pdf_policy_audit" and case["archive_id"] == "a002":
+                value["checks"].pop()
+        provider = PolicyProvider(("poster_material", "entry_fee"), mutate=mutate)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle(root / "input", "A.zip")
+            bundle(root / "input", "B.zip")
+            with self.assertRaisesRegex(AuditError, "全部且仅覆盖"):
+                orchestrator.run_audit("20260917-chain-validation", producer_model="codex",
+                    input_dir=root / "input", output_dir=root, evidence_provider=provider,
+                    observer=lambda event, payload: events.append(event))
+        self.assertEqual(len(provider.calls), 4)
+        self.assertNotIn("result.validated", events)
+        self.assertNotIn("report.verified", events)
+        self.assertTrue(all(not root.exists() for root in provider.temporary_roots))
 
 
 if __name__ == "__main__":

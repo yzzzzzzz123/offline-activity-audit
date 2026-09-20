@@ -43,6 +43,7 @@ from audit_core.oss_intake import (
 from audit_core.workbench_runtime import main as runtime_main
 from audit_core.workbench_server import Handler, WorkbenchCatalog, WorkbenchHTTPServer
 from audit_core.workbench_store import atomic_write_json
+from tests.pdf_test_support import fixture_cli_command
 
 
 OSS_HOST = "audit-materials.oss-cn-hangzhou.aliyuncs.com"
@@ -559,23 +560,28 @@ class OSSIntakeValidationTests(unittest.TestCase):
             self.assertFalse(Path(captured[-1]).exists())
 
     def test_formal_subprocess_returns_failed_classification_with_persisted_reason(self) -> None:
+        native_run = subprocess.run
+
+        def fixture_run(command, **kwargs):
+            if len(command) > 2 and command[2] == str(FORMAL_RUNNER):
+                command = fixture_cli_command(command[3:], candidates={0: []})
+            return native_run(command, **kwargs)
+
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             inputs = root / "input"
             inputs.mkdir()
             (inputs / "unknown.zip").write_bytes(_zip_bytes())
-            result = run_formal_audit_subprocess(
-                run_id="20260911-classification-failed", producer_model="codex",
-                input_dir=inputs, worktrees_root=root / "worktrees",
-                scenario=None, workbench_url=None,
-            )
+            with mock.patch("audit_core.oss_intake.subprocess.run", side_effect=fixture_run):
+                result = run_formal_audit_subprocess(
+                    run_id="20260911-classification-failed", producer_model="codex",
+                    input_dir=inputs, worktrees_root=root / "worktrees",
+                    scenario=None, workbench_url=None,
+                )
             self.assertEqual(result["status"], "failed")
             self.assertEqual(result["failure"]["code"], "classification_failed")
             summary = build_callback_result(result)
-            self.assertIn("核销失败", summary)
-            self.assertIn("unknown.zip", summary)
-            self.assertIn("未注明核销方式", summary)
-            self.assertNotIn("未发现错误", summary)
+            self.assertEqual(summary, "核销方式无法确认")
 
     def test_formal_subprocess_does_not_accept_unrelated_failure_receipt(self) -> None:
         def failed_run(command, **kwargs):
@@ -1703,8 +1709,8 @@ class OSSIntakeHTTPTests(unittest.TestCase):
 
         with self.opener.open(self.base + "/api/config", timeout=5) as response:
             config = json.load(response)
-        self.assertEqual(config["api_version"], "1.40")
-        self.assertEqual(config["material_problem_policy"], "analyze_and_report")
+        self.assertEqual(config["api_version"], "1.44")
+        self.assertEqual(config["material_problem_policy"], "require_exact_material_items_before_audit")
         self.assertTrue(config["oss_intake"]["enabled"])
         self.assertEqual(config["oss_intake"]["list_endpoint"], "/api/intake/jobs")
         self.assertEqual(

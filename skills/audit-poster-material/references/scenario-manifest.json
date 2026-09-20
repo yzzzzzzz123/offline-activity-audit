@@ -1,0 +1,125 @@
+{
+  "schema_version": "2.0",
+  "scenario_id": "poster_material",
+  "skill_name": "audit-poster-material",
+  "display_name": "KT板等物料制作",
+  "scope": "海报制作、张贴、宣传单页、展示道具",
+  "policy_version": "2026-09-18.pdf.3",
+  "classification_policy": "material_content",
+  "label": "KT板等物料制作",
+  "materials": [
+    {
+      "id": "invoice",
+      "text": "发票或收据，抬头为公司名称，含明细、金额、开票时间",
+      "when": "always"
+    },
+    {
+      "id": "finished_photos",
+      "text": "成品水印照片，地址和拍摄时间，展示尺寸、内容、展示位置",
+      "when": "always"
+    },
+    {
+      "id": "settlement",
+      "text": "结算单（公司统一模板，客户盖章）",
+      "when": "always"
+    },
+    {
+      "id": "promotion_contract",
+      "text": "签章后的促销合同",
+      "when": "always"
+    }
+  ],
+  "audit_points": [
+    {
+      "id": "submission_deadline",
+      "text": "核销自活动结束日起3个月内提交，超期不再核销。月份按日历月；必须有真实活动结束与提交日期，不能拿文件名或分析日期代替。进场费按原文“无时间要求”不作活动时限拒付，仍检查水印日期是否存在。",
+      "effect": "reject",
+      "when": "activity_deadline",
+      "numeric": false
+    },
+    {
+      "id": "review_deadline",
+      "text": "财务一审已超2个月且资料有误或缺失，不再补，直接0核销；只有同时具备时间和错误/缺失证据才触发。起算事件不清不能猜测。",
+      "effect": "zero",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "scene_authenticity",
+      "text": "确保费用场景真实；张冠李戴不予核销，额度不返还。仅有模糊或读不清不能认定张冠李戴。",
+      "effect": "reject",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "fraud",
+      "text": "有充分证据确认核销造假时0核销并记录罚款要求（先费用池后经销商额度）；不推测造假，不执行罚款、扣款或通知。",
+      "effect": "zero",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "bi_quota",
+      "text": "BI额度不足不允许先做活动后补申请；以业务发生时的额度与申请、活动时间证据判断，不能用当前余额代替。",
+      "effect": "reject",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "settlement_template_seal",
+      "text": "结算单须为公司统一模板并由客户盖章。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "contract_signed",
+      "text": "促销合同已签章。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "invoice_details",
+      "text": "发票/收据抬头为经销商公司，包含明细、金额和开票时间。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "finished_photo",
+      "text": "有成品水印照片（地址+拍摄时间），展示尺寸、内容、展示位置；无成品照为缺资料。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "pos_fields",
+      "text": "POS必含5+2：活动时间、SKU/69码、商品名称、销售数量、销售单价、销售金额、销售金额及数量合计；缺项即不完整。",
+      "effect": "missing_material",
+      "when": "uses_pos",
+      "numeric": false
+    },
+    {
+      "id": "pos_seal",
+      "text": "要求提交的POS数据有经销商盖章。",
+      "effect": "missing_material",
+      "when": "required_pos",
+      "numeric": false
+    },
+    {
+      "id": "pos_arithmetic",
+      "text": "销售金额=数量×销售单价，并核对销售金额、数量合计。",
+      "effect": "missing_material",
+      "when": "uses_pos",
+      "numeric": true
+    },
+    {
+      "id": "application_quantity_price",
+      "text": "数量、单价与申请不符或填错，直接0核销。必须区分销售单价与奖励/补差单价，不把实际销量低于计划自行解释为填错；比较口径不清记无法核验。",
+      "effect": "zero",
+      "when": "uses_pos",
+      "numeric": true
+    }
+  ]
+}

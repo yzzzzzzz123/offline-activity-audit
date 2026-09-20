@@ -1,4 +1,4 @@
 interface:
-  display_name: "价格补差核销"
-  short_description: "核验补差合同、POS、结算和全门店活动价照片"
-  default_prompt: "通过父级编排器使用 $audit-price-difference-support 核销一个已登记的 price_difference_support 材料包，并返回经过验证的自包含 HTML。"
+  display_name: "补差核销"
+  short_description: "按指定PDF资料清单及审核要点核验补差，保留来源和明确失败原因"
+  default_prompt: "使用 $audit-price-difference-support，仅按指定PDF审核补差资料。"

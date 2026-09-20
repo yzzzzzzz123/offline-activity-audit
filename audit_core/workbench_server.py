@@ -43,6 +43,7 @@ from .oss_intake import (
 )
 from .workbench_runtime import ROOT_HTML
 from .common import AuditError
+from .pdf_policy import SOURCE_TITLE
 from .workbench_delete import RunDeletionConflict, prepare_run_deletion
 from .workbench_labels import record_labels
 from .workbench_html import (
@@ -54,6 +55,7 @@ from .workbench_html import (
     replace_audit_payload as _replace_audit_payload,
 )
 from .workbench_store import (
+    CLASSIFICATION_FAILURE_MESSAGE,
     read_event_records,
     DEFAULT_WORKTREES_ROOT,
     WORKSPACE_ID_PATTERN,
@@ -1535,9 +1537,11 @@ class Handler(BaseHTTPRequestHandler):
         return {
             "api_version": API_VERSION,
             "system_version": SYSTEM_VERSION,
-            "material_problem_policy": "analyze_and_report",
-            "scenario_classification_policy": "zip_name",
-            "unclassified_archive_policy": "fail_before_ai_and_callback_reason",
+            "material_problem_policy": "require_exact_material_items_before_audit",
+            "scenario_classification_policy": "material_content",
+            "unclassified_archive_policy": "fail_after_ai_and_callback_reason",
+            "classification_failure_message": CLASSIFICATION_FAILURE_MESSAGE,
+            "audit_policy_source": SOURCE_TITLE,
             "confidence_badge_display": "hidden",
             "result_summary_display": "hidden",
             "result_list_heading_display": "hidden",

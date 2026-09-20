@@ -48,27 +48,8 @@ def _input_archive_names(input_dir: str | Path, scenario: str | None) -> list[st
     if not root.is_dir() or root.is_symlink():
         return []
     paths = sorted((path for path in root.iterdir() if path.is_file() and path.suffix.lower() == ".zip"), key=lambda path: path.name.casefold())
-    if scenario and len(paths) > 1:
-        try:
-            selected = discover_archives(root).get(scenario)
-            if selected:
-                return [Path(selected["path"]).name]
-        except AuditError:
-            from .archive_input import MaterialInputError, _classify_archive
-            from .material_intake import _scenario_hint
-
-            selected_paths = []
-            for path in paths:
-                try:
-                    identified = _classify_archive(path)["scenario"]
-                except MaterialInputError:
-                    identified = _scenario_hint(path.name)
-                except AuditError:
-                    # The formal intake reports unsafe/unreadable archives.
-                    identified = None
-                if identified is None or identified == scenario:
-                    selected_paths.append(path)
-            paths = selected_paths
+    # Every archive must be inspected before a content-derived type is known.
+    # --scenario filters confirmed types afterwards; names never select a Skill.
     return [path.name for path in paths]
 
 
@@ -254,7 +235,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--scenario",
         choices=SCENARIO_ORDER,
-        help="只运行指定核销类型；不传时运行 input/ 中全部已支持类型",
+        help="按资料内容识别后，只审核指定类型；不能覆盖内容分类结果",
     )
     parser.add_argument(
         "--input-dir",

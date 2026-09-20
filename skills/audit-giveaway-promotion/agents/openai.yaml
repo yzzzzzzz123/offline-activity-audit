@@ -1,4 +1,4 @@
 interface:
-  display_name: "额外搭赠核销"
-  short_description: "核验额外搭赠合同、出货结算、小票及活动执行材料"
-  default_prompt: "使用 $audit-giveaway-promotion 核销这个额外搭赠报销材料包。"
+  display_name: "搭赠核销"
+  short_description: "按指定PDF资料清单及审核要点核验搭赠，保留来源和明确失败原因"
+  default_prompt: "使用 $audit-giveaway-promotion，仅按指定PDF审核搭赠资料。"

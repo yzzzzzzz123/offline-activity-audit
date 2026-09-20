@@ -1,4 +1,4 @@
 interface:
   display_name: "进场费核销"
-  short_description: "核验条码费合同、门店上架照片和系统扣款凭证"
-  default_prompt: "通过父级编排器使用 $audit-entry-fee 核销一个已登记的 entry_fee 材料包，并返回经过验证的自包含 HTML。"
+  short_description: "按指定PDF资料清单及审核要点核验进场费，保留来源和明确失败原因"
+  default_prompt: "使用 $audit-entry-fee，仅按指定PDF审核进场费资料。"

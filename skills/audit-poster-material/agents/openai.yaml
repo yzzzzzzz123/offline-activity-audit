@@ -1,4 +1,4 @@
 interface:
-  display_name: "海报/物料制作核销"
-  short_description: "核对合同、票据、结算单及水印现场照片的海报物料制作费用"
-  default_prompt: "使用 $audit-poster-material 核销这个海报/物料制作报销材料包，并且只报告阻断性错误。"
+  display_name: "KT板等物料制作核销"
+  short_description: "按指定PDF资料清单及审核要点核验KT板等物料制作，保留来源和明确失败原因"
+  default_prompt: "使用 $audit-poster-material，仅按指定PDF审核KT板等物料制作资料。"

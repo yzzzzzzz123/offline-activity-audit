@@ -1,4 +1,4 @@
 interface:
-  display_name: "自采赠品物料核销"
-  short_description: "核验自采赠品票据、规则、POS、全门店照片和结算"
-  default_prompt: "通过父级编排器使用 $audit-self-procured-gift-material 核销一个已登记的 self_procured_gift_material 材料包，并返回经过验证的自包含 HTML。"
+  display_name: "外采赠品核销"
+  short_description: "按指定PDF资料清单及审核要点核验外采赠品，保留来源和明确失败原因"
+  default_prompt: "使用 $audit-self-procured-gift-material，仅按指定PDF审核外采赠品资料。"

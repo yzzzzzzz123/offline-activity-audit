@@ -18,7 +18,7 @@ from .common import AuditError, load_json, validate_json
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LOCATION_REFERENCE_ROOT = (
-    PROJECT_ROOT / "skills" / "audit-promotional-display" / "references"
+    PROJECT_ROOT / "contracts" / "legacy" / "promotional_display" / "references"
 )
 LOCATION_REGISTRY_PATH = LOCATION_REFERENCE_ROOT / "location-resolution-registry.json"
 LOCATION_REGISTRY_SCHEMA_PATH = (

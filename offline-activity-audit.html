@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="canban-template-version" content="3.2.0">
-  <meta name="offline-audit-system-version" content="2.11.27">
+  <meta name="offline-audit-system-version" content="2.12.3">
   <link rel="icon" href="data:,">
   <script>
     if (window.location.protocol === 'file:') {
@@ -2621,13 +2621,17 @@
           const action = actionText(row);
           const issue = sheet.projection_kind === 'material_diagnostic' ? sheet.diagnostic_issues?.[index] : null;
           const reasonCategory = sheet.projection_kind === 'classification_rejection' || issue?.code === 'scenario_unconfirmed'
-            ? '费用类型' : errorReasonCategory([title, ...(row.values || [])].join(' '));
+            ? '费用类型' : row.check_category || errorReasonCategory([title, ...(row.values || [])].join(' '));
           return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [reasonCategory], evidence: row.card_evidence });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
 
       const projections = data.sheets.map((sheet) => {
+        if (sheet.projection_kind === 'pdf_policy') {
+          const label = sheet.audit_type_label;
+          return { sheet, ...groupedIssueView(sheet, label), label };
+        }
         if (sheet.projection_kind === 'material_diagnostic' || sheet.projection_kind === 'classification_rejection') {
           const label = sheet.audit_type_label || (sheet.projection_kind === 'classification_rejection' ? '核销方式无法确认' : '核销类型待确认');
           return { sheet, ...groupedIssueView(sheet, label), label };
@@ -3559,15 +3563,15 @@
       const statusLabels = { completed: '核销完成', failed: '核销失败', running: '运行中', created: '已创建' };
       const scenarioLabels = {
         personnel_incentive: '人员激励',
-        promotional_display: '堆头陈列',
-        poster_material: '展示道具',
+        promotional_display: '陈列堆头',
+        poster_material: 'KT板等物料制作',
         other_expense: '其他费用',
         maintenance_fee: '维护费用',
-        giveaway_promotion: '额外搭赠',
-        price_difference_support: '价差补贴',
+        giveaway_promotion: '搭赠',
+        price_difference_support: '补差',
         pos_target_incentive: 'POS达标激励',
-        entry_fee: '进场费用',
-        self_procured_gift_material: '自采礼赠物料',
+        entry_fee: '进场费',
+        self_procured_gift_material: '外采赠品',
       };
       if (!Array.isArray(context.main_flow_tasks) || context.main_flow_tasks.length !== 6) {
         throw new Error('主流程任务清单必须包含六个 stage');
@@ -3578,7 +3582,9 @@
         'run.created': runStageIndexes.bootstrap,
         'intake.completed': runStageIndexes.intake,
         'scenario.started': runStageIndexes.analysis,
+        'material_classification.started': runStageIndexes.analysis,
         'evidence.validated': runStageIndexes.evidence,
+        'pdf_materials.validated': runStageIndexes.evidence,
         'result.validated': runStageIndexes.decision,
         'report.verified': runStageIndexes.verification,
         'run.completed': runStageIndexes.verification,
@@ -4711,6 +4717,7 @@
         const run = context.run || {};
         const failure = run.failure || {};
         const classificationFailed = failure.code === 'classification_failed';
+        const classificationMessage = '核销方式无法确认';
         const events = context.recent_events || [];
         document.body.className = 'audit-system-page';
         document.title = `参半渠道活动核销｜${context.selected_run}`;
@@ -4719,8 +4726,8 @@
             <span>当前二级运行档案：<strong>${escapeHtml(context.selected_run)}</strong></span>
             <button class="as-button" id="as-record-technical" type="button">打开技术档案</button></div>
           <header class="as-record-status-hero" style="--run-tone:${runTone(run)}"><small>RUN RECORD / ${escapeHtml(String(run.status || 'unknown').toUpperCase())}</small>
-            <h1>${escapeHtml(runStatus(run))}</h1><p>${classificationFailed ? '资料包的核销方式无法确认，本次核销失败。请在 ZIP 文件名中注明唯一核销方式后重新提交。' : '本次运行尚未形成可展示的业务核销页面，但运行身份、结构化分析、事件日志和 DOM 数据断点已经作为该条核销记录持久化保存。'}</p></header>
-          ${failure.message ? `<div class="as-failure"><strong>${escapeHtml(classificationFailed ? '核销方式无法确认' : failure.type || '核销失败')}</strong>${escapeHtml(failure.message)}</div>` : ''}
+            <h1>${escapeHtml(runStatus(run))}</h1>${classificationFailed ? '' : '<p>本次运行尚未形成可展示的业务核销页面，但运行身份、结构化分析、事件日志和 DOM 数据断点已经作为该条核销记录持久化保存。</p>'}</header>
+          ${classificationFailed ? `<div class="as-failure">${classificationMessage}</div>` : failure.message ? `<div class="as-failure"><strong>${escapeHtml(failure.type || '核销失败')}</strong>${escapeHtml(failure.message)}</div>` : ''}
           <section class="as-metric-grid">
             <article class="as-metric" style="--metric-accent:#159edb"><div><span>核销场景</span><small>本次已识别场景</small></div><strong>${Number(run.scenario_count || 0)}</strong></article>
             <article class="as-metric" style="--metric-accent:#173743"><div><span>运行事件</span><small>可观察执行节点</small></div><strong>${events.length}</strong></article>
@@ -4728,7 +4735,7 @@
             <article class="as-metric" style="--metric-accent:#d84b3e"><div><span>DOM 断点</span><small>可恢复页面阶段</small></div><strong>${(context.dom_checkpoints || []).length}</strong></article>
           </section>
           <section class="as-panel"><header class="as-panel-head"><div><small>RUN EVENT LEDGER</small><h2>运行轨迹</h2></div><p>模型私有思维过程不持久化；这里只保存可观察事件与结构化事实</p></header>
-            <div class="as-panel-body"><div class="as-event-list">${events.length ? events.slice().reverse().map((event) => `<div class="as-event"><code>#${escapeHtml(event.seq || '—')}</code><strong>${escapeHtml(event.type || event.event || 'event')}<small>${escapeHtml(event.message || '')}</small></strong><time>${escapeHtml(event.timestamp || '')}</time></div>`).join('') : emptyMarkup('没有运行事件','该记录可能来自旧版结果')}</div></div></section>
+            <div class="as-panel-body"><div class="as-event-list">${events.length ? events.slice().reverse().map((event) => `<div class="as-event"><code>#${escapeHtml(event.seq || '—')}</code><strong>${escapeHtml(event.type || event.event || 'event')}<small>${escapeHtml(classificationFailed && (event.type || event.event) === 'run.failed' ? classificationMessage : event.message || '')}</small></strong><time>${escapeHtml(event.timestamp || '')}</time></div>`).join('') : emptyMarkup('没有运行事件','该记录可能来自旧版结果')}</div></div></section>
         </div></main>`;
         ensureTechnicalDrawer();
         document.getElementById('as-back-ledger').addEventListener('click', routeToSystem);

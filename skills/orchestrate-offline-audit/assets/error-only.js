@@ -514,13 +514,17 @@
           const action = actionText(row);
           const issue = sheet.projection_kind === 'material_diagnostic' ? sheet.diagnostic_issues?.[index] : null;
           const reasonCategory = sheet.projection_kind === 'classification_rejection' || issue?.code === 'scenario_unconfirmed'
-            ? '费用类型' : errorReasonCategory([title, ...(row.values || [])].join(' '));
+            ? '费用类型' : row.check_category || errorReasonCategory([title, ...(row.values || [])].join(' '));
           return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [reasonCategory], evidence: row.card_evidence });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
 
       const projections = data.sheets.map((sheet) => {
+        if (sheet.projection_kind === 'pdf_policy') {
+          const label = sheet.audit_type_label;
+          return { sheet, ...groupedIssueView(sheet, label), label };
+        }
         if (sheet.projection_kind === 'material_diagnostic' || sheet.projection_kind === 'classification_rejection') {
           const label = sheet.audit_type_label || (sheet.projection_kind === 'classification_rejection' ? '核销方式无法确认' : '核销类型待确认');
           return { sheet, ...groupedIssueView(sheet, label), label };

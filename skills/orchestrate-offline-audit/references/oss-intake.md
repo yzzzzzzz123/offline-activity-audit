@@ -15,7 +15,8 @@
    以持久 job 目录作为 `--input-dir`。
    深层归档安全、路由、证据提取、决策、验证和发布仍由正式 runner 负责。
 5. 默认模式下，正式 worktree 快照持久化后，runner 在 worktree 写入 `ai-analysis-summary.md`。
-   该文件执行[统一错误原因与处理方式规范](error-reasons.md)：按 ZIP 名称确定的场景分节，每个不同错误只列具体原因，保留必要业务文件 basename、缺失字段、实际与应有数值及差额。
+   分类失败只写“核销方式无法确认”，八类匹配明细留在技术档案；混合批次保留其他包的业务审核错误，分类失败只提示一次。
+   该文件执行[统一错误原因与处理方式规范](error-reasons.md)：按资料内容确定的核销类型分节，每个不同错误只列具体原因，保留必要业务文件 basename、缺失字段、实际与应有数值及差额。
    重复原因合并，但不得截断不同问题或文件组，也不得替换为“另有 N 项”等占位。不重复错误标题，不含总数概况、逐文件识别过程、完整证据链、通过事实、结论、影响、运行元数据、置信度或处理建议；处理方式仅在客户界面的独立字段展示。
    适配器严格只把 `verifyCode`、`analyzeId` 和该确定性中文 Markdown 作为 `result`，POST 到已配置的完整
    `/api/v1/ai/analyze/callback` URL。默认使用 HTTPS；可信内网 HTTP 必须明确选择启用。
@@ -58,7 +59,7 @@ OSS 使用“单下载 worker → 单核销 worker”两级流水线：下载可
 {
   "verifyCode": "HX202603250014",
   "analyzeId": 123,
-  "downloadUrl": "https://exact-allowed-host/path/维护费用.zip?provider-signature=..."
+  "downloadUrl": "https://exact-allowed-host/path/资料.zip?provider-signature=..."
 }
 ```
 
@@ -86,7 +87,7 @@ OSS 使用“单下载 worker → 单核销 worker”两级流水线：下载可
 {
   "verifyCode": "HX202603250014",
   "analyzeId": 123,
-  "result": "# AI 小结\n\n## 维护费用核销\n\n- 未提交 POS 电子表。\n- 促销合同.jpg 的盖章区域模糊，无法辨认印章。"
+  "result": "# AI 小结\n\n## 人员激励核销\n\n- 未提交 POS 电子表。\n- 促销合同.jpg 的盖章区域模糊，无法辨认印章。"
 }
 ```
 
@@ -102,7 +103,7 @@ OSS 使用“单下载 worker → 单核销 worker”两级流水线：下载可
 工具复用既有回调环境配置及 `post_analysis_callback`，使用独立直连、相同三字段与幂等键，不重跑 AI、不下载、不修改业务历史。
 独立回执保存在 `worktrees/.intake/callback-deliveries/`，同一目标及结果已经 delivered 时跳过；失败只重试投递，互斥保护避免并发双发。回执不含地址、凭据或任意响应正文。
 API `1.32` 的 `oss_intake.callback_transport=direct` 表示普通 OSS 自动回调和显式补发都绕过环境与系统代理。
-`unclassified_archive_policy=fail_before_ai_and_callback_reason` 表示 ZIP 名称无法唯一确定核销类型时，在必要归档安全校验后直接生成分类拒绝报告，不调用 AI。该报告以核销失败状态先持久化，再按同一三字段回调契约发送；不能当作模型执行失败或声称材料已经分析。已知类型错件、缺件继续分析；混合多包只打回无法分类的 ZIP，其他包照常处理。
+`unclassified_archive_policy=fail_after_ai_and_callback_reason` 表示按内容识别后，未匹配、歧义或缺必交资料以AI事实形成具体原因并失败。分类报告先持久化，再按三字段回调；模型或读取故障不能伪装成客户缺件。混合批次保留其他已匹配包的核验结果。
 
 ## 响应与状态
 
@@ -132,4 +133,4 @@ API `1.32` 的 `oss_intake.callback_transport=direct` 表示普通 OSS 自动回
 上游使用足够长有效期的新 URL，再次发送相同 `verifyCode`、`analyzeId` 和对象路径。
 这会创建下一个 attempt 及任务目录。此前验证通过的 ZIP 可以保留在原任务目录供诊断。
 
-核销类型是开始业务核验的前提。ZIP 名称未注明类型或包含多个具体类型时，该包核销失败，不调用 AI；运行 manifest、snapshot、正式收据及 OSS job 均为 `failed`，失败代码为 `classification_failed`，不发布 `run.completed`。CLI 以退出码 2 返回已保存的失败收据，OSS 仍按原三字段契约回传 `核销失败：核销方式无法确认` 及全部具体原因；回传成功只表示送达，不能把核销改成完成。回传失败单独记为 `callback_failed`，原核销失败与原因继续保留。混合批次中已知类型照常检查并保留结果，只要仍有无法分类的包，整次记录为失败。类型已确定且业务核验执行完成后，材料缺失、金额差异等才作为完成结果中的失败检查项展示，与正确检查项并列。旧档案若曾把分类退回标成 completed，工作台只读投影为失败，不重写历史证据或自动重发回调。
+资料项缺少、多余、适用条件不明或无法唯一严格匹配时，manifest、snapshot、正式收据及OSS job因 `classification_failed` 为 `failed`，CLI退出2。只有资料项不多不少且唯一匹配才进入对应Skill；审核严格覆盖本类及PDF明列的适用通用要点。资料存在后的内容不合规写入业务审核结果，流程为completed不代表业务通过。回调送达只表示传输完成；送达失败单独保留callback_failed。混合批次中有类型识别失败时整批failed，同时保留可识别包的完整审核结果。历史档案只读，不重写或重发。

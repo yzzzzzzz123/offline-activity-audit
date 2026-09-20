@@ -35,6 +35,7 @@ from .orchestrator import (
 )
 from .workbench_store import (
     ANALYSIS_SUMMARY_FILENAME,
+    CLASSIFICATION_FAILURE_MESSAGE,
     atomic_write_json,
     read_json_file,
     render_analysis_summary_markdown,
@@ -909,6 +910,8 @@ def build_callback_result(result: dict[str, Any]) -> str:
 
     scenarios = [str(value) for value in result.get("scenarios") or []]
     if result.get("status") == "failed" and not view_payload.get("sheets"):
+        if (result.get("failure") or {}).get("code") == "classification_failed":
+            return CLASSIFICATION_FAILURE_MESSAGE
         message = str((result.get("failure") or {}).get("message") or "").strip()
         if not message:
             raise OSSIntakeExecutionError("核销失败结果缺少具体原因")

@@ -11,12 +11,11 @@ import zipfile
 from pathlib import Path
 
 from audit_core.codex_runner import (
-    SKILL_BY_SCENARIO,
     _apply_poster_material_calibrations,
     _apply_poster_material_document_calibrations,
 )
 from audit_core.common import POSTER_MATERIAL_QUANTITY_CALIBRATION_PREFIX
-from audit_core.html_report import SCENARIO_SHEETS
+from audit_core.scenario_registry import SCENARIO_SHEETS, SKILL_BY_SCENARIO
 from audit_core.orchestrator import EVIDENCE_SCHEMA, SCENARIO_ORDER
 from audit_core.poster_material import _contract_scope_summary, audit_poster_material_case
 
@@ -96,18 +95,24 @@ class ScenarioZipProfilerTests(unittest.TestCase):
 
 
 class ScenarioCreatorContractTests(unittest.TestCase):
-    def test_current_main_flow_registers_all_ten_scenarios(self) -> None:
+    def test_pdf_integration_checks_validate_all_eight_skills(self):
+        for scenario, skill in SKILL_BY_SCENARIO.items():
+            with self.subTest(scenario=scenario):
+                checks = INTEGRATION.run_checks(PROJECT_ROOT, scenario=scenario, skill_name=skill.name,
+                                                 audit_module="pdf_workflow.py", sheet_name="")
+                self.assertTrue(checks)
+                self.assertEqual([c for c in checks if not c.ok], [])
+
+    def test_current_main_flow_registers_exactly_the_eight_pdf_types(self) -> None:
         expected = (
             "personnel_incentive",
             "promotional_display",
             "poster_material",
-            "other_expense",
-            "maintenance_fee",
             "giveaway_promotion",
             "price_difference_support",
-            "pos_target_incentive",
             "entry_fee",
             "self_procured_gift_material",
+            "pos_target_incentive",
         )
         self.assertEqual(SCENARIO_ORDER, expected)
         self.assertEqual(tuple(EVIDENCE_SCHEMA), expected)
@@ -115,13 +120,13 @@ class ScenarioCreatorContractTests(unittest.TestCase):
         self.assertEqual(tuple(SCENARIO_SHEETS), expected)
 
         result_schema = json.loads(
-            (PROJECT_ROOT / "contracts" / "audit-result.schema.json").read_text(
+            (PROJECT_ROOT / "contracts" / "pdf-material-classification.schema.json").read_text(
                 encoding="utf-8"
             )
         )
         self.assertEqual(
-            result_schema["properties"]["scenario"]["enum"],
-            list(expected),
+            set(result_schema["properties"]["candidate_scenarios"]["items"]["enum"]),
+            set(expected),
         )
         baseline = (
             CREATOR_ROOT / "references" / "current-scenarios.md"
@@ -134,13 +139,11 @@ class ScenarioCreatorContractTests(unittest.TestCase):
             "audit-personnel-incentive",
             "audit-promotional-display",
             "audit-poster-material",
-            "audit-other-expense",
-            "audit-maintenance-fee",
             "audit-giveaway-promotion",
             "audit-price-difference-support",
-            "audit-pos-target-incentive",
             "audit-entry-fee",
             "audit-self-procured-gift-material",
+            "audit-pos-target-incentive",
             "create-offline-audit-scenario",
             "orchestrate-offline-audit",
         ):

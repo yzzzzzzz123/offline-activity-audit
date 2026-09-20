@@ -1,73 +1,151 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "scenario_id": "price_difference_support",
   "skill_name": "audit-price-difference-support",
-  "display_name": "价格补差",
-  "aliases": ["补差", "差额补偿"],
-  "order": 7,
-  "provenance": {
-    "source_zip_basename": "SQ202512270003-HX202601160053-补差.zip",
-    "source_zip_sha256": "97a92c8e0d294d3d4cffafc751688d38a78a80c06e9fdba1534b44f70a3531e2",
-    "source_zip_size": 35122673,
-    "generator_skill_version": "1.0",
-    "business_requirements_summary": [
-      "经销商盖章POS及其电子表必须同时提交。",
-      "统一模板盖章结算单必须列明计算和金额。",
-      "全部活动门店须提交活动期内带日期、地址、时间水印并显示活动价的现场照片。",
-      "签章促销合同是补差单价、数量与预算上限的权威来源。"
-    ]
-  },
-  "scope": {
-    "in_scope": ["促销活动让利后按合同约定对终端价格差额进行补偿"],
-    "excluded": ["合同未授权的零售价差额", "维护费用", "额外搭赠", "POS达标激励", "直营"],
-    "audit_object": "一份价格补差申报包及其分组阻断问题"
-  },
-  "evidence_roles": [
-    {"role_id": "stamped_pos_data", "description": "经销商盖章POS可视数据", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": null, "nested_in": null, "name_markers": ["POS", "销售"], "ai_visible": true, "required": true, "binding_rule": "外层名称明确为POS或销售数据的视觉文件全部绑定，印章和内容以可见事实确认。"},
-    {"role_id": "pos_data_spreadsheet", "description": "POS电子表", "extensions": [".xlsx", ".xlsm"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["POS", "销售"], "ai_visible": false, "required": true, "binding_rule": "唯一Excel由确定性代码读取；缺失形成问题，多份停止。"},
-    {"role_id": "signed_promotional_contract", "description": "签章促销合同", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["促销协议", "促销合同"], "ai_visible": true, "required": true, "binding_rule": "唯一合同候选固定绑定。"},
-    {"role_id": "settlement", "description": "统一模板盖章结算单", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["结算单", "结算表"], "ai_visible": true, "required": true, "binding_rule": "唯一结算候选固定绑定为申报来源。"},
-    {"role_id": "activity_photo", "description": "全门店水印活动价照片", "extensions": [".jpg", ".jpeg", ".png", ".webp"], "minimum": 1, "maximum": null, "nested_in": "field_photo_archive", "name_markers": ["照片", "返图", "现场"], "ai_visible": true, "required": true, "binding_rule": "唯一RAR安全解压后的每张图片逐一绑定，按可见地点计证。"}
+  "display_name": "补差",
+  "scope": "价格补差、满减返还",
+  "policy_version": "2026-09-18.pdf.3",
+  "classification_policy": "material_content",
+  "label": "补差",
+  "materials": [
+    {
+      "id": "pos",
+      "text": "经销商盖章 POS 数据",
+      "when": "always"
+    },
+    {
+      "id": "price_evidence",
+      "text": "所有活动门店清晰展示活动价格的现场水印照片，或线上小象超市截图",
+      "when": "always"
+    },
+    {
+      "id": "full_reduction_evidence",
+      "text": "满减返还活动存在证明（现场水印照片、小票等，须对应本次费用，可与价格证明共用同一来源）",
+      "when": "always"
+    },
+    {
+      "id": "settlement",
+      "text": "结算单（公司统一模板，客户盖章）",
+      "when": "always"
+    },
+    {
+      "id": "promotion_contract",
+      "text": "签章后的促销合同",
+      "when": "always"
+    }
   ],
-  "ai_stages": [
-    {"stage_id": "price_difference_visual_facts", "input_roles": ["stamped_pos_data", "signed_promotional_contract", "settlement", "activity_photo"], "reference_scope": [], "schema_file": "references/evidence.schema.json", "source_coverage_rule": "每个绑定视觉源必须且只能返回一次，来源名和角色不得改写。"}
-  ],
-  "authority_edges": [
-    {"from": "signed_promotional_contract", "to": "pos_data_spreadsheet", "purpose": "限定期间、门店、商品、活动价、补差单价、数量和预算"},
-    {"from": "stamped_pos_data", "to": "pos_data_spreadsheet", "purpose": "逐项和合计对应"},
-    {"from": "activity_photo", "to": "signed_promotional_contract", "purpose": "逐门店证明活动期内活动价执行"},
-    {"from": "settlement", "to": "claim_amount", "purpose": "确定申报金额"}
-  ],
-  "forbidden_edges": [
-    {"from": "retail_price_difference", "to": "support_unit_amount", "purpose": "终端降价幅度不能替代合同补差单价"},
-    {"from": "partial_store_photos", "to": "unphotographed_stores", "purpose": "不得将样本照片外推"},
-    {"from": "stamped_pos_data", "to": "missing_pos_spreadsheet", "purpose": "盖章图片不能替代电子表"}
-  ],
-  "controls": [
-    {"control_id": "required_materials", "source": "全部角色", "object": "资料完整性", "expectation": "五类资料齐全", "comparison": "deterministic", "blocking": true, "error_group": "资料完整性", "resubmission": "按缺失清单补交。"},
-    {"control_id": "fee_nature", "source": "合同与结算", "object": "价格补差性质", "expectation": "正文明确为促销价格差额补偿", "comparison": "visible", "blocking": true, "error_group": "费用类型", "resubmission": "补交费用性质明确的签章合同和结算单。"},
-    {"control_id": "pos_correspondence", "source": "盖章POS与电子表", "object": "门店、商品、数量、价格和金额", "expectation": "逐项唯一且合计一致", "comparison": "unique_fuzzy", "blocking": true, "error_group": "POS对应", "resubmission": "更正并重交盖章POS与电子表。"},
-    {"control_id": "contract_and_settlement", "source": "合同与结算", "object": "权威条款", "expectation": "签章、模板、主体、周期、单价、数量、公式和金额完整一致", "comparison": "deterministic", "blocking": true, "error_group": "合同结算", "resubmission": "补正合同或统一模板盖章结算单。"},
-    {"control_id": "all_store_photo_coverage", "source": "现场照片", "object": "全部活动门店", "expectation": "每店至少一张有效水印活动价照片", "comparison": "unique_fuzzy", "blocking": true, "error_group": "照片覆盖", "resubmission": "逐店补交活动期内日期、地址、时间及活动价清楚的照片。"},
-    {"control_id": "amount_recalculation", "source": "合同、POS电子表和结算单", "object": "申报金额", "expectation": "合同补差单价复算并受数量和预算上限约束后与申报一致", "comparison": "deterministic", "blocking": true, "error_group": "金额复算", "resubmission": "补正POS、合同或结算，使金额可复算且一致。"}
-  ],
-  "amount_policy": {
-    "claim_source": "经销商盖章结算单",
-    "supported_amount_rule": "合同范围内合格POS数量×合同补差单价，并受合同数量、预算和申报上限约束；任一阻断控制失败时为0。",
-    "rounding": "人民币元，ROUND_HALF_UP保留两位小数",
-    "blocked_rule": "任一阻断项失败时全额暂缓",
-    "conclusions": ["pass", "human_review"]
-  },
-  "output": {
-    "sheet_name": "价格补差核销",
-    "html_mode": "error_only",
-    "count_unit": "个问题",
-    "required_facts": ["问题来源", "识别内容", "规则要求", "核销影响", "补交动作"],
-    "prohibited_terms": ["prompt", "schema", "临时目录", "系统内部路径"]
-  },
-  "dependencies": [
-    {"name": "openpyxl", "purpose": "确定性读取POS电子表。"},
-    {"name": "bsdtar", "purpose": "安全列举并解压现场照片RAR。"},
-    {"name": "jsonschema", "purpose": "校验证据、manifest和结果结构。"}
+  "audit_points": [
+    {
+      "id": "submission_deadline",
+      "text": "核销自活动结束日起3个月内提交，超期不再核销。月份按日历月；必须有真实活动结束与提交日期，不能拿文件名或分析日期代替。进场费按原文“无时间要求”不作活动时限拒付，仍检查水印日期是否存在。",
+      "effect": "reject",
+      "when": "activity_deadline",
+      "numeric": false
+    },
+    {
+      "id": "review_deadline",
+      "text": "财务一审已超2个月且资料有误或缺失，不再补，直接0核销；只有同时具备时间和错误/缺失证据才触发。起算事件不清不能猜测。",
+      "effect": "zero",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "scene_authenticity",
+      "text": "确保费用场景真实；张冠李戴不予核销，额度不返还。仅有模糊或读不清不能认定张冠李戴。",
+      "effect": "reject",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "fraud",
+      "text": "有充分证据确认核销造假时0核销并记录罚款要求（先费用池后经销商额度）；不推测造假，不执行罚款、扣款或通知。",
+      "effect": "zero",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "bi_quota",
+      "text": "BI额度不足不允许先做活动后补申请；以业务发生时的额度与申请、活动时间证据判断，不能用当前余额代替。",
+      "effect": "reject",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "settlement_template_seal",
+      "text": "结算单须为公司统一模板并由客户盖章。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "contract_signed",
+      "text": "促销合同已签章。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "pos_fields",
+      "text": "POS必含5+2：活动时间、SKU/69码、商品名称、销售数量、销售单价、销售金额、销售金额及数量合计；缺项即不完整。",
+      "effect": "missing_material",
+      "when": "uses_pos",
+      "numeric": false
+    },
+    {
+      "id": "pos_seal",
+      "text": "要求提交的POS数据有经销商盖章。",
+      "effect": "missing_material",
+      "when": "required_pos",
+      "numeric": false
+    },
+    {
+      "id": "pos_arithmetic",
+      "text": "销售金额=数量×销售单价，并核对销售金额、数量合计。",
+      "effect": "missing_material",
+      "when": "uses_pos",
+      "numeric": true
+    },
+    {
+      "id": "application_quantity_price",
+      "text": "数量、单价与申请不符或填错，直接0核销。必须区分销售单价与奖励/补差单价，不把实际销量低于计划自行解释为填错；比较口径不清记无法核验。",
+      "effect": "zero",
+      "when": "uses_pos",
+      "numeric": true
+    },
+    {
+      "id": "reward_unit_price",
+      "text": "活动申请对应69码的奖励/补差单价与结算单奖励单价一致；不是将POS零售价与奖励单价比较。",
+      "effect": "zero",
+      "when": "not_training",
+      "numeric": true
+    },
+    {
+      "id": "settlement_pos_quantity",
+      "text": "结算单每个SKU销售数量与POS对应销售数量一致。",
+      "effect": "zero",
+      "when": "not_training",
+      "numeric": true
+    },
+    {
+      "id": "claim_ceiling",
+      "text": "结算单本次核销金额小于等于申请金额。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": true
+    },
+    {
+      "id": "price_evidence",
+      "text": "所有活动门店现场照片有水印且活动价格清晰，或提供线上小象超市截图；线上证据不套线下照片水印格式。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false
+    },
+    {
+      "id": "full_reduction_evidence",
+      "text": "核验满减返还的现场水印照片、小票等活动存在证明，须对应本次费用；无对应证明为缺资料。此项必须核验，不能以是否满减无法确定为由跳过或中止审核。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false
+    }
   ]
 }

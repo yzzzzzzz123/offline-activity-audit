@@ -1,4 +1,4 @@
 interface:
-  display_name: "促销陈列核销"
-  short_description: "使用数据库商品主账及按需参考图核验合同与现场照片"
-  default_prompt: "使用 $audit-promotional-display 提取合同和现场照片事实，从商品数据库识别候选，仅按数据库 image_manifest_key 从私有 OSS 读取参考图；Excel 读取、商品对账、门店判断、金额计算和结果生成交由确定性程序完成。"
+  display_name: "陈列堆头核销"
+  short_description: "按指定PDF资料清单及审核要点核验陈列堆头，保留来源和明确失败原因"
+  default_prompt: "使用 $audit-promotional-display，仅按指定PDF审核陈列堆头资料。"

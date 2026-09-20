@@ -30,7 +30,7 @@ from audit_core.model_metrics import collect_model_artifacts, record_model_attem
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_SKILL = PROJECT_ROOT / "skills" / "audit-promotional-display"
+SOURCE_SKILL = PROJECT_ROOT / "contracts" / "legacy" / "promotional_display"
 CORE_SENTINEL = "CONTRACT_CORE_SKU_MUST_NOT_IDENTIFY_PHOTO"
 ATTACHMENT_SENTINEL = "ATTACHMENT_SKU_MUST_NOT_IDENTIFY_PHOTO"
 _CALL_CONTEXT: ContextVar[str] = ContextVar("display_pipeline_test_context", default="absent")

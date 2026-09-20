@@ -1,4 +1,0 @@
-interface:
-  display_name: "维护费用核销"
-  short_description: "核验维护费用的 POS、合同、结算和活动资料"
-  default_prompt: "通过父级编排器使用 $audit-maintenance-fee 核销一个已登记的 maintenance_fee 材料包，并返回经过验证的自包含 HTML。"

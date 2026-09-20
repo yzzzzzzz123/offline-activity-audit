@@ -112,9 +112,7 @@ class MaterialDiagnosticOutputTests(unittest.TestCase):
             self.assertEqual(sheet["projection_kind"], "classification_rejection")
             self.assertEqual(sheet["rows"][0]["card_evidence"]["source_files"], [archive["source_archive"]])
         summary = render_analysis_summary_markdown(view, {})
-        self.assertEqual(summary.count("\n- "), 2)
-        for archive in result["archives"]:
-            self.assertIn(archive["reason"], summary)
+        self.assertEqual(summary, "核销方式无法确认")
         for fabricated in ("AI", "已签促销合同", "POS", "建议", "重新提交", "打回申请"):
             self.assertNotIn(fabricated, summary)
 

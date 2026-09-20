@@ -1,459 +1,319 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import tempfile
 import threading
 import time
 import unittest
-import zipfile
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import quote
 
-from PIL import Image
-
 from audit_core.archive_input import ArchiveInputError
 from audit_core.common import AuditError
 from audit_core.oss_intake import OSSIntakeCallbackError, OSSIntakeConfig, OSSIntakeService
-from audit_core.workbench_html import render_static_run_archive_html
 from audit_core.workbench_runtime import ROOT_HTML, _input_archive_names, run_persistent_audit
 from audit_core.workbench_server import WorkbenchCatalog
+from tests.pdf_test_support import PolicyProvider, archive_bytes as _archive_bytes, bundle, image_bytes
 
-
-ARCHIVE_NAME = "HX202601160053-广州南雄维护费用申请-9.zip"
 OSS_HOST = "audit-materials.oss-cn-hangzhou.aliyuncs.com"
 
 
-def _image_bytes(color: str) -> bytes:
-    output = io.BytesIO()
-    Image.new("RGB", (12, 12), color).save(output, format="PNG")
-    return output.getvalue()
-
-
-def _archive_bytes(files: dict[str, bytes]) -> bytes:
-    output = io.BytesIO()
-    with zipfile.ZipFile(output, "w") as archive:
-        for name, content in files.items():
-            archive.writestr(name, content)
-    return output.getvalue()
-
-
-def _maintenance_files() -> dict[str, bytes]:
-    return {
-        "结算单.jpg": _image_bytes("white"),
-        "服务费结算单.jpg": _image_bytes("blue"),
-        "POS数据.jpg": _image_bytes("red"),
-    }
-
-
 class MaterialDiagnosticWorkflowTests(unittest.TestCase):
-    def setUp(self) -> None:
+    def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.inputs = self.root / "input"
-        self.inputs.mkdir()
         self.worktrees = self.root / "worktrees"
-        self.provider_calls: list[dict] = []
-        self.temporary_sources: list[Path] = []
+        self.provider = PolicyProvider()
 
-    def bundle(self, files: dict[str, bytes], name: str = ARCHIVE_NAME) -> Path:
-        path = self.inputs / name
-        path.write_bytes(_archive_bytes(files))
-        return path
+    def bundle(self, name="未注明类型.zip", files=None):
+        return bundle(self.inputs, name, files)
 
-    def provider(self, case: dict, temporary: Path) -> dict:
-        self.assertEqual(case["kind"], "material_diagnostic")
-        self.provider_calls.append(case)
-        self.temporary_sources.append(temporary)
-        archives = []
-        for archive in case["archives"]:
-            documents = []
-            for item in archive["inventory"]:
-                self.assertTrue(Path(item["path"]).is_file())
-                if item["kind"] != "visual":
-                    continue
-                source = item["source_file"]
-                role = "stamped_pos_data" if "POS" in source else "settlement"
-                documents.append({
-                    "file_id": item["file_id"], "document_type": role,
-                    "confidence": "high", "title": "POS销售数据" if role == "stamped_pos_data" else "维护费用结算单",
-                    "document_number": item["file_id"], "page_number": 1,
-                    "total_pages": 1, "visible_facts": ["维护费用材料"],
-                    "limitations": [],
-                })
-            archives.append({
-                "archive_id": archive["archive_id"],
-                "scenario_candidates": [{"scenario": "maintenance_fee", "confidence": "high", "basis": "提交材料可见维护费用标题"}],
-                "documents": documents,
-            })
-        return {"schema_version": "1.0", "archives": archives}
+    def run_audit(self, provider=None, *, scenario=None):
+        return run_persistent_audit("20260917-pdf-workflow", producer_model="codex",
+                                   input_dir=self.inputs, worktrees_root=self.worktrees,
+                                   evidence_provider=provider or self.provider, scenario=scenario)
 
-    def run_audit(self, provider=None, *, scenario: str | None = None) -> dict:
-        return run_persistent_audit(
-            "20260910-material-workflow", producer_model="codex",
-            input_dir=self.inputs, worktrees_root=self.worktrees,
-            evidence_provider=provider or self.provider,
-            scenario=scenario,
-        )
-
-    def conflicting_scenario_provider(self, case: dict, temporary: Path) -> dict:
-        evidence = self.provider(case, temporary)
-        for archive in evidence["archives"]:
-            archive["scenario_candidates"] = [
-                {"scenario": "price_difference_support", "confidence": "high", "basis": "文件可见补差字样"},
-                {"scenario": "personnel_incentive", "confidence": "high", "basis": "文件可见人员激励字样"},
-            ]
-        return evidence
-
-    def business_provider(self, case: dict, temporary: Path) -> dict:
-        if case.get("kind") == "material_diagnostic":
-            return self.provider(case, temporary)
-        self.assertEqual(case["scenario"], "maintenance_fee")
-        documents = []
-        for item in case["document_roles"]:
-            documents.append({
-                "source_file": Path(item["path"]).name, "role": item["role"],
-                "document_type": "图片", "title": None, "party_names": [],
-                "customer_name": None, "activity_start": None, "activity_end": None,
-                "fee_type": None, "expense_lines": [], "eligible_pos_scope": None,
-                "calculation_method": None, "rate": None, "amount_ceiling": None,
-                "sales_quantity": None, "sales_amount": None, "claimed_amount": None,
-                "company_template_visible": "not_applicable", "dealer_seal_visible": "not_visible",
-                "signed_visible": "not_applicable", "pos_lines": [], "pos_total_quantity": None,
-                "pos_total_sales_amount": None, "activity_date": None, "activity_location": None,
-                "activity_content": None, "visible_summary": "可见POS销售数据", "limitations": [],
-            })
-        return {"schema_version": "1.0", "scenario": "maintenance_fee", "documents": documents, "extraction_notes": []}
-
-    def assert_completed_diagnostic(self, receipt: dict) -> tuple[dict, str]:
-        workspace = Path(receipt["worktree"])
-        self.assertEqual(receipt["status"], "completed")
-        self.assertGreater(receipt["error_count"], 0)
-        snapshot = json.loads((workspace / "snapshot.json").read_text(encoding="utf-8"))
-        result = json.loads((workspace / "analysis/material-diagnostic/result.json").read_text(encoding="utf-8"))
-        self.assertEqual(snapshot["run"]["status"], "completed")
-        self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 0)
-        self.assertTrue(result["diagnostic_only"])
-        self.assertEqual(result["summary"], {"conclusion": "human_review"})
-        self.assertNotIn("approved_amount", json.dumps(result))
-        self.assertNotIn("material_diagnostic", receipt["scenarios"])
-        self.assertTrue((workspace / "offline-activity-audit.html").is_file())
-        self.assertFalse(list(workspace.rglob("*.xlsx")))
-        self.assertFalse(list(workspace.rglob("*.jpg")))
-        self.assertTrue(all(not path.exists() for path in self.temporary_sources))
-        return result, Path(receipt["analysis_summary"]).read_text(encoding="utf-8")
-
-    def test_two_settlements_and_missing_contract_continue_ai_and_publish_report(self) -> None:
-        archive = self.bundle(_maintenance_files())
-        original_zip = archive.read_bytes()
-        original_html = ROOT_HTML.read_bytes()
-        receipt = self.run_audit()
-        result, summary = self.assert_completed_diagnostic(receipt)
-        self.assertEqual(len(self.provider_calls), 1)
-        issues = result["archives"][0]["issues"]
-        self.assertTrue(any(item["code"] == "missing_material" and "合同" in item["title"] for item in issues))
-        conflict = next(item for item in issues if item["code"] == "singleton_role_ambiguous")
-        self.assertEqual(set(conflict["source_files"]), {"结算单.jpg", "服务费结算单.jpg"})
-        self.assertFalse(any(item["code"] == "duplicate_submission" for item in issues))
-        for text in ("已签促销合同", "POS", "结算单.jpg", "服务费结算单.jpg", "主件与补充件关系未明确"):
-            self.assertIn(text, summary)
-        self.assertEqual(archive.read_bytes(), original_zip)
-        self.assertEqual(ROOT_HTML.read_bytes(), original_html)
-
-    def test_zip_filename_keeps_maintenance_type_despite_conflicting_ai_candidates(self) -> None:
-        self.bundle(_maintenance_files())
-        receipt = self.run_audit(self.conflicting_scenario_provider)
-        result, summary = self.assert_completed_diagnostic(receipt)
-        self.assertEqual(receipt["scenarios"], ["maintenance_fee"])
-        archive = result["archives"][0]
-        self.assertEqual(archive["scenario_hint"], "maintenance_fee")
-        self.assertEqual(archive["scenario"], "maintenance_fee")
-        self.assertEqual(archive["scenario_label"], "维护费用")
-        issues = archive["issues"]
-        self.assertFalse(any(issue["code"] == "scenario_unconfirmed" for issue in issues))
-        missing = [issue["title"] for issue in issues if issue["code"] == "missing_material"]
-        self.assertTrue(any("已签促销合同" in title for title in missing))
-        self.assertTrue(any("POS" in title and "电子表" in title for title in missing))
-        self.assertTrue(any("费用专项支持材料" in title for title in missing))
-        relationship = next(issue for issue in issues if issue["code"] == "singleton_role_ambiguous")
-        self.assertEqual(set(relationship["source_files"]), {"结算单.jpg", "服务费结算单.jpg"})
-        self.assertIn("维护费用", summary)
-        self.assertIn("已签促销合同", summary)
-        self.assertIn("结算单.jpg", summary)
-        self.assertIn("服务费结算单.jpg", summary)
-        for unselected in ("核销类型待确认", "价格补差", "人员激励", "付款或转账凭证"):
-            self.assertNotIn(unselected, summary)
-
-    def test_each_duplicate_group_survives_saved_summary(self) -> None:
-        white, blue = _image_bytes("white"), _image_bytes("blue")
-        names = {"甲/结算单.jpg": white, "乙/结算单.jpg": white,
-                 "甲/服务费结算单.jpg": blue, "乙/服务费结算单.jpg": blue}
-        self.bundle(names)
-        result, summary = self.assert_completed_diagnostic(self.run_audit())
-        duplicates = [item for item in result["archives"][0]["issues"] if item["code"] == "duplicate_submission"]
-        self.assertEqual(len(duplicates), 2)
-        for source in names:
-            self.assertIn(source.rsplit("/", 1)[-1], summary)
-        self.assertEqual(summary.count("以下 2 份文件内容完全相同"), 2)
-        self.assertNotIn("甲/", summary)
-        self.assertNotIn("乙/", summary)
-        self.assertNotIn("另有", summary)
-
-    def assert_classification_rejection(self, receipt: dict, *, pure: bool = True) -> tuple[dict, str]:
-        workspace = Path(receipt["worktree"])
+    def assert_rejection(self, receipt):
         self.assertEqual(receipt["status"], "failed")
         self.assertEqual(receipt["failure"]["code"], "classification_failed")
+        self.assertEqual(receipt["failure"]["message"], "核销方式无法确认")
+        workspace = Path(receipt["worktree"])
         result = json.loads((workspace / "analysis/classification-rejection/result.json").read_text(encoding="utf-8"))
         snapshot = json.loads((workspace / "snapshot.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["decision_source"], "material_content")
+        self.assertEqual(snapshot["run"]["status"], "failed")
+        self.assertTrue((workspace / "offline-activity-audit.html").is_file())
+        summary = (workspace / "ai-analysis-summary.md").read_text(encoding="utf-8")
+        self.assertNotIn("改ZIP", summary)
+        self.assertNotIn("未注明核销方式", summary)
+        self.assertNotIn("未发现错误", summary)
+        if not receipt["scenarios"]:
+            self.assertEqual(summary, "核销方式无法确认")
+        return result, summary, snapshot
+
+    def test_arbitrary_and_conflicting_zip_names_do_not_override_content(self):
+        for name in ("未注明类型.zip", "维护费用-进场费.zip", "搭赠.zip"):
+            with self.subTest(name=name):
+                source = self.bundle(name)
+                receipt = self.run_audit()
+                self.assertEqual(receipt["status"], "completed")
+                self.assertEqual(receipt["scenarios"], ["poster_material"])
+                source.unlink()  # This test's generated fixture only.
+        self.assertEqual(len(self.provider.calls), 6)
+
+    def test_missing_materials_reject_before_skill_and_keep_all_chinese_names(self):
+        self.bundle()
+        provider = PolicyProvider(missing={0: ("invoice", "settlement", "promotion_contract")})
+        receipt = self.run_audit(provider)
+        result, summary, snapshot = self.assert_rejection(receipt)
+        self.assertEqual(receipt["scenarios"], [])
+        self.assertEqual([c["kind"] for c in provider.calls], ["pdf_material_classification"])
+        workspace = Path(receipt["worktree"])
+        self.assertFalse((workspace / "analysis/results/poster_material.json").exists())
+        for text in ("发票或收据", "结算单", "促销合同"):
+            self.assertIn(text, result["archives"][0]["reason"])
+        self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 0)
+
+    def test_only_settlement_and_pos_fail_all_types_regardless_of_zip_name(self):
+        def two_materials(case, value):
+            if case["kind"] != "pdf_material_classification":
+                self.fail("只有结算单和POS的包不得进入任何类型审核")
+            sources = {"settlement": case["units"][0]["unit_id"], "pos": case["units"][1]["unit_id"]}
+            result = value["classification"]
+            result.update(candidate_scenarios=[], materials=[], reason="仅有结算单和POS，没有完整匹配的PDF资料清单")
+            for match in result["material_matches"]:
+                covered = set()
+                for item in match["materials"]:
+                    if item["id"] in sources:
+                        item.update(state="present", source_ids=[sources[item["id"]]], reason="对应资料实际存在")
+                        covered.add(item["id"])
+                    elif item["state"] != "not_applicable":
+                        item.update(state="missing", source_ids=[], reason="本包仅含结算单和POS，未提交此资料项")
+                match.update(supported=False, source_ids=list(sources.values()), extra_materials=[
+                    {"description": role, "reason": "该类清单未列此资料项", "source_ids": [uid]}
+                    for role, uid in sources.items() if role not in covered])
+        for name in ("维护费用.zip", "人员激励.zip"):
+            with self.subTest(name=name):
+                source = self.bundle(name, {"01.png": image_bytes(), "02.png": image_bytes("blue")})
+                provider = PolicyProvider(mutate=two_materials)
+                receipt = self.run_audit(provider)
+                result, summary, _ = self.assert_rejection(receipt)
+                self.assertEqual(receipt["scenarios"], [])
+                self.assertEqual(len(provider.calls), 1)
+                self.assertIn("促销合同", result["archives"][0]["reason"])
+                self.assertIn("红包截图或临促工资打款截图", result["archives"][0]["reason"])
+                packet = json.loads((Path(receipt["worktree"]) / "analysis/pdf-policy/evidence.json").read_text(encoding="utf-8"))["packets"][0]
+                self.assertEqual(packet["classification"]["candidate_scenarios"], [])
+                self.assertEqual(len(packet["classification"]["material_matches"]), 8)
+                self.assertTrue(all(not item["supported"] for item in packet["classification"]["material_matches"]))
+                source.unlink()  # Only this generated fixture, never original input.
+
+    def test_unmatched_and_ambiguous_content_reject_without_forcing_a_type(self):
+        self.bundle()
+        for candidates, code in (([], "material_type_unmatched"),
+                                 (["personnel_incentive", "poster_material"], "material_type_ambiguous")):
+            with self.subTest(code=code):
+                provider = PolicyProvider(candidates={0: candidates})
+                result, summary, snapshot = self.assert_rejection(self.run_audit(provider))
+                self.assertEqual(result["archives"][0]["reason_code"], code)
+                self.assertEqual(len(provider.calls), 1)
+                self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 0)
+
+    def test_no_type_can_enter_audit_with_missing_material_items(self):
+        from audit_core.pdf_policy import requirements
+        from audit_core.scenario_registry import SCENARIO_ORDER
+        self.bundle()
+        for scenario in SCENARIO_ORDER:
+            with self.subTest(scenario=scenario):
+                provider = PolicyProvider((scenario,), missing={0: [r.id for r in requirements(scenario)]})
+                receipt = self.run_audit(provider)
+                self.assert_rejection(receipt)
+                self.assertEqual(receipt["scenarios"], [])
+                self.assertEqual(len(provider.calls), 1)
+                workspace = Path(receipt["worktree"])
+                self.assertFalse((workspace / f"analysis/results/{scenario}.json").exists())
+
+    def test_extra_item_is_persisted_with_its_source_and_does_not_enter_audit(self):
+        self.bundle(files={"合同和运输单.png": image_bytes()})
+        extra = {"description": "独立运输单", "reason": "物料制作清单未列此资料项", "source_ids": ["a001-f0001"]}
+        provider = PolicyProvider(extra={0: [extra]})
+        receipt = self.run_audit(provider)
+        result, summary, _ = self.assert_rejection(receipt)
+        self.assertIn("清单外资料项：独立运输单", result["archives"][0]["reason"])
+        self.assertIn("合同和运输单.png", result["archives"][0]["reason"])
+        self.assertEqual(len(provider.calls), 1)
+        packet = json.loads((Path(receipt["worktree"]) / "analysis/pdf-policy/evidence.json").read_text(encoding="utf-8"))["packets"][0]
+        match = next(m for m in packet["classification"]["material_matches"] if m["scenario"] == "poster_material")
+        self.assertEqual(match["extra_materials"], [extra])
+
+    def test_multiple_same_role_files_and_identical_photos_are_not_type_conflicts(self):
+        self.bundle(files={"甲/照片.png": image_bytes(), "乙/照片.png": image_bytes(), "第二页.png": image_bytes("blue")})
+        receipt = self.run_audit()
+        self.assertEqual(receipt["status"], "completed")
+        packet = json.loads((Path(receipt["worktree"]) / "analysis/pdf-policy/evidence.json").read_text(encoding="utf-8"))["packets"][0]
+        self.assertEqual(len(packet["documents"]), 3)
+        self.assertEqual(len(packet["classification"]["source_ids"]), 3)
+
+    def test_two_packages_of_same_type_keep_results_passes_and_sources(self):
+        self.bundle("甲.zip")
+        self.bundle("乙.zip")
+        receipt = self.run_audit()
+        workspace = Path(receipt["worktree"])
+        result = json.loads((workspace / "analysis/results/poster_material.json").read_text(encoding="utf-8"))
+        snapshot = json.loads((workspace / "snapshot.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(result["archives"]), 2)
+        self.assertEqual(len(snapshot["view"]["sheets"]), 2)
+        self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 2)
+        self.assertEqual(len({a["archive_id"] for a in result["archives"]}), 2)
+        summary = Path(receipt["analysis_summary"]).read_text(encoding="utf-8")
+        self.assertIn("甲.zip", summary)
+        self.assertIn("乙.zip", summary)
+
+    def test_mixed_batch_keeps_matched_results_but_run_is_failed(self):
+        self.bundle("A.zip")
+        self.bundle("B.zip")
+        provider = PolicyProvider(candidates={1: []})
+        receipt = self.run_audit(provider)
+        result, summary, snapshot = self.assert_rejection(receipt)
+        self.assertEqual(receipt["scenarios"], ["poster_material"])
+        self.assertEqual(len(snapshot["view"]["sheets"]), 2)
+        self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 1)
+        self.assertTrue((Path(receipt["worktree"]) / "analysis/results/poster_material.json").exists())
+        self.assertEqual(result["archives"][0]["source_archive"], "B.zip")
+        self.assertTrue(summary.startswith("核销方式无法确认\n\n"))
+        self.assertIn("## KT板等物料制作", summary)
+        self.assertIn("A.zip", summary)
+        self.assertNotIn("资料清单不匹配", summary)
+
+    def test_selection_classifies_every_input_then_filters_confirmed_types(self):
+        self.bundle("A-人员激励.zip")
+        self.bundle("B-物料.zip")
+        provider = PolicyProvider(("poster_material", "entry_fee"))
+        receipt = self.run_audit(provider, scenario="entry_fee")
+        self.assertEqual(receipt["scenarios"], ["entry_fee"])
+        self.assertEqual([c["kind"] for c in provider.calls], ["pdf_material_classification", "pdf_material_classification", "pdf_policy_audit"])
+        self.assertEqual(_input_archive_names(self.inputs, "entry_fee"), ["A-人员激励.zip", "B-物料.zip"])
+        manifest = json.loads((Path(receipt["worktree"]) / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(manifest["source_archives"]), 2)
+
+    def test_selection_cannot_hide_an_input_with_missing_material_items(self):
+        self.bundle("A.zip")
+        self.bundle("B.zip")
+        provider = PolicyProvider(("poster_material", "entry_fee"), missing={0: ("invoice",)})
+        receipt = self.run_audit(provider, scenario="entry_fee")
+        self.assert_rejection(receipt)
+        self.assertEqual(receipt["scenarios"], ["entry_fee"])
+        provider = PolicyProvider(candidates={0: [], 1: []})
+        self.assert_rejection(self.run_audit(provider, scenario="entry_fee"))
+
+    def test_removed_types_cannot_be_selected(self):
+        self.bundle()
+        for scenario in ("maintenance_fee", "other_expense"):
+            with self.subTest(scenario=scenario), self.assertRaisesRegex(AuditError, "八类"):
+                self.run_audit(scenario=scenario)
+        self.assertEqual(self.provider.calls, [])
+
+    def test_pos_target_and_giveaway_are_independent_despite_archive_names(self):
+        self.bundle("A-搭赠.zip")
+        self.bundle("B-POS达标激励.zip")
+        provider = PolicyProvider(("pos_target_incentive", "giveaway_promotion"))
+        receipt = self.run_audit(provider, scenario="pos_target_incentive")
+        self.assertEqual(receipt["status"], "completed")
+        self.assertEqual(receipt["scenarios"], ["pos_target_incentive"])
+        self.assertEqual(sum(c["kind"] == "pdf_material_classification" for c in provider.calls), 2)
+        self.assertEqual([c["scenario"] for c in provider.calls if c["kind"] == "pdf_policy_audit"],
+                         ["pos_target_incentive"])
+        result = json.loads((Path(receipt["worktree"]) / "analysis/results/pos_target_incentive.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["scenario"], "pos_target_incentive")
+        self.assertIn("POS达标激励", Path(receipt["analysis_summary"]).read_text(encoding="utf-8"))
+
+    def test_present_but_invalid_material_is_a_business_check_failure(self):
+        self.bundle()
+        def mutate(case, value):
+            if case["kind"] == "pdf_policy_audit":
+                check = next(c for c in value["checks"] if c["rule_id"] == "settlement_template_seal")
+                check.update(status="fail", reason="结算单缺少客户盖章")
+        receipt = self.run_audit(PolicyProvider(mutate=mutate))
+        self.assertEqual(receipt["status"], "completed")
+        self.assertGreater(receipt["error_count"], 0)
+        self.assertIn("结算单缺少客户盖章", Path(receipt["analysis_summary"]).read_text(encoding="utf-8"))
+        self.assertFalse((Path(receipt["worktree"]) / "analysis/classification-rejection").exists())
+
+    def test_customer_reasons_translate_model_condition_fields(self):
+        from tests.pdf_test_support import flags_for
+        self.bundle()
+        def mutate(case, value):
+            if case["kind"] == "pdf_policy_audit":
+                check = next(c for c in value["checks"] if c["rule_id"] == "payment_company")
+                check["reason"] = "red_packet为null，无法确认付款截图是否为红包。"
+        receipt = self.run_audit(PolicyProvider(("personnel_incentive",),
+            flags={0: flags_for("personnel_incentive", red_packet=None)}, mutate=mutate))
+        summary = Path(receipt["analysis_summary"]).read_text(encoding="utf-8")
+        self.assertNotIn("red_packet", summary)
+        self.assertNotIn("null", summary)
+        self.assertIn("是否采用红包截图尚未确认", summary)
+
+    def test_all_later_evidence_validates_before_publishing_any_decision(self):
+        self.bundle("A.zip")
+        self.bundle("B.zip")
+        def mutate(case, value):
+            if case["kind"] == "pdf_policy_audit" and case["archive_id"] == "a002":
+                value["checks"].pop()
+        provider = PolicyProvider(mutate=mutate)
+        with self.assertRaisesRegex(AuditError, "全部且仅覆盖"):
+            self.run_audit(provider)
+        workspace = next(self.worktrees.glob("*/manifest.json")).parent
+        self.assertFalse((workspace / "analysis/results").exists())
+        self.assertEqual(len(provider.calls), 4)
+        self.assertTrue(all(not p.exists() for p in provider.temporary_roots))
+
+    def test_model_failure_is_execution_failure_and_does_not_become_missing_material(self):
+        self.bundle()
+        def broken(case, temporary):
+            raise AuditError("模型连接失败")
+        with self.assertRaisesRegex(AuditError, "模型连接失败"):
+            self.run_audit(broken)
+        workspace = next(self.worktrees.glob("*/manifest.json")).parent
         manifest = json.loads((workspace / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["status"], "failed")
-        self.assertEqual(snapshot["run"]["status"], "failed")
-        events = [json.loads(line) for line in (workspace / "logs/events.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertFalse(any(event["type"] == "run.completed" for event in events))
-        self.assertEqual(events[-1]["type"], "run.failed")
-        self.assertEqual(result["kind"], "classification_rejection")
-        self.assertEqual(result["summary"]["conclusion"], "rejected")
-        sheets = [sheet for sheet in snapshot["view"]["sheets"] if sheet.get("projection_kind") == "classification_rejection"]
-        self.assertEqual(len(sheets), len(result["archives"]))
-        for sheet in sheets:
-            self.assertEqual(sheet["business_decision"], "rejected")
-            self.assertEqual(len(sheet["rows"]), 1)
-            self.assertEqual(sheet["rows"][0]["status"], "issue")
-        for archive in result["archives"]:
-            self.assertIsNone(archive["scenario"])
-            self.assertIn(archive["reason"], receipt["failure"]["message"])
-            for fabricated in ("documents", "scenario_candidates", "approved_amount", "supported_amount"):
-                self.assertNotIn(fabricated, archive)
-        self.assertFalse((workspace / "analysis/classification-rejection/evidence.json").exists())
-        self.assertTrue((workspace / "offline-activity-audit.html").is_file())
-        if pure:
-            self.assertEqual(receipt["error_count"], len(result["archives"]))
-            self.assertEqual(receipt["scenarios"], [])
-            self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 0)
-            manifest = json.loads((workspace / "manifest.json").read_text(encoding="utf-8"))
-            self.assertIsNone(manifest["analysis_started_at"])
-            events = [json.loads(line) for line in (workspace / "logs/events.jsonl").read_text(encoding="utf-8").splitlines()]
-            self.assertFalse(any(event["type"] in {"scenario.started", "material_diagnostic.started", "evidence.validated", "material_diagnostic.evidence_validated"} for event in events))
-            self.assertFalse((workspace / "analysis/material-diagnostic/result.json").exists())
-            self.assertFalse(list((workspace / "analysis/results").glob("*.json")))
-        summary = Path(receipt["analysis_summary"]).read_text(encoding="utf-8")
-        self.assertIn("核销失败：核销方式无法确认", summary)
-        return result, summary
+        self.assertNotEqual(manifest["failure"].get("code"), "classification_failed")
+        self.assertFalse((workspace / "analysis/classification-rejection").exists())
+        self.assertFalse((workspace / "ai-analysis-summary.md").exists())
+        self.assertTrue((workspace / "offline-activity-audit.html").exists())
 
-    def no_ai_provider(self, case: dict, temporary: Path) -> dict:
-        self.provider_calls.append(case)
-        self.fail("无法唯一确认 ZIP 核销类型时不应调用 AI")
+    def test_unsafe_archive_and_nested_archive_fail_before_any_model(self):
+        for files in ({"../escape.png": image_bytes()}, {"附件.zip": _archive_bytes({"../escape.png": image_bytes()})}):
+            self.bundle(files=files)
+            with self.assertRaises(ArchiveInputError):
+                self.run_audit()
+            self.assertEqual(self.provider.calls, [])
+            self.assertFalse((self.root / "escape.png").exists())
 
-    def test_old_completed_classification_is_displayed_as_failed_without_rewriting_history(self) -> None:
-        self.bundle(_maintenance_files(), "ai-pack-8.zip")
-        receipt = self.run_audit(self.no_ai_provider)
+    def test_run_preserves_input_root_html_and_publishes_one_self_contained_archive(self):
+        source = self.bundle()
+        original = source.read_bytes(), ROOT_HTML.read_bytes()
+        with patch("audit_core.product_database.load_product_catalog", side_effect=AssertionError("No database")):
+            receipt = self.run_audit()
         workspace = Path(receipt["worktree"])
-        manifest_path = workspace / "manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest.update(status="completed", failure=None)
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
-        before = {path: path.read_bytes() for path in workspace.rglob("*") if path.is_file()}
-        catalog = WorkbenchCatalog(self.worktrees)
-        self.assertEqual(catalog.list_runs()[0]["status"], "failed")
-        snapshot = catalog.snapshot(workspace.name)
-        self.assertEqual(snapshot["run"]["status"], "failed")
-        self.assertIn("ai-pack-8.zip", snapshot["run"]["failure"]["message"])
-        with self.assertRaisesRegex(ValueError, "完成"):
-            catalog.set_manual_review(workspace.name, True)
-        html = render_static_run_archive_html(workspace, ROOT_HTML)
-        self.assertIn('name="offline-audit-view-available" content="false"', html)
-        self.assertEqual(before, {path: path.read_bytes() for path in workspace.rglob("*") if path.is_file()})
-
-    def test_unknown_zip_name_is_rejected_without_ai_or_missing_material_checklist(self) -> None:
-        archive = self.bundle({"IMG_0001.jpg": _image_bytes("yellow")}, "ai-pack-8.zip")
-        original = archive.read_bytes()
-        receipt = self.run_audit(self.no_ai_provider)
-        result, summary = self.assert_classification_rejection(receipt)
-        self.assertEqual(self.provider_calls, [])
-        self.assertEqual(result["archives"][0]["reason_code"], "missing_scenario_marker")
-        self.assertEqual(result["archives"][0]["matched_scenarios"], [])
-        self.assertIn("ai-pack-8.zip", summary)
-        for fabricated in ("IMG", "Excel", "POS", "已签促销合同", "已完成AI", "已完成 AI", "建议", "处理方式"):
-            self.assertNotIn(fabricated, summary)
-        self.assertEqual(archive.read_bytes(), original)
-
-    def test_ambiguous_zip_name_is_rejected_without_ai_even_with_recognizable_materials(self) -> None:
-        archive_name = "维护费用-进场费.zip"
-        self.bundle(_maintenance_files(), archive_name)
-        result, summary = self.assert_classification_rejection(self.run_audit(self.no_ai_provider))
-        self.assertEqual(self.provider_calls, [])
-        self.assertEqual(result["archives"][0]["reason_code"], "ambiguous_scenario_markers")
-        self.assertEqual(set(result["archives"][0]["matched_scenarios"]), {"maintenance_fee", "entry_fee"})
-        self.assertIn(archive_name, summary)
-        for fabricated in ("POS", "结算单.jpg", "已签促销合同", "需补交", "重新提交"):
-            self.assertNotIn(fabricated, summary)
-
-    def test_unknown_name_rejection_does_not_decode_business_documents(self) -> None:
-        self.bundle({"坏照片.jpg": b"not an image", "活动返图.xls": b"not a workbook"}, "ai-pack-8.zip")
-        with (
-            patch("audit_core.material_intake._visual_limitations", side_effect=AssertionError("分类拒绝不应读取图片内容")),
-            patch("audit_core.material_intake.extract_activity_return_workbook", side_effect=AssertionError("分类拒绝不应转换工作簿")),
-        ):
-            result, summary = self.assert_classification_rejection(self.run_audit(self.no_ai_provider))
-        self.assertEqual(self.provider_calls, [])
-        self.assertEqual(result["archives"][0]["reason_code"], "missing_scenario_marker")
-        self.assertNotIn("坏照片", summary)
-        self.assertNotIn("活动返图", summary)
-
-    def test_multiple_rejected_archives_keep_each_name_reason_without_ai(self) -> None:
-        names = ("ai-pack-8.zip", "维护费用-进场费.zip")
-        for name in names:
-            self.bundle(_maintenance_files(), name)
-        result, summary = self.assert_classification_rejection(self.run_audit(self.no_ai_provider))
-        self.assertEqual(self.provider_calls, [])
-        self.assertEqual({archive["source_archive"] for archive in result["archives"]}, set(names))
-        self.assertEqual(len({archive["archive_id"] for archive in result["archives"]}), 2)
-        self.assertEqual(summary.count("\n- "), 2)
-        for name in names:
-            self.assertIn(name, summary)
-
-    def test_mixed_input_keeps_valid_case_on_business_pipeline_and_rejects_only_unknown_name(self) -> None:
-        self.bundle({"POS数据.jpg": _image_bytes("red")}, "正常维护费用.zip")
-        self.bundle({"IMG.jpg": _image_bytes("white")}, "ai-pack-8.zip")
-        seen = []
-
-        def provider(case: dict, temporary: Path) -> dict:
-            seen.append(case.get("kind") or case["scenario"])
-            return self.business_provider(case, temporary)
-
-        receipt = self.run_audit(provider)
-        rejection, summary = self.assert_classification_rejection(receipt, pure=False)
-        self.assertEqual(receipt["scenarios"], ["maintenance_fee"])
-        self.assertEqual(seen, ["maintenance_fee"])
-        self.assertEqual([item["source_archive"] for item in rejection["archives"]], ["ai-pack-8.zip"])
-        workspace = Path(receipt["worktree"])
-        self.assertTrue((workspace / "analysis/results/maintenance_fee.json").is_file())
-        self.assertFalse((workspace / "analysis/material-diagnostic/result.json").exists())
+        self.assertEqual((source.read_bytes(), ROOT_HTML.read_bytes()), original)
+        self.assertEqual(len(list(workspace.rglob("*.html"))), 1)
+        self.assertFalse(list(workspace.rglob("*.xlsx")))
+        self.assertFalse(list(workspace.rglob("*.png")))
+        self.assertTrue(all(not p.exists() for p in self.provider.temporary_roots))
+        manifest = json.loads((workspace / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["scenario_classification_policy"], "material_content")
+        self.assertTrue(manifest["analysis_started_at"])
+        self.assertEqual(manifest["snapshot_sha256"], hashlib.sha256((workspace / "snapshot.json").read_bytes()).hexdigest())
+        self.assertEqual(manifest["analysis_summary"]["sha256"], hashlib.sha256((workspace / "ai-analysis-summary.md").read_bytes()).hexdigest())
         snapshot = json.loads((workspace / "snapshot.json").read_text(encoding="utf-8"))
-        known = [sheet for sheet in snapshot["view"]["sheets"] if sheet.get("scenario") == "maintenance_fee"]
-        self.assertEqual(len(known), 1)
-        known_reasons = "\n".join(reason for row in known[0]["rows"] for reason in row.get("error_reasons", []))
-        self.assertNotIn("分类标记", known_reasons)
-        self.assertIn("ai-pack-8.zip", summary)
-
-    def test_mixed_input_runs_ai_only_for_known_broken_materials(self) -> None:
-        self.bundle(_maintenance_files())
-        self.bundle({"私有照片.jpg": _image_bytes("yellow")}, "ai-pack-8.zip")
-        receipt = self.run_audit()
-        rejection, summary = self.assert_classification_rejection(receipt, pure=False)
-        self.assertEqual(len(self.provider_calls), 1)
-        self.assertEqual([Path(archive["source_archive"]).name for archive in self.provider_calls[0]["archives"]], [ARCHIVE_NAME])
-        self.assertEqual([archive["source_archive"] for archive in rejection["archives"]], ["ai-pack-8.zip"])
-        workspace = Path(receipt["worktree"])
-        diagnosis = json.loads((workspace / "analysis/material-diagnostic/result.json").read_text(encoding="utf-8"))
-        self.assertEqual([archive["source_archive"] for archive in diagnosis["archives"]], [ARCHIVE_NAME])
-        self.assertTrue(any(issue["code"] == "missing_material" for issue in diagnosis["archives"][0]["issues"]))
-        self.assertNotIn("私有照片.jpg", summary)
-        self.assertIn("已签促销合同", summary)
-
-    def test_explicit_selection_diagnoses_only_the_selected_known_scenario(self) -> None:
-        self.bundle(_maintenance_files())
-        self.bundle({"现场.jpg": _image_bytes("yellow")}, "进场费缺合同.zip")
-        result, summary = self.assert_completed_diagnostic(self.run_audit(scenario="maintenance_fee"))
-        self.assertEqual([item["source_archive"] for item in result["archives"]], [ARCHIVE_NAME])
-        self.assertEqual(len(self.provider_calls[0]["archives"]), 1)
-        self.assertNotIn("进场费缺合同", summary)
-
-    def test_selected_workspace_names_exclude_unselected_known_archives(self) -> None:
-        self.bundle(_maintenance_files())
-        self.bundle({"现场.jpg": _image_bytes("yellow")}, "进场费缺合同.zip")
-        self.assertEqual(_input_archive_names(self.inputs, "maintenance_fee"), [ARCHIVE_NAME])
-        self.bundle({"IMG.jpg": _image_bytes("white")}, "ai-pack-8.zip")
-        self.assertEqual(set(_input_archive_names(self.inputs, "maintenance_fee")), {ARCHIVE_NAME, "ai-pack-8.zip"})
-
-    def test_unselected_broken_case_does_not_block_selected_normal_case(self) -> None:
-        self.bundle({"POS数据.jpg": _image_bytes("red")}, "正常维护费用.zip")
-        self.bundle({"现场.jpg": _image_bytes("yellow")}, "进场费缺合同.zip")
-        receipt = self.run_audit(self.business_provider, scenario="maintenance_fee")
-        self.assertEqual(receipt["status"], "completed")
-        self.assertEqual(receipt["scenarios"], ["maintenance_fee"])
-        self.assertEqual(self.provider_calls, [])
-        workspace = Path(receipt["worktree"])
-        self.assertTrue((workspace / "analysis/results/maintenance_fee.json").is_file())
-        self.assertFalse((workspace / "analysis/material-diagnostic/result.json").exists())
-
-    def test_two_packages_of_same_scenario_preserve_both_diagnostic_sources(self) -> None:
-        names = ["甲维护费用.zip", "乙维护费用.zip"]
-        for name, color in zip(names, ["red", "blue"]):
-            self.bundle({"POS数据.jpg": _image_bytes(color)}, name)
-        result, summary = self.assert_completed_diagnostic(self.run_audit())
-        self.assertEqual({item["source_archive"] for item in result["archives"]}, set(names))
-        self.assertEqual(len(self.provider_calls[0]["archives"]), 2)
-        self.assertEqual(len({item["archive_id"] for item in result["archives"]}), 2)
-        for name in names:
-            self.assertIn(name, summary)
-
-    def test_normal_and_broken_packages_of_same_scenario_both_require_diagnosis(self) -> None:
-        self.bundle({"POS数据.jpg": _image_bytes("red")}, "A正常维护费用.zip")
-        self.bundle(_maintenance_files(), "B维护费用多结算单.zip")
-        receipt = self.run_audit()
-        result, summary = self.assert_completed_diagnostic(receipt)
-        self.assertEqual({item["source_archive"] for item in result["archives"]},
-                         {"A正常维护费用.zip", "B维护费用多结算单.zip"})
-        self.assertEqual(len(self.provider_calls), 1)
-        self.assertEqual(len(self.provider_calls[0]["archives"]), 2)
-        self.assertFalse((Path(receipt["worktree"]) / "analysis/results/maintenance_fee.json").exists())
-        self.assertIn("A正常维护费用.zip", summary)
-        self.assertIn("B维护费用多结算单.zip", summary)
-
-    def test_unsafe_archive_still_fails_without_ai(self) -> None:
-        self.bundle({"../outside.jpg": _image_bytes("red")})
-        with self.assertRaises(ArchiveInputError):
-            self.run_audit()
-        self.assertEqual(self.provider_calls, [])
-        self.assertFalse((self.root / "outside.jpg").exists())
-        manifest = next(self.worktrees.glob("*/manifest.json"))
-        self.assertEqual(json.loads(manifest.read_text(encoding="utf-8"))["status"], "failed")
-
-    def test_unsafe_unknown_archive_fails_security_validation_without_ai(self) -> None:
-        self.bundle({"../outside.jpg": _image_bytes("red")}, "ai-pack-8.zip")
-        with self.assertRaises(ArchiveInputError):
-            self.run_audit(self.no_ai_provider)
-        self.assertEqual(self.provider_calls, [])
-        self.assertFalse((self.root / "outside.jpg").exists())
-        manifest = next(self.worktrees.glob("*/manifest.json"))
-        self.assertEqual(json.loads(manifest.read_text(encoding="utf-8"))["status"], "failed")
-        self.assertFalse((manifest.parent / "analysis/classification-rejection/result.json").exists())
-
-    def test_unknown_name_cannot_hide_unsafe_members_inside_a_nested_zip(self) -> None:
-        self.bundle({"附件.zip": _archive_bytes({"../outside.jpg": _image_bytes("red")})}, "ai-pack-8.zip")
-        with self.assertRaises(ArchiveInputError):
-            self.run_audit(self.no_ai_provider)
-        self.assertEqual(self.provider_calls, [])
-        manifest = next(self.worktrees.glob("*/manifest.json"))
-        self.assertEqual(json.loads(manifest.read_text(encoding="utf-8"))["status"], "failed")
-        self.assertFalse((manifest.parent / "analysis/classification-rejection/result.json").exists())
-
-    def test_explicit_selection_cannot_assign_an_unknown_zip_to_the_requested_type(self) -> None:
-        self.bundle(_maintenance_files(), "ai-pack-8.zip")
-        receipt = self.run_audit(self.no_ai_provider, scenario="maintenance_fee")
-        result, summary = self.assert_classification_rejection(receipt)
-        self.assertEqual(self.provider_calls, [])
-        self.assertEqual(result["archives"][0]["reason_code"], "missing_scenario_marker")
-        self.assertNotIn("已签促销合同", summary)
-
-    def test_model_execution_error_is_not_converted_to_completed_diagnostic(self) -> None:
-        self.bundle(_maintenance_files())
-
-        def broken_provider(case: dict, temporary: Path) -> dict:
-            self.provider(case, temporary)
-            raise AuditError("模型隔离材料读取失败")
-
-        with self.assertRaisesRegex(AuditError, "模型隔离材料读取失败"):
-            self.run_audit(broken_provider)
-        self.assertEqual(len(self.provider_calls), 1)
-        manifest_path = next(self.worktrees.glob("*/manifest.json"))
-        self.assertEqual(json.loads(manifest_path.read_text(encoding="utf-8"))["status"], "failed")
-        self.assertFalse((manifest_path.parent / "ai-analysis-summary.md").exists())
-        self.assertTrue(all(not path.exists() for path in self.temporary_sources))
+        unknown_fraud = next(row for row in snapshot["view"]["sheets"][0]["rows"] if row["rule_id"] == "fraud")
+        self.assertEqual(unknown_fraud["heading"], "资料真实性无法核验")
+        self.assertTrue(list((workspace / "dom/checkpoints").glob("*.json")))
+        self.assertEqual(WorkbenchCatalog(self.worktrees).list_runs()[0]["status"], "completed")
 
     def run_oss_submission(self, archive_name: str, files: dict[str, bytes], provider, *, analyze_id: int = 9, expected_status: str = "completed", callback_required: bool = True, fail_callback: bool = False) -> tuple[dict, list[dict]]:
         zip_bytes = _archive_bytes(files)
@@ -482,7 +342,14 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
             downloader=downloader, runner=runner, url_validator=lambda value, _config: value,
             callback_sender=callback_sender,
         )
-        self.addCleanup(service.close)
+        def close_fixture_service():
+            service.close()
+            # close() queues shutdown asynchronously. Wait for this fixture's
+            # workers before TemporaryDirectory removes their receipt files.
+            for worker in (service._download_worker, service._audit_worker):
+                worker.join(timeout=5)
+                self.assertFalse(worker.is_alive(), "测试后台线程未退出，不能开始删除临时资料")
+        self.addCleanup(close_fixture_service)
         job, created = service.submit({
             "verifyCode": "HX202601160053", "analyzeId": analyze_id,
             "downloadUrl": f"https://{OSS_HOST}/incoming/{quote(archive_name)}?X-Oss-Signature=test-only-secret",
@@ -496,57 +363,39 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
             if job["status"] in {"completed", "failed"}:
                 break
             time.sleep(0.02)
-        service.close()
+        close_fixture_service()
         self.assertEqual(job["status"], expected_status, job)
         self.assertEqual(job["callback"]["status"], "failed" if fail_callback else "delivered" if callback_required else "not_required")
         self.assertEqual((self.root / "input-oss" / job["job_id"] / archive_name).read_bytes(), zip_bytes)
         self.assertNotIn("test-only-secret", json.dumps(job, ensure_ascii=False))
         return job, callbacks
 
-    def test_oss_service_runs_persistent_diagnostic_and_callbacks_saved_markdown(self) -> None:
-        job, callbacks = self.run_oss_submission(ARCHIVE_NAME, _maintenance_files(), self.conflicting_scenario_provider)
-        result, summary = self.assert_completed_diagnostic(job["result"])
-        self.assertEqual(len(self.provider_calls), 1)
-        self.assertEqual(callbacks, [{"verifyCode": "HX202601160053", "analyzeId": 9, "result": summary}])
-        self.assertEqual(job["result"]["scenarios"], ["maintenance_fee"])
-        self.assertEqual(result["archives"][0]["scenario"], "maintenance_fee")
-        self.assertIn("已签促销合同", callbacks[0]["result"])
-        self.assertIn("服务费结算单.jpg", callbacks[0]["result"])
-        for unselected in ("核销类型待确认", "价格补差", "人员激励"):
-            self.assertNotIn(unselected, callbacks[0]["result"])
-        self.assertEqual(result["archives"][0]["source_archive"], ARCHIVE_NAME)
 
-    def test_oss_unknown_and_ambiguous_names_callback_rejection_with_three_fields_and_no_ai(self) -> None:
-        for analyze_id, archive_name, expected_code in (
-            (10, "ai-pack-8.zip", "missing_scenario_marker"),
-            (11, "维护费用-进场费.zip", "ambiguous_scenario_markers"),
-        ):
-            with self.subTest(archive_name=archive_name):
-                job, callbacks = self.run_oss_submission(archive_name, _maintenance_files(), self.no_ai_provider, analyze_id=analyze_id, expected_status="failed")
-                self.assertEqual(job["failure"]["code"], "classification_failed")
-                result, summary = self.assert_classification_rejection(job["result"])
-                self.assertEqual(self.provider_calls, [])
-                self.assertEqual(result["archives"][0]["reason_code"], expected_code)
-                self.assertEqual(callbacks, [{"verifyCode": "HX202601160053", "analyzeId": analyze_id, "result": summary}])
-                self.assertIn(archive_name, summary)
-                for fabricated in ("已签促销合同", "POS", "结算单.jpg", "建议", "处理方式", "需补交"):
-                    self.assertNotIn(fabricated, summary)
+    def test_oss_callbacks_use_saved_markdown_and_exact_three_fields(self):
+        job, callbacks = self.run_oss_submission("不按名称选型.zip", {"材料.png": image_bytes()}, self.provider)
+        self.assertEqual(job["result"]["scenarios"], ["poster_material"])
+        self.assertEqual(set(callbacks[0]), {"verifyCode", "analyzeId", "result"})
+        self.assertEqual(callbacks[0]["result"], Path(job["result"]["analysis_summary"]).read_text(encoding="utf-8"))
+        self.assertNotIn("downloadUrl", callbacks[0])
 
-    def test_oss_classification_stays_failed_when_callback_delivery_fails(self) -> None:
-        job, callbacks = self.run_oss_submission("ai-pack-8.zip", _maintenance_files(), self.no_ai_provider,
-                                               expected_status="failed", fail_callback=True)
-        _, summary = self.assert_classification_rejection(job["result"])
-        self.assertEqual(job["failure"]["code"], "callback_failed")
-        self.assertEqual(callbacks[0]["result"], summary)
-        self.assertEqual(self.provider_calls, [])
+    def test_oss_missing_materials_fail_classification_and_callback_exact_reason(self):
+        provider = PolicyProvider(missing={0: ("invoice",)})
+        job, callbacks = self.run_oss_submission("进场费.zip", {"材料.png": image_bytes()}, provider, expected_status="failed")
+        self.assertEqual(job["result"]["scenarios"], [])
+        self.assertEqual(job["result"]["failure"]["code"], "classification_failed")
+        self.assertEqual(len(provider.calls), 1)
+        self.assertGreater(job["result"]["error_count"], 0)
+        self.assertEqual(callbacks[0]["result"], "核销方式无法确认")
 
-    def test_oss_classification_stays_failed_when_callback_is_disabled(self) -> None:
-        job, callbacks = self.run_oss_submission("ai-pack-8.zip", _maintenance_files(), self.no_ai_provider,
-                                               expected_status="failed", callback_required=False)
-        self.assert_classification_rejection(job["result"])
-        self.assertEqual(job["failure"]["code"], "classification_failed")
-        self.assertEqual(callbacks, [])
-        self.assertEqual(self.provider_calls, [])
+    def test_oss_content_failure_remains_failed_when_callback_fails_or_is_disabled(self):
+        for analyze_id, required, fail in ((10, True, True), (11, False, False)):
+            with self.subTest(callback_required=required):
+                provider = PolicyProvider(candidates={0: []})
+                job, callbacks = self.run_oss_submission("无类型.zip", {"材料.png": image_bytes()}, provider,
+                    analyze_id=analyze_id, expected_status="failed", callback_required=required, fail_callback=fail)
+                self.assertEqual(job["result"]["failure"]["code"], "classification_failed")
+                self.assertEqual(len(callbacks), int(required))
+                self.assertEqual(len(provider.calls), 1)
 
 
 if __name__ == "__main__":

@@ -1,86 +1,157 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/offline-activity-audit/price-difference-support-evidence.schema.json",
-  "title": "Price-difference visible evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "scenario", "documents", "extraction_notes"],
   "properties": {
-    "schema_version": {"type": "string", "const": "1.0"},
-    "scenario": {"type": "string", "const": "price_difference_support"},
-    "documents": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/document"}},
-    "extraction_notes": {"type": "array", "items": {"type": "string", "minLength": 1}}
-  },
-  "$defs": {
-    "visibility": {"type": "string", "enum": ["visible", "not_visible", "unclear", "not_applicable"]},
-    "pos_line": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["store_name", "product_code", "barcode", "product_name", "quantity", "unit_price", "sales_amount"],
-      "properties": {
-        "store_name": {"type": ["string", "null"], "minLength": 1},
-        "product_code": {"type": ["string", "null"], "minLength": 1},
-        "barcode": {"type": ["string", "null"], "pattern": "^69[0-9]{11}$"},
-        "product_name": {"type": ["string", "null"], "minLength": 1},
-        "quantity": {"type": ["number", "null"], "minimum": 0},
-        "unit_price": {"type": ["number", "null"], "minimum": 0},
-        "sales_amount": {"type": ["number", "null"], "minimum": 0}
-      }
-    },
-    "document": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "source_file", "role", "document_type", "title", "party_names", "dealer_name",
-        "activity_start", "activity_end", "fee_type", "store_count", "store_names",
-        "product_code", "barcode", "product_name", "original_price", "activity_price",
-        "support_unit_amount", "planned_quantity", "amount_ceiling", "calculation_method",
-        "settlement_quantity", "claimed_amount", "company_template_visible", "dealer_seal_visible",
-        "signed_visible", "pos_lines", "pos_total_quantity", "pos_total_sales_amount",
-        "photo_date", "photo_time", "photo_location", "watermark_date_visible",
-        "watermark_time_visible", "watermark_address_visible", "photo_activity_price",
-        "activity_price_visible", "visible_summary", "limitations"
-      ],
-      "properties": {
-        "source_file": {"type": "string", "minLength": 1},
-        "role": {"type": "string", "enum": ["signed_promotional_contract", "settlement", "stamped_pos_data", "activity_photo", "other"]},
-        "document_type": {"type": "string", "minLength": 1},
-        "title": {"type": ["string", "null"], "minLength": 1},
-        "party_names": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
-        "dealer_name": {"type": ["string", "null"], "minLength": 1},
-        "activity_start": {"type": ["string", "null"], "format": "date"},
-        "activity_end": {"type": ["string", "null"], "format": "date"},
-        "fee_type": {"type": ["string", "null"], "minLength": 1},
-        "store_count": {"type": ["integer", "null"], "minimum": 0},
-        "store_names": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
-        "product_code": {"type": ["string", "null"], "minLength": 1},
-        "barcode": {"type": ["string", "null"], "pattern": "^69[0-9]{11}$"},
-        "product_name": {"type": ["string", "null"], "minLength": 1},
-        "original_price": {"type": ["number", "null"], "minimum": 0},
-        "activity_price": {"type": ["number", "null"], "minimum": 0},
-        "support_unit_amount": {"type": ["number", "null"], "minimum": 0},
-        "planned_quantity": {"type": ["number", "null"], "minimum": 0},
-        "amount_ceiling": {"type": ["number", "null"], "minimum": 0},
-        "calculation_method": {"type": ["string", "null"], "minLength": 1},
-        "settlement_quantity": {"type": ["number", "null"], "minimum": 0},
-        "claimed_amount": {"type": ["number", "null"], "minimum": 0},
-        "company_template_visible": {"$ref": "#/$defs/visibility"},
-        "dealer_seal_visible": {"$ref": "#/$defs/visibility"},
-        "signed_visible": {"$ref": "#/$defs/visibility"},
-        "pos_lines": {"type": "array", "items": {"$ref": "#/$defs/pos_line"}},
-        "pos_total_quantity": {"type": ["number", "null"], "minimum": 0},
-        "pos_total_sales_amount": {"type": ["number", "null"], "minimum": 0},
-        "photo_date": {"type": ["string", "null"], "format": "date"},
-        "photo_time": {"type": ["string", "null"], "minLength": 1},
-        "photo_location": {"type": ["string", "null"], "minLength": 1},
-        "watermark_date_visible": {"$ref": "#/$defs/visibility"},
-        "watermark_time_visible": {"$ref": "#/$defs/visibility"},
-        "watermark_address_visible": {"$ref": "#/$defs/visibility"},
-        "photo_activity_price": {"type": ["number", "null"], "minimum": 0},
-        "activity_price_visible": {"$ref": "#/$defs/visibility"},
-        "visible_summary": {"type": "string", "minLength": 1},
-        "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}}
-      }
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "enum": [
+              "submission_deadline",
+              "review_deadline",
+              "scene_authenticity",
+              "fraud",
+              "bi_quota",
+              "settlement_template_seal",
+              "contract_signed",
+              "pos_fields",
+              "pos_seal",
+              "pos_arithmetic",
+              "application_quantity_price",
+              "reward_unit_price",
+              "settlement_pos_quantity",
+              "claim_ceiling",
+              "price_evidence",
+              "full_reduction_evidence"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "unknown",
+              "not_applicable"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "comparisons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "left": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "unit_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "number": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "unit_id",
+                    "quote",
+                    "number"
+                  ]
+                },
+                "right": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "unit_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "number": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "unit_id",
+                      "quote",
+                      "number"
+                    ]
+                  }
+                },
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "value",
+                    "sum",
+                    "product",
+                    "ratio",
+                    "floor_ratio"
+                  ]
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "eq",
+                    "le",
+                    "ge"
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "left",
+                "right",
+                "operation",
+                "operator"
+              ]
+            }
+          }
+        },
+        "required": [
+          "rule_id",
+          "status",
+          "reason",
+          "source_ids",
+          "comparisons"
+        ]
+      },
+      "minItems": 16,
+      "maxItems": 16
     }
-  }
+  },
+  "required": [
+    "checks"
+  ]
 }

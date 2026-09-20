@@ -230,6 +230,7 @@ def prepare_material_diagnosis(
     *,
     original_error: str | Exception,
     selected_scenarios: set[str] | None = None,
+    classify_by_content: bool = False,
 ) -> dict[str, Any]:
     """Inventory safely submitted materials without binding a principal file.
 
@@ -274,7 +275,7 @@ def prepare_material_diagnosis(
                 "archive_id": archive_id,
                 "source_archive": source.resolve(),
                 "archive_sha256": sha256_file(source),
-                "scenario_hint": _scenario_hint(source.name),
+                "scenario_hint": None if classify_by_content else _scenario_hint(source.name),
                 "inventory": inventory,
             }
             archives.append(entry)
@@ -337,7 +338,8 @@ def prepare_material_diagnosis(
                     item["limitations"].extend(_visual_limitations(path))
                 elif item["suffix"] == ".xls":
                     if not _is_activity_return_workbook(path):
-                        item["limitations"].append("未确认此旧式工作簿为活动返图结构；未将表格内容交给 AI")
+                        if not classify_by_content:
+                            item["limitations"].append("未确认此旧式工作簿为活动返图结构；未将表格内容交给 AI")
                         continue
                     workbook_root = destination / entry["archive_id"] / f"workbook-{item['file_id']}"
                     try:

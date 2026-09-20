@@ -16,7 +16,9 @@ dependencies = [
   "mcp>=1.29,<2",
   "openpyxl>=3.1,<4",
   "Pillow>=10,<13",
-  "pypdf>=5,<7"
+  "pypdf>=5,<7",
+  "PyMuPDF>=1.26,<2",
+  "xlrd>=2,<3"
 ]
 
 [tool.setuptools]

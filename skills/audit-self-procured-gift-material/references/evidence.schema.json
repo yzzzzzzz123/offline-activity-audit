@@ -1,99 +1,157 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/offline-activity-audit/self-procured-gift-material-evidence.schema.json",
-  "title": "Self-procured gift material visible evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "scenario", "documents", "extraction_notes"],
   "properties": {
-    "schema_version": {"type": "string", "const": "1.0"},
-    "scenario": {"type": "string", "const": "self_procured_gift_material"},
-    "documents": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/document"}},
-    "extraction_notes": {"type": "array", "items": {"type": "string", "minLength": 1}}
-  },
-  "$defs": {
-    "visibility": {"type": "string", "enum": ["visible", "not_visible", "unclear", "not_applicable"]},
-    "pos_row": {
-      "type": "object", "additionalProperties": false,
-      "required": ["period_text", "store_name", "sales_quantity", "sales_amount"],
-      "properties": {
-        "period_text": {"type": ["string", "null"], "minLength": 1},
-        "store_name": {"type": ["string", "null"], "minLength": 1},
-        "sales_quantity": {"type": ["number", "null"], "minimum": 0},
-        "sales_amount": {"type": ["number", "null"], "minimum": 0}
-      }
-    },
-    "document": {
-      "type": "object", "additionalProperties": false,
-      "required": [
-        "source_file", "role", "document_type", "title", "party_names", "dealer_name",
-        "activity_start", "activity_end", "contract_signing_date", "store_count", "store_names",
-        "activity_budget", "qualifying_product_or_set", "qualifying_purchase_amount",
-        "gift_material_name", "gift_material_code", "buy_quantity", "gift_quantity",
-        "limited_quantity_rule", "material_quantity", "material_unit_price", "document_amount",
-        "calculation_method", "company_template_visible", "customer_seal_visible", "signed_visible",
-        "receipt_number", "document_date", "seller_or_payee", "receipt_detail_visible",
-        "payer_name", "payee_name", "payment_amount", "payment_time", "transaction_number",
-        "pos_rows", "pos_total_quantity", "pos_total_sales_amount", "photo_date", "photo_time",
-        "photo_location", "photo_store_name", "watermark_date_visible", "watermark_time_visible",
-        "watermark_address_visible", "promotion_content_visible", "self_procured_material_visible",
-        "photo_material_name", "qualifying_product_visible", "gift_rule_visible",
-        "visible_summary", "limitations"
-      ],
-      "properties": {
-        "source_file": {"type": "string", "minLength": 1},
-        "role": {"type": "string", "enum": ["signed_promotional_contract", "settlement", "purchase_invoice_or_receipt", "purchase_payment_record", "stamped_pos_data", "activity_photo", "unclassified_visual", "other"]},
-        "document_type": {"type": "string", "enum": ["signed_promotional_contract", "settlement", "purchase_invoice_or_receipt", "purchase_payment_record", "stamped_pos_data", "activity_photo", "other"]},
-        "title": {"type": ["string", "null"], "minLength": 1},
-        "party_names": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
-        "dealer_name": {"type": ["string", "null"], "minLength": 1},
-        "activity_start": {"type": ["string", "null"], "format": "date"},
-        "activity_end": {"type": ["string", "null"], "format": "date"},
-        "contract_signing_date": {"type": ["string", "null"], "format": "date"},
-        "store_count": {"type": ["integer", "null"], "minimum": 0},
-        "store_names": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
-        "activity_budget": {"type": ["number", "null"], "minimum": 0},
-        "qualifying_product_or_set": {"type": ["string", "null"], "minLength": 1},
-        "qualifying_purchase_amount": {"type": ["number", "null"], "minimum": 0},
-        "gift_material_name": {"type": ["string", "null"], "minLength": 1},
-        "gift_material_code": {"type": ["string", "null"], "minLength": 1},
-        "buy_quantity": {"type": ["number", "null"], "minimum": 0},
-        "gift_quantity": {"type": ["number", "null"], "minimum": 0},
-        "limited_quantity_rule": {"type": ["string", "null"], "minLength": 1},
-        "material_quantity": {"type": ["number", "null"], "minimum": 0},
-        "material_unit_price": {"type": ["number", "null"], "minimum": 0},
-        "document_amount": {"type": ["number", "null"], "minimum": 0},
-        "calculation_method": {"type": ["string", "null"], "minLength": 1},
-        "company_template_visible": {"$ref": "#/$defs/visibility"},
-        "customer_seal_visible": {"$ref": "#/$defs/visibility"},
-        "signed_visible": {"$ref": "#/$defs/visibility"},
-        "receipt_number": {"type": ["string", "null"], "minLength": 1},
-        "document_date": {"type": ["string", "null"], "format": "date"},
-        "seller_or_payee": {"type": ["string", "null"], "minLength": 1},
-        "receipt_detail_visible": {"$ref": "#/$defs/visibility"},
-        "payer_name": {"type": ["string", "null"], "minLength": 1},
-        "payee_name": {"type": ["string", "null"], "minLength": 1},
-        "payment_amount": {"type": ["number", "null"], "minimum": 0},
-        "payment_time": {"type": ["string", "null"], "minLength": 1},
-        "transaction_number": {"type": ["string", "null"], "minLength": 1},
-        "pos_rows": {"type": "array", "items": {"$ref": "#/$defs/pos_row"}},
-        "pos_total_quantity": {"type": ["number", "null"], "minimum": 0},
-        "pos_total_sales_amount": {"type": ["number", "null"], "minimum": 0},
-        "photo_date": {"type": ["string", "null"], "format": "date"},
-        "photo_time": {"type": ["string", "null"], "minLength": 1},
-        "photo_location": {"type": ["string", "null"], "minLength": 1},
-        "photo_store_name": {"type": ["string", "null"], "minLength": 1},
-        "watermark_date_visible": {"$ref": "#/$defs/visibility"},
-        "watermark_time_visible": {"$ref": "#/$defs/visibility"},
-        "watermark_address_visible": {"$ref": "#/$defs/visibility"},
-        "promotion_content_visible": {"$ref": "#/$defs/visibility"},
-        "self_procured_material_visible": {"$ref": "#/$defs/visibility"},
-        "photo_material_name": {"type": ["string", "null"], "minLength": 1},
-        "qualifying_product_visible": {"$ref": "#/$defs/visibility"},
-        "gift_rule_visible": {"$ref": "#/$defs/visibility"},
-        "visible_summary": {"type": "string", "minLength": 1},
-        "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}}
-      }
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "enum": [
+              "submission_deadline",
+              "review_deadline",
+              "scene_authenticity",
+              "fraud",
+              "bi_quota",
+              "settlement_template_seal",
+              "contract_signed",
+              "pos_fields",
+              "pos_seal",
+              "pos_arithmetic",
+              "application_quantity_price",
+              "invoice_details",
+              "gift_rule_present",
+              "gift_rule_quantity",
+              "gift_finished_photos",
+              "gift_all_store_photos"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "unknown",
+              "not_applicable"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "comparisons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "left": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "unit_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "number": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "unit_id",
+                    "quote",
+                    "number"
+                  ]
+                },
+                "right": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "unit_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "number": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "unit_id",
+                      "quote",
+                      "number"
+                    ]
+                  }
+                },
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "value",
+                    "sum",
+                    "product",
+                    "ratio",
+                    "floor_ratio"
+                  ]
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "eq",
+                    "le",
+                    "ge"
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "left",
+                "right",
+                "operation",
+                "operator"
+              ]
+            }
+          }
+        },
+        "required": [
+          "rule_id",
+          "status",
+          "reason",
+          "source_ids",
+          "comparisons"
+        ]
+      },
+      "minItems": 16,
+      "maxItems": 16
     }
-  }
+  },
+  "required": [
+    "checks"
+  ]
 }

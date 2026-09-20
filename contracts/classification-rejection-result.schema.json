@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ZIP-name classification rejection without AI evidence",
+  "title": "Material-content classification rejection, including read-only legacy ZIP-name results",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "kind", "decision_source", "generated_at", "summary", "archives"],
   "properties": {
     "schema_version": {"const": "1.0"},
     "kind": {"const": "classification_rejection"},
-    "decision_source": {"const": "zip_filename"},
+    "decision_source": {"enum": ["zip_filename", "material_content"]},
     "generated_at": {"type": "string", "format": "date-time"},
     "summary": {
       "type": "object", "additionalProperties": false,
@@ -23,7 +23,7 @@
           "source_archive": {"type": "string", "minLength": 1},
           "archive_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "scenario": {"type": "null"},
-          "reason_code": {"enum": ["missing_scenario_marker", "ambiguous_scenario_markers"]},
+          "reason_code": {"enum": ["missing_scenario_marker", "ambiguous_scenario_markers", "material_type_unmatched", "material_type_ambiguous", "required_materials_missing"]},
           "matched_scenarios": {
             "type": "array", "uniqueItems": true,
             "items": {"enum": ["personnel_incentive", "promotional_display", "poster_material", "other_expense", "maintenance_fee", "giveaway_promotion", "price_difference_support", "pos_target_incentive", "entry_fee", "self_procured_gift_material"]}

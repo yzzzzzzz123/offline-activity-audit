@@ -182,6 +182,7 @@ class RunTemporaryTests(unittest.TestCase):
             self.assertEqual((source / "preserve.zip").read_bytes(), b"original")
 
     def test_real_process_referencing_abandoned_material_defers_cleanup(self):
+        restricted = runtime._process_uses(self.root / "unowned-probe")
         value = self.create()
         self.abandon(value)
         child = subprocess.Popen(
@@ -196,10 +197,15 @@ class RunTemporaryTests(unittest.TestCase):
         finally:
             child.kill()
             child.communicate(timeout=10)
-        self.assertEqual(self.sweep()["removed"], 1)
+        result = self.sweep()
+        self.assertEqual(result, {"removed": 0, "busy": 1, "deferred": 0} if restricted
+                         else {"removed": 1, "busy": 0, "deferred": 0})
+        self.assertEqual(value.container.exists(), restricted)
 
     def test_bundled_cli_reaps_old_temp_and_publishes_only_its_own_archive(self):
-        # 真实 bundled CLI；无分类标记的隔离 ZIP 走正式确定性拒绝，不调用 AI/数据库/OSS。
+        # 真实 bundled CLI 与隔离模型夹具；不连接模型、数据库或OSS。
+        from tests.pdf_test_support import fixture_cli_command
+        restricted = runtime._process_uses(self.root / "unowned-probe")
         project = Path(__file__).resolve().parents[1]
         inputs = self.root / "input"
         inputs.mkdir()
@@ -214,16 +220,17 @@ class RunTemporaryTests(unittest.TestCase):
         environment.update({"TEMP": str(self.root), "TMP": str(self.root), "TMPDIR": str(self.root),
                             "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
         completed = subprocess.run(
-            [sys.executable, "-B", str(project / "skills/orchestrate-offline-audit/scripts/run.py"),
-             "--run-id", "20260914-temp-cleanup-test", "--producer-model", "codex",
-             "--input-dir", str(inputs), "--worktrees", str(self.scope)],
+            fixture_cli_command(
+                ["--run-id", "20260914-temp-cleanup-test", "--producer-model", "codex",
+                 "--input-dir", str(inputs), "--worktrees", str(self.scope)], candidates={0: []}),
             env=environment, cwd=project, capture_output=True, text=True, encoding="utf-8",
             timeout=45, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         self.assertEqual(completed.returncode, 2, completed.stderr)
-        self.assertIn("已清理 1 个目录", completed.stderr)
-        self.assertFalse(previous.container.exists())
-        self.assertEqual(list(self.root.glob("oa-*")), [])
+        if not restricted:
+            self.assertIn("已清理 1 个目录", completed.stderr)
+        self.assertEqual(previous.container.exists(), restricted)
+        self.assertEqual(list(self.root.glob("oa-*")), [previous.container] if restricted else [])
         self.assertEqual(source.read_bytes(), before_zip)
         self.assertEqual((project / "offline-activity-audit.html").read_bytes(), before_html)
         outputs = list(self.scope.glob("*/offline-activity-audit.html"))
@@ -234,6 +241,7 @@ class RunTemporaryTests(unittest.TestCase):
         self.assertEqual(list(self.scope.rglob("*.xlsx")), [])
 
     def test_real_forced_exit_then_next_process_cleans_both_kinds(self):
+        restricted = runtime._process_uses(self.root / "unowned-probe")
         script = (
             "import json,sys,time; from pathlib import Path; "
             "from audit_core.run_temporary import ManagedTemporaryDirectory; "
@@ -262,8 +270,9 @@ class RunTemporaryTests(unittest.TestCase):
                 cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True,
                 check=True, timeout=45, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            self.assertEqual(json.loads(completed.stdout), {"removed": 2, "busy": 0, "deferred": 0})
-            self.assertTrue(all(not container.exists() for container in containers))
+            self.assertEqual(json.loads(completed.stdout), {"removed": 0, "busy": 2, "deferred": 0} if restricted
+                             else {"removed": 2, "busy": 0, "deferred": 0})
+            self.assertTrue(all(container.exists() == restricted for container in containers))
         finally:
             if child.poll() is None:
                 child.kill()

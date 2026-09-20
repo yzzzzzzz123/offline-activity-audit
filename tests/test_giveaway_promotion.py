@@ -17,8 +17,9 @@ from audit_core.report import create_combined_report, verify_workbook
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE_SCHEMA = (
     PROJECT_ROOT
-    / "skills"
-    / "audit-giveaway-promotion"
+    / "contracts"
+    / "legacy"
+    / "giveaway_promotion"
     / "references"
     / "evidence.schema.json"
 )

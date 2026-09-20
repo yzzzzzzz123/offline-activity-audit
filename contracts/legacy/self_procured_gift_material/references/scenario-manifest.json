@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "self_procured_gift_material",
+  "skill_name": "audit-self-procured-gift-material",
+  "display_name": "客户自采赠品物料",
+  "aliases": ["自采赠品物料", "客户自采赠品", "凳子赠品", "收纳篮赠品"],
+  "order": 10,
+  "provenance": {
+    "source_zip_basename": "SQ202512310091-HX202602030065-自采赠品物料.zip",
+    "source_zip_sha256": "7a7c50e9a035abb0851dc2921b0e614cf76228967500e2a4c78238c2b8c1b391",
+    "source_zip_size": 79713711,
+    "generator_skill_version": "1.0",
+    "business_requirements_summary": [
+      "客户自行采购凳子、收纳篮等物料用于商品促销赠送消费者。",
+      "票据须有费用明细、金额和开具时间。",
+      "核销须写清活动赠送规则。",
+      "经销商盖章POS和POS电子表必须同时提交并对应。",
+      "所有活动门店须有活动期内日期、地址、时间水印照片，且清楚展示促销内容和自采物料。",
+      "统一模板客户盖章结算单和签章促销合同必须提交。"
+    ]
+  },
+  "scope": {
+    "in_scope": ["客户采购非公司商品物料后赠送消费者"],
+    "excluded": ["宣传单页物料制作", "展架/模型展示道具", "公司商品额外搭赠", "进场费", "直营"],
+    "audit_object": "一份客户自采赠品物料申报包及其分组阻断问题"
+  },
+  "evidence_roles": [
+    {"role_id": "signed_promotional_contract", "description": "签章促销合同", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["促销协议", "促销合同"], "ai_visible": true, "required": true, "binding_rule": "名称明确的唯一合同。"},
+    {"role_id": "purchase_invoice_or_receipt", "description": "自采物料发票或收据", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["购买凭证", "发票", "收据"], "ai_visible": true, "required": true, "binding_rule": "名称明确的唯一票据。"},
+    {"role_id": "stamped_pos_data", "description": "经销商盖章POS视觉数据", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": null, "nested_in": null, "name_markers": ["销售POS", "POS数据"], "ai_visible": true, "required": true, "binding_rule": "明确名称先绑定；剩余通用图由可见正文分类。"},
+    {"role_id": "pos_data_spreadsheet", "description": "POS数据电子表", "extensions": [".xlsx", ".xlsm"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["POS", "销售数据"], "ai_visible": false, "required": true, "binding_rule": "唯一现代Excel由确定性代码读取；活动返图.xls不得替代。"},
+    {"role_id": "activity_photo", "description": "全部活动门店水印照片", "extensions": [".png", ".jpg", ".jpeg", ".webp"], "minimum": 1, "maximum": null, "nested_in": "activity_return_workbook", "name_markers": [], "ai_visible": true, "required": true, "binding_rule": "活动返图.xls每行DISPIMG图片逐行、逐ID安全提取；行内门店只作路由提示。"},
+    {"role_id": "settlement", "description": "公司统一模板客户盖章结算单", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"], "minimum": 1, "maximum": 1, "nested_in": null, "name_markers": ["结算单", "结算表"], "ai_visible": true, "required": true, "binding_rule": "名称明确的唯一结算单。"}
+  ],
+  "ai_stages": [{"stage_id": "self_procured_visual_facts", "input_roles": ["signed_promotional_contract", "purchase_invoice_or_receipt", "purchase_payment_record", "stamped_pos_data", "settlement", "activity_photo", "unclassified_visual"], "reference_scope": [], "schema_file": "references/evidence.schema.json", "source_coverage_rule": "每个视觉源必须且只能返回一次，来源名和路由角色不得改写。"}],
+  "authority_edges": [
+    {"from": "signed_promotional_contract", "to": "settlement", "purpose": "限定活动、赠送规则、物料、门店、预算和计算"},
+    {"from": "purchase_invoice_or_receipt", "to": "settlement", "purpose": "证明实际采购物料、数量、单价、金额和时间"},
+    {"from": "stamped_pos_data", "to": "pos_data_spreadsheet", "purpose": "逐门店核对活动销售数量和金额"},
+    {"from": "activity_photo", "to": "activity_return_workbook", "purpose": "逐门店证明促销内容和自采物料实际展示/赠送"}
+  ],
+  "forbidden_edges": [
+    {"from": "activity_return_workbook", "to": "pos_data_spreadsheet", "purpose": "活动返图Excel不能替代POS电子表"},
+    {"from": "store_hint", "to": "photo_store", "purpose": "工作簿门店名不能替代照片水印"},
+    {"from": "stamped_pos_data", "to": "gift_rule", "purpose": "POS不能替代合同/结算中的赠送规则"}
+  ],
+  "controls": [
+    {"control_id": "required_materials", "source": "全部角色", "object": "六类必备资料", "expectation": "票据、赠送规则、盖章POS+电子表、全门店照片、盖章结算、签章合同齐全", "comparison": "deterministic", "blocking": true, "error_group": "资料完整性", "resubmission": "按缺失清单补交。"},
+    {"control_id": "contract_and_gift_rule", "source": "合同/结算", "object": "活动、赠送规则、物料、门店和预算", "expectation": "规则完整、同一且已签章", "comparison": "visible", "blocking": true, "error_group": "促销合同", "resubmission": "补交规则完整的签章合同/盖章结算。"},
+    {"control_id": "purchase_document", "source": "发票/收据/付款", "object": "采购明细与金额", "expectation": "名称、数量、单价、金额、时间清楚并与付款/申报一致", "comparison": "visible_and_deterministic", "blocking": true, "error_group": "采购票据", "resubmission": "补交明细完整的发票或收据及必要付款说明。"},
+    {"control_id": "pos_correspondence", "source": "盖章POS与电子表", "object": "周期、门店、数量和金额", "expectation": "逐项唯一、合计一致", "comparison": "deterministic", "blocking": true, "error_group": "POS对应", "resubmission": "补交并更正POS两种载体。"},
+    {"control_id": "activity_photo_coverage", "source": "活动返图工作簿和照片", "object": "全部门店水印及活动内容", "expectation": "逐行唯一绑定且每店照片自身完整", "comparison": "visible_and_unique_fuzzy", "blocking": true, "error_group": "活动照片", "resubmission": "补交缺失门店或水印/内容不完整的原始照片。"},
+    {"control_id": "amount_recalculation", "source": "合同、票据、付款、结算和POS", "object": "申报金额", "expectation": "数量×单价、预算、票据、付款、结算和赠送规则闭环", "comparison": "deterministic", "blocking": true, "error_group": "金额复算", "resubmission": "补正数量、单价、规则或金额来源。"}
+  ],
+  "amount_policy": {"claim_source": "公司统一模板客户盖章结算单", "supported_amount_rule": "受签章合同预算、有效票据金额和实际采购金额上限约束；全部阻断控制通过且复算与申报一致时支持，否则0。", "rounding": "人民币元，ROUND_HALF_UP保留两位小数", "blocked_rule": "任一阻断失败全额暂缓", "conclusions": ["pass", "human_review"]},
+  "output": {"sheet_name": "自采赠品物料核销", "html_mode": "error_only", "count_unit": "个问题", "required_facts": ["问题来源", "识别内容", "规则", "影响", "补交"], "prohibited_terms": ["prompt", "schema", "临时目录", "系统内部路径"]},
+  "dependencies": [{"name": "Microsoft Excel COM", "purpose": "只读转换WPS DISPIMG旧式活动返图.xls。"}, {"name": "openpyxl", "purpose": "确定性读取活动返图路由和POS电子表。"}, {"name": "jsonschema", "purpose": "校验证据和结果。"}]
+}
