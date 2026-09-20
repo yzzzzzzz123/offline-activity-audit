@@ -73,7 +73,7 @@ class RunDeletionTests(_RunDeletionFixture, unittest.TestCase):
     def test_removes_all_owned_files_and_standalone_git_without_touching_other_data(self):
         other = self.seed("20260907_1200_01-codex_high")
         before = (other.workspace / "manifest.json").read_bytes()
-        render_static_run_archive(self.workspace, Path("offline-activity-audit.html"))
+        render_static_run_archive(self.workspace, Path("skills/orchestrate-offline-audit/assets/offline-activity-audit.html"))
         atomic_write_json(self.workspace / ".git" / "objects" / "fixture", {"git": True})
         legacy = self.root / f"{self.workspace_id}.html"
         legacy.write_text("owned legacy", encoding="utf-8")

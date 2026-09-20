@@ -1,0 +1,230 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "other_expense",
+  "skill_name": "audit-other-expense",
+  "display_name": "其他费用",
+  "aliases": ["其他", "其他费用", "新增费用类型"],
+  "order": 4,
+  "provenance": {
+    "source_zip_basename": "SQ202511250016-HX202512300004-其他.zip",
+    "source_zip_sha256": "9c7ee49786be8d8f3c4b70d02be7e278fed52574a8fad2076250e6eba49db755",
+    "source_zip_size": 3542998,
+    "generator_skill_version": "1.0",
+    "business_requirements_summary": [
+      "其他费用只适用于无法归入既有费用分类的新类型",
+      "新增费用类型必须先取得特殊审批",
+      "资料按具体费用类型提供合同、协议、相关文件、活动周期内照片、POS等",
+      "必须提交公司统一模板且有客户盖章的结算单",
+      "必须提交签章后的促销合同"
+    ]
+  },
+  "scope": {
+    "in_scope": [
+      "明确申报为其他费用且需要判断是否属于新费用类型的核销包",
+      "新费用类型的特殊审批与基础资料完整性审核"
+    ],
+    "excluded": [
+      "能归入赠品、陈列堆头、人员激励、海报或物料制作、维护费用、补差、搭赠、POS达标激励、进场费的普通核销",
+      "仅因文件名写有其他而没有新类型实质的材料"
+    ],
+    "audit_object": "一份其他费用申报包"
+  },
+  "evidence_roles": [
+    {
+      "role_id": "signed_promotional_contract",
+      "description": "签章后的促销合同",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 1,
+      "maximum": 1,
+      "nested_in": null,
+      "name_markers": ["促销合同"],
+      "ai_visible": true,
+      "required": true,
+      "binding_rule": "文件名候选与可见标题共同确认；不得用普通支持协议替代"
+    },
+    {
+      "role_id": "settlement",
+      "description": "公司统一模板且有客户盖章的结算单",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 1,
+      "maximum": 1,
+      "nested_in": null,
+      "name_markers": ["结算单", "结算表"],
+      "ai_visible": true,
+      "required": true,
+      "binding_rule": "恰好绑定一份结算单候选并由可见内容复核模板和客户盖章"
+    },
+    {
+      "role_id": "supporting_document",
+      "description": "按费用实质提供的独立合同、协议或相关文件",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 0,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["协议", "合同", "相关文件"],
+      "ai_visible": true,
+      "required": false,
+      "binding_rule": "排除促销合同、结算单、票据和审批证明后的独立费用支持文件"
+    },
+    {
+      "role_id": "invoice_or_receipt",
+      "description": "按费用实质提供的发票或收据",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 0,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["发票", "收据"],
+      "ai_visible": true,
+      "required": false,
+      "binding_rule": "与普通支持协议分开绑定，保留票据自己的费用描述和金额"
+    },
+    {
+      "role_id": "activity_photo",
+      "description": "活动周期内的现场照片或其他图片执行证明",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp"],
+      "minimum": 0,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["现场", "活动", "照片", "水印"],
+      "ai_visible": true,
+      "required": false,
+      "binding_rule": "逐张保留来源，只提取照片内可见的水印和活动事实"
+    },
+    {
+      "role_id": "pos_data",
+      "description": "活动周期内的POS数据证明",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 0,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["POS", "pos"],
+      "ai_visible": true,
+      "required": false,
+      "binding_rule": "与现场照片分开绑定，只提取POS文件内可见的期间和汇总事实"
+    },
+    {
+      "role_id": "special_approval",
+      "description": "批准新增费用类型的独立特殊审批证明",
+      "extensions": [".jpg", ".jpeg", ".png", ".webp", ".pdf"],
+      "minimum": 0,
+      "maximum": null,
+      "nested_in": null,
+      "name_markers": ["特殊审批", "特批", "新增类型审批"],
+      "ai_visible": true,
+      "required": false,
+      "binding_rule": "路由阶段允许缺失；确定性审核仅接受可见内容明确批准新增类型的文件"
+    }
+  ],
+  "ai_stages": [
+    {
+      "stage_id": "visible_document_extraction",
+      "input_roles": [
+        "signed_promotional_contract", "settlement", "supporting_document",
+        "invoice_or_receipt", "activity_photo", "pos_data", "special_approval"
+      ],
+      "reference_scope": [],
+      "schema_file": "references/evidence.schema.json",
+      "source_coverage_rule": "每个送入模型的原始文件 basename 恰好返回一条 document，禁止遗漏、重复或发明来源"
+    }
+  ],
+  "authority_edges": [
+    {"from": "资料可见费用描述", "to": "既有费用分类表", "purpose": "先排除可归入的现有类型"},
+    {"from": "特殊审批", "to": "新增费用类型", "purpose": "授权建立无法归类的新类型"},
+    {"from": "签章促销合同", "to": "活动范围与费用构成", "purpose": "确定活动和预算基线"},
+    {"from": "统一模板盖章结算单", "to": "申报金额", "purpose": "确定本次申报金额"},
+    {"from": "支持材料", "to": "具体费用事实", "purpose": "证明费用发生和活动执行"}
+  ],
+  "forbidden_edges": [
+    {"from": "ZIP名称中的其他", "to": "新增费用类型", "purpose": "文件名不能证明业务分类"},
+    {"from": "促销合同或结算单", "to": "特殊审批", "purpose": "普通业务单据不能替代新类型审批"},
+    {"from": "总额相同", "to": "缺失的费用身份或执行事实", "purpose": "金额相同不能补造证据链"},
+    {"from": "活动照片或POS", "to": "审批通过", "purpose": "执行证明不能授权新增类型"}
+  ],
+  "controls": [
+    {
+      "control_id": "expense_type_eligibility",
+      "source": "全部资料中的费用描述",
+      "object": "其他费用申报包",
+      "expectation": "申报费用无法归入任何既有费用类型",
+      "comparison": "deterministic",
+      "blocking": true,
+      "error_group": "类型归类错误",
+      "resubmission": "按识别到的既有费用类型重新提交或拆分资料"
+    },
+    {
+      "control_id": "special_approval",
+      "source": "特殊审批证明",
+      "object": "新增费用类型",
+      "expectation": "审批明确写明新增类型、审批主体、批准意见、日期和审批标记",
+      "comparison": "visible",
+      "blocking": true,
+      "error_group": "需特殊审批",
+      "resubmission": "补交批准新增费用类型的独立特殊审批证明"
+    },
+    {
+      "control_id": "signed_promotional_contract",
+      "source": "促销合同",
+      "object": "活动业务基线",
+      "expectation": "合同签订方、周期、费用范围或预算及签章可识别",
+      "comparison": "visible",
+      "blocking": true,
+      "error_group": "促销合同不完整",
+      "resubmission": "补交信息完整且已签章的促销合同"
+    },
+    {
+      "control_id": "settlement_template_and_seal",
+      "source": "结算单",
+      "object": "申报金额",
+      "expectation": "公司统一模板、客户盖章、费用明细、计算方式、金额和日期均可识别",
+      "comparison": "visible",
+      "blocking": true,
+      "error_group": "结算单不合格",
+      "resubmission": "按公司统一模板补交客户盖章且明细完整的结算单"
+    },
+    {
+      "control_id": "type_specific_support",
+      "source": "合同、协议、相关文件、活动照片、POS等",
+      "object": "具体费用事实",
+      "expectation": "至少存在一份独立支持材料，且按审批后的新类型覆盖费用和执行事实",
+      "comparison": "deterministic",
+      "blocking": true,
+      "error_group": "具体费用资料不完整",
+      "resubmission": "按审批后的新类型补交对应协议、相关文件及活动期执行证明"
+    },
+    {
+      "control_id": "amount_consistency",
+      "source": "合同、审批、结算单及支持材料",
+      "object": "申报金额",
+      "expectation": "同一口径下明确列示的金额精确一致，不做倒推",
+      "comparison": "exact",
+      "blocking": true,
+      "error_group": "金额不一致",
+      "resubmission": "更正冲突单据并保留逐项金额和计算依据"
+    }
+  ],
+  "amount_policy": {
+    "claim_source": "公司统一模板且有客户盖章的结算单合计",
+    "supported_amount_rule": "其他费用属于特殊审批通道，系统自动建议金额恒为0，由有权审批人确认新增类型与金额",
+    "rounding": "只保留来源金额到分，不进行来源外计算",
+    "blocked_rule": "任何类型、审批或资料控制失败时自动建议金额为0",
+    "conclusions": ["类型归类错误", "需特殊审批", "资料需补正", "待人工核定"]
+  },
+  "output": {
+    "sheet_name": "其他费用核销",
+    "html_mode": "error_only",
+    "count_unit": "错误项",
+    "required_facts": [
+      "具体问题文件和对照文件",
+      "识别到的费用描述及其应归入的现有类型",
+      "特殊审批是否存在及其批准的新类型",
+      "结算单模板、客户盖章、合同签章和支持材料状态",
+      "申报金额与自动建议金额0",
+      "明确处理方式"
+    ],
+    "prohibited_terms": ["其他兜底", "默认通过", "详见审计JSON", "资料无法逐一确认"]
+  },
+  "dependencies": [
+    {"name": "费用分类及申请核销资料表", "purpose": "提供其他费用之前的既有费用类型边界"},
+    {"name": "skills/orchestrate-offline-audit/scripts/audit_core/archive_input.py", "purpose": "安全解压并绑定促销合同、结算单、支持材料、活动证据和审批候选"}
+  ]
+}

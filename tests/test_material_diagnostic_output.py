@@ -530,7 +530,7 @@ class MaterialDiagnosticOutputTests(unittest.TestCase):
             workspace = Path(temporary) / "diagnostic"
             workspace.mkdir()
             store = WorkbenchRunStore(workspace, run_id="20260910-diagnostic", producer_model="codex",
-                root_html=Path(__file__).resolve().parents[1] / "offline-activity-audit.html", workbench_url="http://127.0.0.1:8080/",
+                root_html=Path(__file__).resolve().parents[1] / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html', workbench_url="http://127.0.0.1:8080/",
                 source_archives=["ai-pack-9.zip"])
             store.observe("cases.prepared", {"cases": {}, "scenarios": []})
             store.observe("material_diagnostic.started", {"case": case})

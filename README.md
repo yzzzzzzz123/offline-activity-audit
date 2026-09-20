@@ -2,9 +2,38 @@
 
 系统版本 **2.12.3**，工作台API **1.44**。以用户指定PDF为唯一审核标准，按提交资料内容识别八种核销方式。
 
+## 项目目录
+
+代码、规则和模板按 Skill 归属存放；启动命令、Python 包名 `audit_core` 和工作台网址保持一致。
+
+```text
+offline-activity-audit/
+├─ skills/
+│  ├─ orchestrate-offline-audit/
+│  │  ├─ SKILL.md
+│  │  ├─ scripts/             # 正式入口、维护命令和 audit_core 核销引擎
+│  │  ├─ references/          # contracts、pdf-policy、部署及故障记录
+│  │  └─ assets/              # 唯一客户 HTML；legacy/ 保留旧视图编译资源
+│  ├─ audit-*/               # 各核销类型的 Skill、证据结构和规则
+│  ├─ create-offline-audit-scenario/  # 场景维护和规则同步脚本
+│  ├─ new-product-onboarding-rag-workflow/ # 独立商品入库维护
+│  └─ project-workflow-showcase/     # 工作流展示工具及 assets/ 展示页
+├─ shared/product-database/  # 独立商品数据库及维护工具
+├─ tests/                   # 跨 Skill 回归；fixtures/ 仅供验收测试
+├─ input/                   # 本地原始 ZIP
+├─ input-oss/               # 按任务隔离的 OSS 原始 ZIP
+├─ worktrees/               # 正式运行档案
+└─ artifacts/               # 本地诊断与备份
+```
+
+运行及维护从 [编排 Skill](skills/orchestrate-offline-audit/SKILL.md) 进入；
+迁移部署参考 [部署说明](skills/orchestrate-offline-audit/references/deployment.md)。
+仅移动源码和资源，不迁移或改写输入、历史运行、数据库、凭据及 Git 中保留的历史图库。
+验收工作簿保留在 `tests/fixtures/`，不进入模型可读的 Skill 目录。
+
 ## 当前规则（2026-09-18）
 
-唯一业务标准为用户指定的《费用核销类型-资料与标准清单-20260918.pdf》第1页。程序规则表位于 `audit_core/pdf_policy.py`；八份Skill的清单与审核要点由 `scripts/sync_pdf_policy.py` 同步。新规则取代旧十类业务规则及2026-09-11的ZIP名称路由。
+唯一业务标准为用户指定的《费用核销类型-资料与标准清单-20260918.pdf》第1页。程序规则表位于 `skills/orchestrate-offline-audit/scripts/audit_core/pdf_policy.py`；八份Skill的清单与审核要点由 `skills/create-offline-audit-scenario/scripts/sync_pdf_policy.py` 同步。新规则取代旧十类业务规则及2026-09-11的ZIP名称路由。
 
 | 核销类型 | 类型标识 | Skill |
 |---|---|---|
@@ -185,16 +214,16 @@ Windows 上工作台端口采用独占绑定；若已有旧服务占用相同端
 
 ## 维护与验证
 
-- `audit_core/pdf_policy.py`：唯一八类清单与PDF审核要点。
+- `skills/orchestrate-offline-audit/scripts/audit_core/pdf_policy.py`：唯一八类清单与PDF审核要点。
 - `pdf_materials.py`：整页/表格读取、内容分类和选定Skill调用。
 - `pdf_evidence.py`：严格Schema、来源引用及数值复算。
 - `pdf_workflow.py`：分类失败/对应Skill审核、结果与持久页面投影。
-- `contracts/legacy/`：旧十类资源，仅供历史兼容回归，不能驱动新运行。
+- `skills/create-offline-audit-scenario/references/legacy/`：旧十类资源，仅供历史兼容回归，不能驱动新运行。
 
 ```powershell
-py -3 -B scripts/sync_pdf_policy.py
-py -3 -B -m unittest discover -s tests -v
-py -3 -B -m compileall -q audit_core skills
+py -3 -B skills/create-offline-audit-scenario/scripts/sync_pdf_policy.py
+py -3 -B skills/orchestrate-offline-audit/scripts/verify_project.py -v
+py -3 -B -m compileall -q skills tests shared/product-database
 ```
 
 执行流程更改还需真实ZIP的bundled runner验证、1440×960与1280px桌面工作台检查。安装Playwright及Chromium后，可用 `python -B tests/pdf_workbench_smoke.py` 在隔离夹具中验证八类结果、失败文案、服务与静态档案一致性。结果必须严格只含PDF审核要点；不得用旧测试的额外审核反向扩大范围。验收工作簿只用于测试。

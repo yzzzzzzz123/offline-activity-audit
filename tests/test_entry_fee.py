@@ -194,7 +194,7 @@ class EntryFeeTests(unittest.TestCase):
                 ],
             }
             result = audit_entry_fee_case(case, evidence)
-            validate_json(result, ROOT / "contracts" / "audit-result.schema.json")
+            validate_json(result, ROOT / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json")
             self.assertEqual(result["summary"]["claimed_amount"], 8500)
             self.assertEqual(result["summary"]["suggested_approved_amount"], 8500)
             self.assertEqual(result["summary"]["temporarily_held_amount"], 0)

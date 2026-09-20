@@ -11,7 +11,7 @@ class MaintenanceTests(unittest.TestCase):
     def test_preview_and_apply_only_remove_reproducible_code_caches(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            cache = root / "audit_core/__pycache__/example.cpython-314.pyc"
+            cache = root / "skills/orchestrate-offline-audit/scripts/audit_core/__pycache__/example.cpython-314.pyc"
             cache.parent.mkdir(parents=True)
             cache.write_bytes(b"cache")
             protected = [

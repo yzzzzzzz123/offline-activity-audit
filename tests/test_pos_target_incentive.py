@@ -148,7 +148,7 @@ class PosTargetIncentiveTests(unittest.TestCase):
                 "pos_spreadsheet": workbook,
             }
             result = audit_pos_target_incentive_case(case, evidence)
-            validate_json(result, ROOT / "contracts" / "audit-result.schema.json")
+            validate_json(result, ROOT / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json")
             self.assertEqual(result["summary"]["claimed_amount"], 30000)
             self.assertEqual(result["summary"]["suggested_approved_amount"], 0)
             self.assertEqual(result["summary"]["temporarily_held_amount"], 30000)

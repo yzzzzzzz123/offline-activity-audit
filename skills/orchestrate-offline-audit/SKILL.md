@@ -22,6 +22,24 @@ POS达标激励采用新版PDF独立清单：盖章POS及Excel、结算单、签
 
 先读 [资料识别和路由规则](references/routing-rules.md)。错误文案遵循 [错误原因规范](references/error-reasons.md)，OSS传输遵循 [接收契约](references/oss-intake.md)。
 
+## 资源位置
+
+本 Skill 收纳编排引擎、契约及工作台资源；项目根目录继续承载业务数据和跨 Skill 测试。
+
+| 任务 | 位置 |
+|---|---|
+| 正式核销、服务、归档维护 | `scripts/`；引擎为 `scripts/audit_core/` |
+| 核对批准的 PDF 与规则目录 | [PDF 规则资料](references/pdf-policy/) |
+| 检查当前输出结构 | [契约](references/contracts/) |
+| 历史兼容维护 | [维护 Skill 的历史资源](../create-offline-audit-scenario/references/legacy/)；不用于当前核销 |
+| 工作台源码与旧视图编译器 | `assets/offline-activity-audit.html` 与 `assets/legacy/` |
+| 部署迁移或排查历史故障 | [部署说明](references/deployment.md)、[故障记录](references/incidents/) |
+| 清理临时文件、完整回归 | `scripts/clean_temporary.py`、`scripts/verify_project.py` |
+| 修改规则及同步八类 Skill | [场景维护 Skill](../create-offline-audit-scenario/SKILL.md) |
+| 用户明确要求陈列档位评测 | `../audit-promotional-display/scripts/benchmark_display_effort.py`；不作为普通核销入口 |
+
+从项目根运行以下命令；验收工作簿位于根 `tests/fixtures/`，不能复制到 Skill 或模型资料目录。
+
 ## 正式运行
 
 ```powershell
@@ -53,7 +71,7 @@ py -3 -B skills/orchestrate-offline-audit/scripts/run.py --run-id <run-id> --pro
 
 ## 输出与运行边界
 
-Audit System `2.12.3`，API `1.44`。唯一客户源码是根 `offline-activity-audit.html`，不重设计界面。
+Audit System `2.12.3`，API `1.44`。唯一客户源码是`skills/orchestrate-offline-audit/assets/offline-activity-audit.html`，不重设计界面。
 每次运行落盘到独立worktree，历史不可变；成功/失败均保留真实状态。分类失败CLI退出2，回调送达不能改为核销成功。
 资料分类和审核证据位于 `analysis/pdf-policy/evidence.json`，按类型结果位于 `analysis/results/`，分类失败位于 `analysis/classification-rejection/result.json`。
 分类失败对外只写“核销方式无法确认”，页面、摘要和回调一致；逐类匹配详情保留在技术档案。其他业务审核错误摘要仍逐项列具体原因；混合批次保留这些审核错误，分类失败只提示一次。文件区域只列原始文件basename。通过台账只能来自同次已验证通过项，不新增规则。

@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "skills/orchestrate-offline-audit/scripts"))
 
 from playwright.sync_api import sync_playwright, expect
 from audit_core.scenario_registry import SCENARIO_ORDER

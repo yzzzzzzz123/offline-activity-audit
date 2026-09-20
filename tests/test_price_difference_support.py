@@ -194,7 +194,7 @@ class PriceDifferenceSupportTests(unittest.TestCase):
             "pos_spreadsheet": None,
         }
         result = audit_price_difference_support_case(case, evidence)
-        validate_json(result, ROOT / "contracts" / "audit-result.schema.json")
+        validate_json(result, ROOT / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json")
         self.assertEqual(result["summary"]["claimed_amount"], 10980)
         self.assertEqual(result["summary"]["suggested_approved_amount"], 0)
         self.assertEqual(result["summary"]["temporarily_held_amount"], 10980)

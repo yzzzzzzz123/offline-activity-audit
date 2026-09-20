@@ -17,8 +17,8 @@ from PIL import Image
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_ROOT = SCRIPT_DIR.parent
 PROJECT_ROOT = SCRIPT_DIR.parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT / 'skills/orchestrate-offline-audit/scripts') not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / 'skills/orchestrate-offline-audit/scripts'))
 
 from audit_core.common import AuditError, load_json, sha256_file, validate_json
 from audit_core.product_rag import canonical_product_name, catalog_product_name_values, ean13_is_valid

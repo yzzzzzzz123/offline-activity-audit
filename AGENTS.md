@@ -1,8 +1,14 @@
 # 线下活动核销项目
 
+## 目录归属
+
+编排代码位于 `skills/orchestrate-offline-audit/scripts/audit_core/`，Python 包名仍为 `audit_core`。契约及 PDF 规则位于该 Skill 的 `references/`，唯一客户源码位于 `assets/offline-activity-audit.html`，旧编译资源完整保留在 `assets/legacy/`。规则同步脚本及旧规则、Schema、校准资料归场景维护 Skill，旧资源不进入当前核销模型的 Skill 目录；工作流展示页归展示 Skill。
+
+根目录保留业务输入、运行档案、独立数据库、备份及跨 Skill 测试。验收工作簿只位于 `tests/fixtures/`，不能纳入模型可读的 Skill。详细目录导航见 `README.md`；所有命令从项目根目录执行。
+
 ## 当前规则（2026-09-18）
 
-唯一业务标准为用户指定的《费用核销类型-资料与标准清单-20260918.pdf》第1页。程序规则表位于 `audit_core/pdf_policy.py`；八份Skill的清单与审核要点由 `scripts/sync_pdf_policy.py` 同步。新规则取代旧十类业务规则及2026-09-11的ZIP名称路由。
+唯一业务标准为用户指定的《费用核销类型-资料与标准清单-20260918.pdf》第1页。程序规则表位于 `skills/orchestrate-offline-audit/scripts/audit_core/pdf_policy.py`；八份Skill的清单与审核要点由 `skills/create-offline-audit-scenario/scripts/sync_pdf_policy.py` 同步。新规则取代旧十类业务规则及2026-09-11的ZIP名称路由。
 
 | 核销类型 | 类型标识 | Skill |
 |---|---|---|
@@ -94,7 +100,7 @@ OSS 下载必须使用独立直连 opener，显式禁用环境变量和 Windows 
 用户明确要求摘要格式迁移时，`backfill_analysis_summaries.py --apply` 只可确定性重写现有已完成 worktree 的
 `ai-analysis-summary.md` 及匹配的 manifest/snapshot 摘要元数据。文字必须来自已保存快照；以原子方式更新哈希；
 所有业务证据和决定保持不变；绝不能自动重发历史回调。
-可用 `--workspace-id` 仅刷新指定记录的摘要，支持已完成或 `classification_failed` 终态；只改摘要及其哈希元数据，保留原始快照视图与失败详情。静态HTML另从规范根源码刷新。
+可用 `--workspace-id` 仅刷新指定记录的摘要，支持已完成或 `classification_failed` 终态；只改摘要及其哈希元数据，保留原始快照视图与失败详情。静态HTML另从规范客户源码刷新。
 
 用户于 2026-09-11 明确授权按最新规则整理全部已完成 worktree。复用 `backfill_analysis_summaries.py --refresh-archives` 先预览，执行时以 `--backup-dir` 指定新的备份目录并加 `--apply`。允许更新摘要、对应摘要元数据、规范静态 HTML 和 manifest 的 `customer_projection` 派生显示数量；写入前备份全部将变更文件。原始 `snapshot.view`、业务 `error_count`、结果、证据、日志、检查点与回调回执保持不变，不调用 AI、不恢复已删除记录。客户数量按规则版本与快照 SHA 校验，重复执行保持幂等。
 
@@ -112,7 +118,7 @@ Agent 不得调用内部报告/渲染函数作为替代工作流，不得手写�
 
 仓库严格只有一个带版本的客户 HTML 源码和局域网入口：
 
-`offline-activity-audit.html`
+`skills/orchestrate-offline-audit/assets/offline-activity-audit.html`
 
 它是持久、带版本的两级系统外壳，普通核销运行绝不在磁盘上重新生成或填充它。
 可信本地服务在 `http://127.0.0.1:8080/` 及机器获批局域网地址提供页面，并暴露只读结果 API、
@@ -150,18 +156,18 @@ Agent 不得调用内部报告/渲染函数作为替代工作流，不得手写�
 
 客户错误只来自当前PDF要点，包含文件basename、具体缺失/不符字段及必要差值。通过台账从同一保存结果投影，不把分类识别当成业务通过；同类多包都保留独立来源。
 
-规范、带版本客户界面源码是根目录 `offline-activity-audit.html`，当前为 Audit System `2.12.3`。
+规范、带版本客户界面源码是`skills/orchestrate-offline-audit/assets/offline-activity-audit.html`，当前为 Audit System `2.12.3`。
 普通核销中，其一级系统、获批原始二级核销台、文案、布局、客户/技术隔离、运行历史行为、相对 API 契约、响应式行为和控件保持不变。
 它只读取可信服务的 `/api/config`、`/api/runs`、运行 `snapshot`、`log`、`events`、批准的 `analysis` 及 `checkpoints` 资源。
 可信服务在 `/?run=<workspace-id>` 的固定 HTML 响应中注入选定运行载荷，不修改磁盘文件。
-每次运行进入终态后，持久 runner 必须从准确根源码原子派生
+每次运行进入终态后，持久 runner 必须从准确客户源码原子派生
 `worktrees/<workspace-id>/offline-activity-audit.html`，只嵌入该运行视图、批准分析资源、检查点及可观察日志。
 该运行档案只读且自包含。不带查询打开时，展示合并台账的一级总览和技术档案，范围只限嵌入运行；
 嵌入的已完成或失败运行在总览台账和技术档案中均为一条记录；通过同一本地 HTML 的 `?run=<workspace-id>` 打开结果或诊断。返回保持本地，无需 HTTP。
 核验注释显示为禁用只读控件，并隐藏删除。失败档案不嵌入样例业务行。
-直接以 `file://` 打开根源码仍重定向到服务。未来核销运行绝不能重写根文件或创建第二套前端实现。
+直接以 `file://` 打开客户源码仍重定向到服务。未来核销运行绝不能重写客户源码文件或创建第二套前端实现。
 
-`skills/orchestrate-offline-audit/assets/` 下旧 bundle 保持为确定性、运行范围内的视图载荷编译器和校验器。
+`skills/orchestrate-offline-audit/assets/legacy/` 下旧 bundle 保持为确定性、运行范围内的视图载荷编译器和校验器。
 `audit_core.html_report` 只可在系统临时空间组装它，用于证明六列投影、提取已验证 `audit-data` 载荷，随后删除临时 HTML。
 它不是客户入口，绝不能发布到 `worktrees/`。
 
@@ -316,17 +322,17 @@ GET 资源是私有内容且必须重新验证；未变化请求可以返回 304
 
 ## Skill维护与验证
 
-仅当用户明确新增业务标准时扩展核销范围，使用 `skills/create-offline-audit-scenario/SKILL.md`。先判断是否属于既有八类；不要按客户、月份或ZIP名称另建Skill。修改 `pdf_policy.py` 后运行 `python -B scripts/sync_pdf_policy.py --write`，再用不带参数的命令检查同步；八份证据Schema与JSON均须校验。
+仅当用户明确新增业务标准时扩展核销范围，使用 `skills/create-offline-audit-scenario/SKILL.md`。先判断是否属于既有八类；不要按客户、月份或ZIP名称另建Skill。修改 `pdf_policy.py` 后运行 `python -B skills/create-offline-audit-scenario/scripts/sync_pdf_policy.py --write`，再用不带参数的命令检查同步；八份证据Schema与JSON均须校验。
 
-主动清理仅使用 `scripts/clean_temporary.py` 的归属/占用机制；不得为测试删除真实输入、历史worktree、数据库、凭据或Git历史。LangSmith追踪、全局verbose/debug与父级回调的隔离要求保持不变。
+主动清理仅使用 `skills/orchestrate-offline-audit/scripts/clean_temporary.py` 的归属/占用机制；不得为测试删除真实输入、历史worktree、数据库、凭据或Git历史。LangSmith追踪、全局verbose/debug与父级回调的隔离要求保持不变。
 
 ## 变更验证
 
 至少运行：
 
 ```powershell
-py -3 -B -m unittest discover -s tests -v
-py -3 -B -m compileall -q audit_core skills
+py -3 -B skills/orchestrate-offline-audit/scripts/verify_project.py -v
+py -3 -B -m compileall -q skills tests shared/product-database
 ```
 
 还要校验全部 JSON 和 Skill frontmatter。执行路径变化时，使用保留的真实 ZIP 输入运行 bundled 正式命令；
@@ -338,4 +344,4 @@ py -3 -B -m compileall -q audit_core skills
 最后运行 `git diff --check` 和 `git status --short`。
 
 用户指定获批参考 HTML 时，只可用于明确的工作台重设计验收。运行时代码、模型提示词、证据提取及运行快照绝不能读取或复制它。
-本地服务加载源码派生测试快照后比较根固定页面，再将生成运行档案与服务记录比较；绝不能手工修补生成页面。
+本地服务加载源码派生测试快照后比较固定工作台页面，再将生成运行档案与服务记录比较；绝不能手工修补生成页面。

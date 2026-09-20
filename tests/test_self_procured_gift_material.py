@@ -20,7 +20,7 @@ from audit_core.self_procured_gift_material import audit_self_procured_gift_mate
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE_SCHEMA = (
     ROOT
-    / "contracts"
+    / "skills/create-offline-audit-scenario/references"
     / "legacy"
     / "self_procured_gift_material"
     / "references"
@@ -293,7 +293,7 @@ class SelfProcuredGiftMaterialTests(unittest.TestCase):
             }
             _validate_self_procured_gift_material_sources(case, evidence)
             result = audit_self_procured_gift_material_case(case, evidence)
-            validate_json(result, ROOT / "contracts" / "audit-result.schema.json")
+            validate_json(result, ROOT / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json")
             self.assertEqual(result["summary"]["claimed_amount"], 42000)
             self.assertEqual(result["summary"]["suggested_approved_amount"], 42000)
             self.assertEqual(result["summary"]["temporarily_held_amount"], 0)

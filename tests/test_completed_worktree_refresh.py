@@ -23,7 +23,8 @@ class CompletedWorktreeRefreshTests(unittest.TestCase):
         self.project = Path(self.temporary.name)
         self.root = self.project / "worktrees"
         self.root.mkdir()
-        self.template = self.project / "offline-activity-audit.html"
+        self.template = self.project / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html'
+        self.template.parent.mkdir(parents=True)
         self.template.write_text(f"<html><head></head><body>{DATA_OPEN}{{}}{DATA_CLOSE}</body></html>", encoding="utf-8")
         self.backup = self.project / "artifacts" / "refresh-backup"
 

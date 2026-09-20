@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT.parents[1]))
+sys.path.insert(0, str(ROOT.parents[1] / 'skills/orchestrate-offline-audit/scripts'))
 from audit_core.common import AuditError, sha256_file
 from audit_core.product_database import load_product_catalog
 from audit_core.product_oss import (

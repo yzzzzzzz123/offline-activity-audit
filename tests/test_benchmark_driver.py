@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "scripts/benchmark_display_effort.py"
+SOURCE = Path(__file__).resolve().parents[1] / "skills/audit-promotional-display/scripts/benchmark_display_effort.py"
 SPEC = importlib.util.spec_from_file_location("benchmark_display_effort", SOURCE)
 assert SPEC and SPEC.loader
 driver = importlib.util.module_from_spec(SPEC)
@@ -50,7 +50,7 @@ class BenchmarkDriverTests(unittest.TestCase):
         self.assertIsNotNone(driver.build_report(self.state())["recommendation"])
         self.assertIsNone(driver.build_report(self.state(["low", "medium"]))["recommendation"])
         changed = self.state()
-        changed["fingerprint_changes"] = ["source/audit_core/codex_runner.py"]
+        changed["fingerprint_changes"] = ["source/skills/orchestrate-offline-audit/scripts/audit_core/codex_runner.py"]
         report = driver.build_report(changed)
         self.assertFalse(report["comparable"])
         self.assertIsNone(report["recommendation"])
@@ -109,8 +109,8 @@ class BenchmarkDriverTests(unittest.TestCase):
             inputs = root / "input"
             inputs.mkdir()
             (inputs / "a.zip").write_bytes(b"input")
-            (root / "audit_core").mkdir()
-            code = root / "audit_core/a.py"
+            (root / "skills/orchestrate-offline-audit/scripts/audit_core").mkdir(parents=True)
+            code = root / "skills/orchestrate-offline-audit/scripts/audit_core/a.py"
             code.write_text("version=1", encoding="utf-8")
             baseline = driver.source_fingerprint(root, inputs)
             source["read_at_utc"] = "next"
@@ -121,7 +121,7 @@ class BenchmarkDriverTests(unittest.TestCase):
             code.write_text("version=2", encoding="utf-8")
             (inputs / "a.zip").write_bytes(b"changed")
             changed = driver.source_fingerprint(root, inputs)
-            self.assertEqual(driver.fingerprint_changes(baseline, changed), ["input/a.zip", "source/audit_core/a.py"])
+            self.assertEqual(driver.fingerprint_changes(baseline, changed), ["input/a.zip", "source/skills/orchestrate-offline-audit/scripts/audit_core/a.py"])
             remote_data["oss-images/CP/a.jpg"]["sha256"] = "b" * 64
             current = driver.source_fingerprint(root, inputs)
             self.assertIn("oss-images/CP/a.jpg", driver.fingerprint_changes(changed, current))

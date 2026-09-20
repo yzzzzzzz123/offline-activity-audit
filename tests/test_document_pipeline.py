@@ -12,7 +12,7 @@ from audit_core import codex_runner as api
 from audit_core.common import AuditError, validate_json
 from audit_core.document_pipeline import extract_maintenance_documents, maintenance_document_batches
 from audit_core.model_metrics import collect_model_artifacts
-from test_maintenance_fee import _document, EVIDENCE_SCHEMA
+from tests.test_maintenance_fee import _document, EVIDENCE_SCHEMA
 
 
 class DocumentPipelineTests(unittest.TestCase):

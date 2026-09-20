@@ -2,7 +2,7 @@
 
 范围：地堆、陈列、专架、端架。规则版本：`2026-09-18.pdf.3`。
 
-本文件由 `scripts/sync_pdf_policy.py` 从 `audit_core/pdf_policy.py` 生成。修改时先核对原PDF，再同步。
+本文件由 `skills/create-offline-audit-scenario/scripts/sync_pdf_policy.py` 从 `skills/orchestrate-offline-audit/scripts/audit_core/pdf_policy.py` 生成。修改时先核对原PDF，再同步。
 
 ## 核销资料
 

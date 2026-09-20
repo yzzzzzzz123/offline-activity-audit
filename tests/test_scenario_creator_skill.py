@@ -120,7 +120,7 @@ class ScenarioCreatorContractTests(unittest.TestCase):
         self.assertEqual(tuple(SCENARIO_SHEETS), expected)
 
         result_schema = json.loads(
-            (PROJECT_ROOT / "contracts" / "pdf-material-classification.schema.json").read_text(
+            (PROJECT_ROOT / "skills/orchestrate-offline-audit/references/contracts" / "pdf-material-classification.schema.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -167,7 +167,7 @@ class ScenarioCreatorContractTests(unittest.TestCase):
             ]
         )
         self.assertEqual(scope, "橱窗海报（合同数量7）、落地立牌（合同数量3）")
-        module_text = (PROJECT_ROOT / "audit_core" / "poster_material.py").read_text(
+        module_text = (PROJECT_ROOT / "skills/orchestrate-offline-audit/scripts/audit_core" / "poster_material.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("灯箱1个和台上架90个", module_text)
@@ -583,17 +583,17 @@ class ScenarioCreatorContractTests(unittest.TestCase):
             )
 
             write(
-                f"audit_core/{module_name}",
+                f"skills/orchestrate-offline-audit/scripts/audit_core/{module_name}",
                 f'SCENARIO = "{scenario}"\n\ndef audit_sample_scene_case():\n    return None\n',
             )
-            write("audit_core/archive_input.py", scenario)
-            write("audit_core/codex_runner.py", f"{scenario} {skill_name}")
-            write("audit_core/orchestrator.py", f"{scenario} sample_scene")
-            write("contracts/audit-result.schema.json", scenario)
-            write("audit_core/report.py", f"{scenario} {sheet_name}")
-            write("audit_core/html_report.py", f"{scenario} {sheet_name}")
+            write("skills/orchestrate-offline-audit/scripts/audit_core/archive_input.py", scenario)
+            write("skills/orchestrate-offline-audit/scripts/audit_core/codex_runner.py", f"{scenario} {skill_name}")
+            write("skills/orchestrate-offline-audit/scripts/audit_core/orchestrator.py", f"{scenario} sample_scene")
+            write("skills/orchestrate-offline-audit/references/contracts/audit-result.schema.json", scenario)
+            write("skills/orchestrate-offline-audit/scripts/audit_core/report.py", f"{scenario} {sheet_name}")
+            write("skills/orchestrate-offline-audit/scripts/audit_core/html_report.py", f"{scenario} {sheet_name}")
             write(
-                "skills/orchestrate-offline-audit/assets/canban-audit-shell.html",
+                "skills/orchestrate-offline-audit/assets/legacy/canban-audit-shell.html",
                 scenario,
             )
             write(

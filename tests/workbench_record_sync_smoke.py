@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT))
+sys.path.insert(0, str(PROJECT / "skills/orchestrate-offline-audit/scripts"))
 
 from audit_core.workbench_html import render_static_run_archive
 from audit_core.workbench_server import Handler, WorkbenchCatalog, WorkbenchHTTPServer
@@ -56,7 +57,7 @@ def main() -> None:
             with patch("audit_core.workbench_store.utc_now", return_value="2026-09-09T15:55:00+00:00"):
                 store = WorkbenchRunStore(
                     workspace, run_id=run_id, producer_model="codex",
-                    root_html=PROJECT / "offline-activity-audit.html", workbench_url="http://127.0.0.1/",
+                    root_html=PROJECT / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html', workbench_url="http://127.0.0.1/",
                     audit_model="gpt-6-astra", reasoning_effort="ultra",
                     input_source="oss" if index == 107 else None,
                 )
@@ -250,7 +251,7 @@ def main() -> None:
 
                 context.set_offline(True)
                 for index in (1, 106):
-                    archive = render_static_run_archive(stores[index].workspace, PROJECT / "offline-activity-audit.html")
+                    archive = render_static_run_archive(stores[index].workspace, PROJECT / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html')
                     page.goto(archive.as_uri())
                     counts(1)
                     for view in ("overview", "archive"):

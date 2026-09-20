@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills/orchestrate-offline-audit/scripts"))
 from audit_core.workbench_html import SYSTEM_VERSION
 
 

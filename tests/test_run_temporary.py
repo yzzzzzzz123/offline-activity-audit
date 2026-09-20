@@ -213,7 +213,7 @@ class RunTemporaryTests(unittest.TestCase):
         with zipfile.ZipFile(source, "w") as archive:
             archive.writestr("说明.txt", "isolated fixture")
         before_zip = source.read_bytes()
-        before_html = (project / "offline-activity-audit.html").read_bytes()
+        before_html = (project / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html').read_bytes()
         previous = self.create()
         self.abandon(previous)
         environment = os.environ.copy()
@@ -232,7 +232,7 @@ class RunTemporaryTests(unittest.TestCase):
         self.assertEqual(previous.container.exists(), restricted)
         self.assertEqual(list(self.root.glob("oa-*")), [previous.container] if restricted else [])
         self.assertEqual(source.read_bytes(), before_zip)
-        self.assertEqual((project / "offline-activity-audit.html").read_bytes(), before_html)
+        self.assertEqual((project / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html').read_bytes(), before_html)
         outputs = list(self.scope.glob("*/offline-activity-audit.html"))
         self.assertEqual(len(outputs), 1)
         manifest = json.loads((outputs[0].parent / "manifest.json").read_text(encoding="utf-8"))

@@ -13,6 +13,7 @@ from playwright.sync_api import expect, sync_playwright
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "skills/orchestrate-offline-audit/scripts"))
 
 from audit_core.workbench_html import render_static_run_archive
 from audit_core.workbench_store import WorkbenchRunStore, atomic_write_json, reserve_workspace
@@ -34,7 +35,7 @@ def seed() -> tuple[str, WorkbenchRunStore, str]:
         workspace,
         run_id="20260828-browser",
         producer_model="codex",
-        root_html=Path("offline-activity-audit.html"),
+        root_html=PROJECT_ROOT / "skills/orchestrate-offline-audit/assets/offline-activity-audit.html",
         workbench_url=f"http://127.0.0.1:{PORT}/",
         audit_model="gpt-5.6-sol",
         reasoning_effort="xhigh",
@@ -242,7 +243,7 @@ def seed() -> tuple[str, WorkbenchRunStore, str]:
         running_workspace,
         run_id="20260829-browser-running",
         producer_model="qwen3.8",
-        root_html=Path("offline-activity-audit.html"),
+        root_html=PROJECT_ROOT / "skills/orchestrate-offline-audit/assets/offline-activity-audit.html",
         workbench_url=f"http://127.0.0.1:{PORT}/",
         audit_model="qwen3.8",
         reasoning_effort="max",
@@ -661,7 +662,7 @@ def main() -> None:
 
         # Derive the fixture's only static page from the canonical source and
         # compare the same served/standalone business views before deleting it.
-        archive = render_static_run_archive(ROOT / workspace_id, PROJECT_ROOT / "offline-activity-audit.html")
+        archive = render_static_run_archive(ROOT / workspace_id, PROJECT_ROOT / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html')
         assert list((ROOT / workspace_id).rglob("*.html")) == [archive]
         assert not list((ROOT / workspace_id).rglob("*.xlsx"))
         page.goto(archive.as_uri())

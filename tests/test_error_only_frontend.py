@@ -11,7 +11,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSET = ROOT / "skills/orchestrate-offline-audit/assets/error-only.js"
+ASSET = ROOT / "skills/orchestrate-offline-audit/assets/legacy/error-only.js"
 NODE = shutil.which("node")
 SCENARIOS = (
     "personnel_incentive", "promotional_display", "poster_material",
@@ -349,7 +349,7 @@ class ErrorOnlyFrontendTests(unittest.TestCase):
         self.assertNotIn("<img>", html)
 
     def test_root_and_asset_share_exact_renderer_and_keep_other_controls(self) -> None:
-        root = (ROOT / "offline-activity-audit.html").read_text(encoding="utf-8")
+        root = (ROOT / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html').read_text(encoding="utf-8")
         script = root.split('<script id="error-only-preview-script">', 1)[1].split("</script>", 1)[0].strip()
         self.assertEqual(script, ASSET.read_text(encoding="utf-8").strip())
         result = render({"sheets": [{"scenario": "maintenance_fee", "rows": [row("maintenance_fee")]}]}, script=script)

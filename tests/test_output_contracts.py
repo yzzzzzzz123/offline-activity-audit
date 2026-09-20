@@ -1335,7 +1335,7 @@ class DisplayContractTests(unittest.TestCase):
     def test_workbook_separates_display_standard_and_photo_reuse(self) -> None:
         validate_json(
             _display_result(),
-            Path(__file__).resolve().parents[1] / "contracts" / "audit-result.schema.json",
+            Path(__file__).resolve().parents[1] / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json",
         )
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "result.xlsx"
@@ -1527,7 +1527,7 @@ class DisplayContractTests(unittest.TestCase):
         )
         validate_json(
             result,
-            Path(__file__).resolve().parents[1] / "contracts" / "audit-result.schema.json",
+            Path(__file__).resolve().parents[1] / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json",
         )
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -1582,7 +1582,7 @@ class DisplayContractTests(unittest.TestCase):
         )
         validate_json(
             result,
-            Path(__file__).resolve().parents[1] / "contracts" / "audit-result.schema.json",
+            Path(__file__).resolve().parents[1] / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json",
         )
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -1635,7 +1635,7 @@ class DisplayContractTests(unittest.TestCase):
         self.assertIsNone(reconciliation["records"][0]["sales_excel_row"])
         validate_json(
             result,
-            Path(__file__).resolve().parents[1] / "contracts" / "audit-result.schema.json",
+            Path(__file__).resolve().parents[1] / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json",
         )
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -1686,7 +1686,7 @@ class DisplayContractTests(unittest.TestCase):
         )
         validate_json(
             result,
-            Path(__file__).resolve().parents[1] / "contracts" / "audit-result.schema.json",
+            Path(__file__).resolve().parents[1] / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json",
         )
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -1824,7 +1824,7 @@ class DisplayContractTests(unittest.TestCase):
         )
         validate_json(
             result,
-            Path(__file__).resolve().parents[1] / "contracts" / "audit-result.schema.json",
+            Path(__file__).resolve().parents[1] / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json",
         )
 
         with tempfile.TemporaryDirectory() as temporary:

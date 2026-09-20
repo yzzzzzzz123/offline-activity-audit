@@ -16,6 +16,7 @@ def fixture_cli_command(arguments, *, candidates=None):
     script = (
         "import runpy,sys\n"
         f"sys.path.insert(0, {str(root)!r})\n"
+        f"sys.path.insert(0, {str(root / 'skills/orchestrate-offline-audit/scripts')!r})\n"
         "from unittest.mock import patch\n"
         "from tests.pdf_test_support import PolicyProvider\n"
         f"with patch('audit_core.orchestrator._default_provider', return_value=PolicyProvider(candidates={candidates!r})):\n"

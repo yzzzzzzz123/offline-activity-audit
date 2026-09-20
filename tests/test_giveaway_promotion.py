@@ -17,13 +17,13 @@ from audit_core.report import create_combined_report, verify_workbook
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE_SCHEMA = (
     PROJECT_ROOT
-    / "contracts"
+    / "skills/create-offline-audit-scenario/references"
     / "legacy"
     / "giveaway_promotion"
     / "references"
     / "evidence.schema.json"
 )
-RESULT_SCHEMA = PROJECT_ROOT / "contracts" / "audit-result.schema.json"
+RESULT_SCHEMA = PROJECT_ROOT / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json"
 
 
 def _line(
