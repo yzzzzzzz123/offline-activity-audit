@@ -77,7 +77,10 @@ def source_fingerprint(project_root: Path, input_dir: Path, codex_binary: Path |
         path = root / name
         if path.is_file():
             files["source/" + name] = path
-    for directory in ("skills/orchestrate-offline-audit", "skills/audit-promotional-display"):
+    for directory in (
+        "skills/orchestrate-offline-audit", "skills/audit-promotional-display",
+        "skills/create-offline-audit-scenario/references/legacy",
+    ):
         for path in (root / directory).rglob("*"):
             if path.is_file() and path.suffix.lower() in _SOURCE_EXTENSIONS and "__pycache__" not in path.parts:
                 files["source/" + path.relative_to(root).as_posix()] = path

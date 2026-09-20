@@ -127,6 +127,15 @@ class BenchmarkDriverTests(unittest.TestCase):
             self.assertIn("oss-images/CP/a.jpg", driver.fingerprint_changes(changed, current))
             source["image_manifest_keys_sha256"] = "0" * 64
             self.assertIn("database/product_catalog.products", driver.fingerprint_changes(current, driver.source_fingerprint(root, inputs)))
+            before_legacy = driver.source_fingerprint(root, inputs)
+            legacy_relative = "skills/create-offline-audit-scenario/references/legacy/promotional_display/references/calibration.json"
+            legacy = root / legacy_relative
+            legacy.parent.mkdir(parents=True)
+            legacy.write_text('{"version": 1}', encoding="utf-8")
+            self.assertEqual(
+                driver.fingerprint_changes(before_legacy, driver.source_fingerprint(root, inputs)),
+                ["source/" + legacy_relative],
+            )
 
     def test_failed_workspace_discovery_requires_exact_unique_run_identity(self) -> None:
         with TemporaryDirectory() as temporary:
