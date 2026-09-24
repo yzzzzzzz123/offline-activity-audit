@@ -130,7 +130,7 @@ def audit_entry_fee_case(
     evidence: dict[str, Any],
 ) -> dict[str, Any]:
     if str(case.get("scenario")) != "entry_fee":
-        raise AuditError("进场费审核收到错误的场景类型")
+        raise AuditError("条码费审核收到错误的场景类型")
     documents = list(evidence.get("documents") or [])
     contracts = _by_role(documents, "entry_fee_contract")
     photos = _by_role(documents, "shelf_photo")
@@ -141,7 +141,7 @@ def audit_entry_fee_case(
 
     missing: list[str] = []
     if len(contracts) != 1:
-        missing.append("双方签章进场费合同")
+        missing.append("双方签章条码费合同")
     if not photos:
         missing.append("合同门店进场/上架水印照片")
     if not deduction_proofs:
@@ -157,10 +157,10 @@ def audit_entry_fee_case(
         issues.append(
             _issue(
                 "required_materials_missing",
-                "进场费资料不完整",
+                "条码费资料不完整",
                 _sources(documents),
                 "缺少：" + "、".join(missing),
-                "须同时提交双方签章进场费合同、合同门店水印上架照片及合同要求的系统扣款凭证。",
+                "须同时提交双方签章条码费合同、合同门店水印上架照片及合同要求的系统扣款凭证。",
                 "进场、实际扣款和金额之间未形成完整证据链。",
                 "补交" + "、".join(missing) + "。",
             )
@@ -200,12 +200,12 @@ def audit_entry_fee_case(
         issues.append(
             _issue(
                 "contract_authority_invalid",
-                "进场费合同权威条款不完整",
+                "条码费合同权威条款不完整",
                 _sources(contracts),
                 controls[-1]["basis"],
                 "双方签章合同须明确双方、渠道系统、商品条码、合同门店、条码费、总额、支付方式及实际上架和扣款凭证要求。",
                 "无法确认费用授权、适用范围和支付条件。",
-                "补交上述条款完整、双方签章清楚的进场费合同。",
+                "补交上述条款完整、双方签章清楚的条码费合同。",
             )
         )
 
@@ -412,7 +412,7 @@ def audit_entry_fee_case(
         "generated_at": now_utc(),
         "scenario": "entry_fee",
         "case_id": Path(case["source_archive"]).stem,
-        "case_name": "进场费/条码费核销",
+        "case_name": "条码费核销",
         "summary": {
             "conclusion": "human_review" if blocked else "pass",
             "decision_label": "资料需补正" if blocked else "可核销",

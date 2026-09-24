@@ -222,11 +222,12 @@ class RunTemporaryTests(unittest.TestCase):
         completed = subprocess.run(
             fixture_cli_command(
                 ["--run-id", "20260914-temp-cleanup-test", "--producer-model", "codex",
+                 "--biz-type", "KT板等物料制作",
                  "--input-dir", str(inputs), "--worktrees", str(self.scope)], candidates={0: []}),
             env=environment, cwd=project, capture_output=True, text=True, encoding="utf-8",
             timeout=45, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        self.assertEqual(completed.returncode, 2, completed.stderr)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
         if not restricted:
             self.assertIn("已清理 1 个目录", completed.stderr)
         self.assertEqual(previous.container.exists(), restricted)
@@ -236,8 +237,8 @@ class RunTemporaryTests(unittest.TestCase):
         outputs = list(self.scope.glob("*/offline-activity-audit.html"))
         self.assertEqual(len(outputs), 1)
         manifest = json.loads((outputs[0].parent / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["status"], "failed")
-        self.assertEqual(manifest["failure"]["code"], "classification_failed")
+        self.assertEqual(manifest["status"], "completed")
+        self.assertIsNone(manifest["failure"])
         self.assertEqual(list(self.scope.rglob("*.xlsx")), [])
 
     def test_real_forced_exit_then_next_process_cleans_both_kinds(self):

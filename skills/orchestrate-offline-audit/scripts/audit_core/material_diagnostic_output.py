@@ -27,7 +27,7 @@ SCENARIO_LABELS = {
     "poster_material": "海报/展示道具", "other_expense": "其他费用",
     "maintenance_fee": "维护费用", "giveaway_promotion": "额外搭赠",
     "price_difference_support": "价格补差", "pos_target_incentive": "POS达标激励",
-    "entry_fee": "进场费", "self_procured_gift_material": "客户自采赠品物料",
+    "entry_fee": "条码费", "self_procured_gift_material": "客户自采赠品物料",
 }
 ROLE_LABELS = {
     "signed_promotional_contract": "已签促销合同", "settlement": "结算单",

@@ -154,7 +154,7 @@ class PassCheckLogTests(unittest.TestCase):
         }
 
         log = build_pass_check_log(view, results)
-        self.assertEqual([group["audit_type"] for group in log["groups"]], ["维护费用", "进场费"])
+        self.assertEqual([group["audit_type"] for group in log["groups"]], ["维护费用", "条码费"])
         self.assertEqual([group["item_count"] for group in log["groups"]], [1, 1])
         titles = [item["title"] for group in log["groups"] for item in group["items"]]
         self.assertEqual(titles, ["盖章POS核验通过", "合同权威性核验通过"])

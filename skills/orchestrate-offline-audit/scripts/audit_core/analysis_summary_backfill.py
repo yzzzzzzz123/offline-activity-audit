@@ -37,12 +37,10 @@ def backfill_analysis_summaries(
     workspace_id: str | None = None,
 ) -> dict[str, Any]:
     if refresh_archives:
-        if workspace_id is not None:
-            raise AuditError("--workspace-id 仅用于单条摘要刷新；静态档案另行从规范源码生成")
         from .completed_worktree_refresh import refresh_completed_worktree_archives
 
         return refresh_completed_worktree_archives(
-            worktrees_root, apply=apply, backup_dir=backup_dir, root_html=root_html,
+            worktrees_root, apply=apply, backup_dir=backup_dir, root_html=root_html, workspace_id=workspace_id,
         )
     if backup_dir is not None:
         raise AuditError("--backup-dir 仅与 --refresh-archives 一起使用")

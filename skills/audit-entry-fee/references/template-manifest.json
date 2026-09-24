@@ -1,0 +1,53 @@
+{
+  "scenario": "entry_fee",
+  "approved_on": "2026-09-22",
+  "authorization": "用户明确指定input根目录八个ZIP中的相应样张作为模板参考，并分别写入对应Skill。",
+  "source_zip": "input/SQ202607130073-HX202608180040-进场费.zip",
+  "source_zip_sha256": "677762281d650171d1becb2a2daf02b5b077e8a3ca3af00d9c209675f694207d",
+  "documents": [
+    {
+      "id": "template-reference-entry_fee-entry-agreement",
+      "title": "产品推广协议及门店附件（原件2026V2）",
+      "role": "entry_agreement",
+      "usage": "template_check",
+      "rule_ids": [
+        "entry_agreement"
+      ],
+      "file": "assets/templates/entry-agreement.pdf",
+      "sha256": "3632af5234a7cdddf2cdab207a6c8b38993f200a0ccb11428a1572dcd864f468",
+      "source_member": "连云港蕙风商贸有限公司产品推广协议.pdf",
+      "source_sha256": "3632af5234a7cdddf2cdab207a6c8b38993f200a0ccb11428a1572dcd864f468",
+      "source_pages": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "preview_images": [
+        {
+          "file": "assets/templates/template-reference-entry_fee-entry-agreement-01.png",
+          "sha256": "ca8e366942a867439b770fb79d0e3398df9fb51447f4cf89657ef9a2f9174439",
+          "page": 1
+        },
+        {
+          "file": "assets/templates/template-reference-entry_fee-entry-agreement-02.png",
+          "sha256": "b54b9cbf6f05eb9c9dcb46fe5900cae7e273a74d606bf9dc4593c2e3228719a7",
+          "page": 2
+        },
+        {
+          "file": "assets/templates/template-reference-entry_fee-entry-agreement-03.png",
+          "sha256": "333db614ee8a9492e0c9f6b8a070eeae710f0a5d1f0df0f5bf81656d70f65ffb",
+          "page": 3
+        },
+        {
+          "file": "assets/templates/template-reference-entry_fee-entry-agreement-04.png",
+          "sha256": "6f0217ba32bf385b4119b8953da468361bfa45c999587fc3124488b1fa37c831",
+          "page": 4
+        }
+      ]
+    }
+  ],
+  "unselected_members": [
+    "家得福进场照片.rar"
+  ]
+}

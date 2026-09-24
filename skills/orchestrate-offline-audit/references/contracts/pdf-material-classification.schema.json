@@ -142,6 +142,36 @@
         ]
       }
     },
+    "background_materials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "description",
+          "reason",
+          "source_ids"
+        ]
+      }
+    },
     "material_matches": {
       "type": "array",
       "minItems": 8,
@@ -338,6 +368,7 @@
     "source_ids",
     "flags",
     "materials",
+    "background_materials",
     "material_matches"
   ]
 }

@@ -1,4 +1,4 @@
 interface:
   display_name: "搭赠核销"
-  short_description: "按指定PDF资料清单及审核要点核验搭赠，保留来源和明确失败原因"
-  default_prompt: "使用 $audit-giveaway-promotion，仅按指定PDF审核搭赠资料。"
+  short_description: "搭赠资料先过门禁，按本类要点及已确认POS通用规则核对"
+  default_prompt: "使用 $audit-giveaway-promotion，按PDF及已确认补充做资料门禁，按本类审核要点/标准栏及用户确认的POS通用规则审核搭赠，其他文字只作背景，按客户结果写法输出。"

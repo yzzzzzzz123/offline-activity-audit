@@ -11,26 +11,16 @@
           "rule_id": {
             "type": "string",
             "enum": [
-              "submission_deadline",
-              "review_deadline",
-              "scene_authenticity",
-              "fraud",
-              "bi_quota",
-              "settlement_template_seal",
-              "contract_signed",
               "pos_fields",
-              "pos_seal",
               "pos_arithmetic",
-              "application_quantity_price",
+              "pos_product_identity",
               "reward_unit_price",
               "settlement_pos_quantity",
               "claim_ceiling",
-              "pos_excel_present",
-              "payment_evidence",
               "payment_company",
-              "payment_application_amount",
               "payment_claim_amount",
-              "staff_daily_photos"
+              "staff_daily_photos",
+              "application_quantity_price"
             ]
           },
           "status": {
@@ -63,6 +53,14 @@
                 "label": {
                   "type": "string",
                   "minLength": 1
+                },
+                "value_kind": {
+                  "type": "string",
+                  "enum": [
+                    "amount",
+                    "quantity",
+                    "unit_price"
+                  ]
                 },
                 "left": {
                   "type": "object",
@@ -135,6 +133,7 @@
               },
               "required": [
                 "label",
+                "value_kind",
                 "left",
                 "right",
                 "operation",
@@ -151,8 +150,8 @@
           "comparisons"
         ]
       },
-      "minItems": 20,
-      "maxItems": 20
+      "minItems": 10,
+      "maxItems": 10
     }
   },
   "required": [

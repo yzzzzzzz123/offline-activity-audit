@@ -12,7 +12,5 @@ __pycache__/
 /worktrees/
 /input/*
 !/input/README.md
-/input-oss/*
-!/input-oss/README.md
 /shared/canban-product-multimodal-knowledge-base/
 /artifacts/

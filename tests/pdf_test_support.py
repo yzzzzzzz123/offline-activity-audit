@@ -8,6 +8,7 @@ from zipfile import ZipFile
 from PIL import Image
 
 from audit_core.pdf_policy import FLAGS, MATERIALS, applicability, requirements, rules
+from audit_core.scenario_registry import SCENARIO_LABELS
 
 
 def fixture_cli_command(arguments, *, candidates=None):
@@ -82,7 +83,8 @@ def classification(scenario, ids, *, missing=(), flags=None, candidates=None, ex
     selected = next((m for m in matches if m["scenario"] == candidates[0]), None) if len(candidates) == 1 else None
     return {"candidate_scenarios": candidates, "reason": "按PDF逐类比对后，原始资料组合支持候选类型。" if candidates else "逐类比对后，本次资料组合不能对应PDF八类。",
             "source_ids": ids, "flags": selected["flags"] if selected else flags,
-            "materials": selected["materials"] if selected else [], "material_matches": matches}
+            "materials": selected["materials"] if selected else [], "material_matches": matches,
+            "background_materials": []}
 
 
 def unknown_checks(scenario, flags):
@@ -107,20 +109,27 @@ class PolicyProvider:
         self.calls.append(deepcopy(case))
         self.temporary_roots.append(Path(temporary))
         index = int(case["archive_id"][1:]) - 1
-        scenario = self.scenarios[index % len(self.scenarios)]
+        scenario = case.get("selected_scenario") or case.get("scenario") or self.scenarios[index % len(self.scenarios)]
         if case["kind"] == "pdf_material_classification":
+            flags = self.flags.get(index)
+            if flags is None and scenario == "promotional_display" and case.get("large_venue_fee") is not None:
+                flags = flags_for(scenario, atrium=case["large_venue_fee"])
             documents = [{"unit_id": u["unit_id"], "roles": ["submitted"],
                           "facts": ["本次资料记载费用用途和统一结算单，客户印章可见"] if u["image"] else u["native_facts"],
                           "limitations": u["limitations"]} for u in case["units"]]
             value = {"documents": documents,
                      "classification": classification(scenario, [d["unit_id"] for d in documents],
-                         missing=self.missing.get(index, ()), flags=self.flags.get(index), candidates=self.candidates.get(index),
+                         missing=self.missing.get(index, ()), flags=flags, candidates=self.candidates.get(index),
                          extra=self.extra.get(index, ()))}
+            if case.get("selected_scenario"):
+                selected = next(m for m in value["classification"]["material_matches"] if m["scenario"] == scenario)
+                value["classification"].update(candidate_scenarios=[scenario], material_matches=[selected],
+                                                flags=selected["flags"], materials=selected["materials"])
         else:
             value = unknown_checks(scenario, case["flags"])
             for check in value["checks"]:
                 if check["rule_id"] in {"settlement_template_seal", "entry_agreement"}:
-                    check.update(status="pass", reason="统一模板和客户签章可见", source_ids=[case["documents"][0]["unit_id"]])
+                    check.update(status="pass", reason="本类审核栏要求的模板和签章可见", source_ids=[case["documents"][0]["unit_id"]])
         if self.mutate:
             self.mutate(case, value)
         return value

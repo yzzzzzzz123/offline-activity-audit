@@ -31,6 +31,7 @@ from audit_core.oss_intake import (
     OSSIntakeExecutionError,
     OSSIntakeRequestError,
     OSSIntakeService,
+    OSSIntakeStore,
     OSSIntakeUnavailableError,
     _validate_download_url,
     build_callback_result,
@@ -66,6 +67,7 @@ def _payload(
     return {
         "verifyCode": verify_code,
         "analyzeId": analyze_id,
+        "bizType": "KT板等物料制作",
         "downloadUrl": (
             f"https://{OSS_HOST}/incoming/{quote('维护费用-20260831.zip')}"
             "?X-Oss-Signature=must-never-be-persisted"
@@ -147,6 +149,70 @@ def _wait_for_job(
 
 
 class OSSIntakeValidationTests(unittest.TestCase):
+    def test_biz_type_is_preserved_for_routing_without_changing_object_identity(self) -> None:
+        original = normalize_submission(
+            _payload(), _config(), url_validator=_no_network_url_validator,
+        )
+        self.assertEqual(original["biz_type"], "KT板等物料制作")
+        for value in (None, "", "人员激励", "01", " 自定义业务 "):
+            with self.subTest(biz_type=value):
+                submission = normalize_submission(
+                    {**_payload(), "bizType": value},
+                    _config(),
+                    url_validator=_no_network_url_validator,
+                )
+                self.assertEqual(submission["biz_type"], value)
+                self.assertEqual(submission["fingerprint"], original["fingerprint"])
+                self.assertEqual(submission["job_id"], original["job_id"])
+                self.assertIsNone(submission["scenario"])
+
+    def test_legacy_receipt_projects_null_biz_type_without_mutation(self) -> None:
+        receipt = {"verifyCode": "HX202608310001", "fileId": 123}
+        projected = public_job(receipt)
+        self.assertIsNone(projected["bizType"])
+        self.assertEqual(projected["analyzeId"], 123)
+        self.assertEqual(receipt, {"verifyCode": "HX202608310001", "fileId": 123})
+
+    def test_only_biz_type_controls_new_submission(self) -> None:
+        payload = {**_payload(), "planType": "人员激励"}
+        submission = normalize_submission(payload, _config(), url_validator=_no_network_url_validator)
+        self.assertEqual(submission["biz_type"], "KT板等物料制作")
+        payload.pop("bizType")
+        submission = normalize_submission(payload, _config(), url_validator=_no_network_url_validator)
+        self.assertIsNone(submission["biz_type"])
+
+    def test_old_plan_type_receipt_is_projected_without_mutation(self) -> None:
+        for current in ({}, {"bizType": None}, {"bizType": "陈列堆头"}):
+            with self.subTest(current=current):
+                receipt = {"planType": "人员激励", "analyzeId": 123, **current}
+                original = dict(receipt)
+                projected = public_job(receipt)
+                self.assertEqual(projected["bizType"], current.get("bizType", "人员激励"))
+                self.assertNotIn("planType", projected)
+                self.assertEqual(receipt, original)
+
+    def test_active_old_receipt_retains_idempotency_and_type_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            store = OSSIntakeStore(Path(temporary))
+            submission = normalize_submission(_payload(), _config(), url_validator=_no_network_url_validator)
+            submission["producer_model"] = "codex"
+            job, _ = store.create_or_get(submission)
+            job["planType"] = job.pop("bizType")
+            job["schema_version"] = "1.5"
+            path = store._path(job["job_id"])
+            atomic_write_json(path, job)
+            original = path.read_bytes()
+            duplicate, created = store.create_or_get(dict(submission))
+            self.assertFalse(created)
+            self.assertEqual(duplicate["job_id"], job["job_id"])
+            with self.assertRaisesRegex(OSSIntakeConflictError, "bizType"):
+                store.create_or_get({**submission, "biz_type": "人员激励"})
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_old_type_failure_keeps_exact_callback_text(self) -> None:
+        result = {"status": "failed", "failure": {"code": "plan_type_unrecognized", "message": "无法识别核销类型"}}
+        self.assertEqual(build_callback_result(result), "无法识别核销类型")
+
     def test_analyze_id_requires_a_positive_64_bit_integer(self) -> None:
         for invalid in (None, True, False, "123", 1.5, 0, -1, 2**63):
             with self.subTest(analyze_id=invalid):
@@ -229,7 +295,7 @@ class OSSIntakeValidationTests(unittest.TestCase):
             root = Path(temporary)
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=config,
                 downloader=_fake_downloader,
                 runner=lambda **kwargs: {},
@@ -559,7 +625,7 @@ class OSSIntakeValidationTests(unittest.TestCase):
             self.assertIn("--scenario", captured)
             self.assertFalse(Path(captured[-1]).exists())
 
-    def test_formal_subprocess_returns_failed_classification_with_persisted_reason(self) -> None:
+    def test_formal_subprocess_completes_material_check_with_persisted_reason(self) -> None:
         native_run = subprocess.run
 
         def fixture_run(command, **kwargs):
@@ -576,12 +642,37 @@ class OSSIntakeValidationTests(unittest.TestCase):
                 result = run_formal_audit_subprocess(
                     run_id="20260911-classification-failed", producer_model="codex",
                     input_dir=inputs, worktrees_root=root / "worktrees",
-                    scenario=None, workbench_url=None,
+                    scenario=None, workbench_url=None, biz_type="KT板等物料制作",
                 )
-            self.assertEqual(result["status"], "failed")
-            self.assertEqual(result["failure"]["code"], "classification_failed")
+            self.assertEqual(result["status"], "completed")
+            self.assertIsNone(result["failure"])
             summary = build_callback_result(result)
-            self.assertEqual(summary, "核销方式无法确认")
+            self.assertIn("## KT板等物料制作", summary)
+            self.assertNotIn("核销失败", summary)
+
+    def test_formal_subprocess_returns_non_required_biz_type_for_exact_callback(self) -> None:
+        native_run = subprocess.run
+        def fixture_run(command, **kwargs):
+            if len(command) > 2 and command[2] == str(FORMAL_RUNNER):
+                self.assertIn("--biz-type=未定义的业务代码", command)
+                command = fixture_cli_command(command[3:])
+            return native_run(command, **kwargs)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            inputs = root / "input"
+            inputs.mkdir()
+            (inputs / "资料.zip").write_bytes(_zip_bytes())
+            with mock.patch("audit_core.oss_intake.subprocess.run", side_effect=fixture_run):
+                result = run_formal_audit_subprocess(
+                    run_id="20260921-unknown-plan", producer_model="codex",
+                    input_dir=inputs, worktrees_root=root / "worktrees",
+                    scenario=None, workbench_url=None, biz_type="未定义的业务代码",
+                )
+            self.assertEqual(result["status"], "completed")
+            self.assertFalse(result["audit_required"])
+            self.assertIsNone(result["failure"])
+            self.assertNotIn("worktree", result)
+            self.assertEqual(build_callback_result(result), "该业务类型无需AI核销")
 
     def test_formal_subprocess_does_not_accept_unrelated_failure_receipt(self) -> None:
         def failed_run(command, **kwargs):
@@ -877,7 +968,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
             )
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=config,
                 downloader=_fake_downloader,
                 runner=lambda **kwargs: {},
@@ -898,7 +989,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
             )
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=config,
                 downloader=_fake_downloader,
                 runner=lambda **kwargs: {
@@ -936,7 +1027,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
             )
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=config,
                 downloader=_fake_downloader,
                 runner=lambda **_kwargs: self.fail(
@@ -970,7 +1061,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
             )
             first_service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=config,
                 downloader=_fake_downloader,
                 runner=lambda **_kwargs: self.fail(
@@ -1008,7 +1099,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
 
             replay_service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=config,
                 downloader=_fake_downloader,
                 runner=lambda **_kwargs: self.fail(
@@ -1069,7 +1160,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
 
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=_config(),
                 downloader=_fake_downloader,
                 runner=runner,
@@ -1077,14 +1168,18 @@ class OSSIntakeServiceTests(unittest.TestCase):
                 callback_sender=_fake_callback_sender,
             )
             try:
-                first, created = service.submit(_payload())
+                first, created = service.submit({**_payload(), "bizType": "人员激励"})
                 self.assertTrue(created)
                 self.assertEqual(first["attempt"], 1)
+                self.assertEqual(first["bizType"], "人员激励")
                 self.assertIsNone(first["supersedes_job_id"])
                 self.assertTrue(runner_started.wait(timeout=5))
-                duplicate, duplicate_created = service.submit(_payload())
+                with self.assertRaises(OSSIntakeConflictError):
+                    service.submit({**_payload(), "bizType": "陈列堆头"})
+                duplicate, duplicate_created = service.submit({**_payload(), "bizType": "人员激励"})
                 self.assertFalse(duplicate_created)
                 self.assertEqual(duplicate["job_id"], first["job_id"])
+                self.assertEqual(duplicate["bizType"], "人员激励")
                 release_runner.set()
                 completed = _wait_for_job(
                     service,
@@ -1092,7 +1187,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
                     "completed",
                 )
                 self.assertEqual(len(calls), 1)
-                expected_input_dir = root / "input-oss" / str(first["job_id"])
+                expected_input_dir = root / "input" / str(first["job_id"])
                 expected_input_file = expected_input_dir / "维护费用-20260831.zip"
                 self.assertEqual(calls[0]["input_dir"], expected_input_dir)
                 self.assertTrue(expected_input_file.is_file())
@@ -1105,9 +1200,13 @@ class OSSIntakeServiceTests(unittest.TestCase):
                     str(expected_input_file),
                 )
                 self.assertEqual(completed["result"]["workspace_id"], "20260831-codex")
-                rerun, rerun_created = service.submit(_payload())
+                first_receipt_path = root / ".intake" / "jobs" / f"{first['job_id']}.json"
+                first_receipt = first_receipt_path.read_bytes()
+                self.assertEqual(json.loads(first_receipt)["bizType"], "人员激励")
+                rerun, rerun_created = service.submit({**_payload(), "bizType": "陈列堆头"})
                 self.assertTrue(rerun_created)
                 self.assertEqual(rerun["attempt"], 2)
+                self.assertEqual(rerun["bizType"], "陈列堆头")
                 self.assertEqual(rerun["supersedes_job_id"], first["job_id"])
                 self.assertNotEqual(rerun["job_id"], first["job_id"])
                 self.assertNotEqual(rerun["run_id"], first["run_id"])
@@ -1117,7 +1216,9 @@ class OSSIntakeServiceTests(unittest.TestCase):
                     "completed",
                 )
                 self.assertEqual(len(calls), 2)
-                rerun_input_dir = root / "input-oss" / str(rerun["job_id"])
+                self.assertEqual(first_receipt_path.read_bytes(), first_receipt)
+                self.assertEqual(rerun_completed["bizType"], "陈列堆头")
+                rerun_input_dir = root / "input" / str(rerun["job_id"])
                 rerun_input_file = rerun_input_dir / "维护费用-20260831.zip"
                 self.assertEqual(calls[1]["input_dir"], rerun_input_dir)
                 self.assertTrue(rerun_input_file.is_file())
@@ -1192,7 +1293,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
 
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=_config(),
                 downloader=downloader,
                 runner=runner,
@@ -1266,7 +1367,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
 
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=_config(),
                 downloader=downloader,
                 runner=runner,
@@ -1316,7 +1417,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
 
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=_config(),
                 downloader=_fake_downloader,
                 runner=runner,
@@ -1343,7 +1444,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
                 self.assertTrue(deleted["canceled"])
                 self.assertIsNone(deleted["workspace_id"])
                 self.assertFalse((root / ".intake" / "jobs" / f"{queued['job_id']}.json").exists())
-                self.assertFalse((root / "input-oss" / str(queued["job_id"])).exists())
+                self.assertFalse((root / "input" / str(queued["job_id"])).exists())
                 release_first.set()
                 _wait_for_job(service, str(first["job_id"]), "completed")
                 time.sleep(0.05)
@@ -1381,7 +1482,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
 
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=_config(),
                 downloader=_fake_downloader,
                 runner=runner,
@@ -1403,7 +1504,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
                     "20260909_1000_00-codex_high",
                 )
                 self.assertFalse((root / "20260909_1000_00-codex_high").exists())
-                self.assertFalse((root / "input-oss" / str(job["job_id"])).exists())
+                self.assertFalse((root / "input" / str(job["job_id"])).exists())
                 with self.assertRaises(FileNotFoundError):
                     service.get(str(job["job_id"]))
                 self.assertFalse(callback_called.is_set())
@@ -1419,7 +1520,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
 
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=_config(),
                 downloader=_fake_downloader,
                 runner=failing_runner,
@@ -1437,7 +1538,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
                 failed = _wait_for_job(service, str(accepted["job_id"]), "failed")
                 source = (
                     root
-                    / "input-oss"
+                    / "input"
                     / str(accepted["job_id"])
                     / "维护费用-20260831.zip"
                 )
@@ -1488,7 +1589,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
 
             service = OSSIntakeService(
                 worktrees_root=root,
-                input_root=root / "input-oss",
+                input_root=root / "input",
                 config=_config(),
                 downloader=_fake_downloader,
                 runner=runner,
@@ -1537,6 +1638,8 @@ class OSSIntakeServiceTests(unittest.TestCase):
                         "20260831-cli-adapter",
                         "--producer-model",
                         "codex",
+                        "--biz-type",
+                        "KT板等物料制作",
                         "--input-dir",
                         str(input_dir),
                         "--worktrees",
@@ -1551,6 +1654,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
             self.assertEqual(json.loads(result_path.read_text(encoding="utf-8")), expected)
             self.assertEqual(Path(run.call_args.kwargs["input_dir"]), input_dir)
             self.assertEqual(Path(run.call_args.kwargs["worktrees_root"]), worktrees)
+            self.assertEqual(run.call_args.kwargs["biz_type"], "KT板等物料制作")
 
 
 class OSSIntakeHTTPTests(unittest.TestCase):
@@ -1586,7 +1690,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
 
         self.intake = OSSIntakeService(
             worktrees_root=self.root,
-            input_root=self.root / "input-oss",
+            input_root=self.root / "input",
             config=_config(),
             downloader=_fake_downloader,
             runner=runner,
@@ -1636,8 +1740,66 @@ class OSSIntakeHTTPTests(unittest.TestCase):
         self.assertEqual(self.intake.list(), [])
         self.assertEqual(self.callbacks, [])
 
+    def test_http_rejects_non_string_biz_type_before_creating_job(self) -> None:
+        for value in (123, 1.5, True, False, [], {}):
+            with self.subTest(biz_type=value):
+                request = urllib.request.Request(
+                    self.base + "/api/intake/oss",
+                    data=json.dumps({**_payload(), "bizType": value}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    self.opener.open(request, timeout=5)
+                with caught.exception as response:
+                    self.assertEqual(response.code, 400)
+                    self.assertIn("bizType", response.read().decode("utf-8"))
+        self.assertEqual(self.intake.list(), [])
+        self.assertEqual(self.callbacks, [])
+
+    def test_http_empty_biz_type_callbacks_failure_without_material_processing(self) -> None:
+        for index, value in enumerate((None, "", " \t\n")):
+            payload = {**_payload(analyze_id=index + 1), "bizType": value}
+            if value is None:
+                payload.pop("bizType")
+            request = urllib.request.Request(
+                self.base + "/api/intake/oss", data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with self.opener.open(request, timeout=5) as response:
+                accepted = json.load(response)
+            failed = _wait_for_job(self.intake, accepted["job"]["job_id"], "failed")
+            self.assertIsNone(failed["delivery"])
+            self.assertIsNone(failed["audit_started_at"])
+            with self.opener.open(self._request(accepted["status_url"]), timeout=5) as response:
+                self.assertEqual(json.load(response)["job"]["failure"]["message"], "无法识别核销类型")
+            self.assertEqual(self.callbacks[-1], {"verifyCode": payload["verifyCode"],
+                "analyzeId": index + 1, "result": "无法识别核销类型"})
+
+    def test_http_other_biz_type_completes_with_exact_no_audit_callback(self) -> None:
+        payload = {**_payload(), "bizType": "其他费用"}
+        request = urllib.request.Request(
+            self.base + "/api/intake/oss", data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with mock.patch.object(self.intake, "downloader") as downloader, mock.patch.object(self.intake, "runner") as runner:
+            with self.opener.open(request, timeout=5) as response:
+                self.assertEqual(response.status, 202)
+                accepted = json.load(response)
+            complete = _wait_for_job(self.intake, accepted["job"]["job_id"], "completed")
+            with self.opener.open(self._request(accepted["status_url"]), timeout=5) as response:
+                public = json.load(response)["job"]
+            self.assertEqual(public["status"], "completed")
+            self.assertIsNone(public["failure"])
+            self.assertFalse(public["result"]["audit_required"])
+            self.assertEqual(complete["callback"]["status"], "delivered")
+            self.assertEqual(self.callbacks, [{"verifyCode": payload["verifyCode"],
+                "analyzeId": payload["analyzeId"], "result": "该业务类型无需AI核销"}])
+            downloader.assert_not_called()
+            runner.assert_not_called()
+
     def test_unauthenticated_post_runs_job_and_status_is_queryable(self) -> None:
-        body = json.dumps(_payload(), ensure_ascii=False).encode("utf-8")
+        body = json.dumps({**_payload(), "bizType": "人员激励"}, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
             self.base + "/api/intake/oss",
             data=body,
@@ -1652,6 +1814,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
         self.assertFalse(accepted["duplicate"])
         self.assertFalse(accepted["rerun"])
         self.assertEqual(accepted["job"]["attempt"], 1)
+        self.assertEqual(accepted["job"]["bizType"], "人员激励")
         self.assertNotIn("identity_job_id", accepted["job"])
         job_id = str(accepted["job"]["job_id"])
         deadline = time.monotonic() + 5
@@ -1669,6 +1832,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
         self.assertEqual(job["result"]["workspace_id"], "20260831-codex")
         self.assertEqual(job["verifyCode"], "HX202608310001")
         self.assertEqual(job["analyzeId"], 123)
+        self.assertEqual(job["bizType"], "人员激励")
         self.assertNotIn("fileId", job)
         self.assertEqual(job["callback"]["status"], "delivered")
         self.assertEqual(job["callback"]["http_status"], 204)
@@ -1709,7 +1873,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
 
         with self.opener.open(self.base + "/api/config", timeout=5) as response:
             config = json.load(response)
-        self.assertEqual(config["api_version"], "1.44")
+        self.assertEqual(config["api_version"], "1.54")
         self.assertEqual(config["material_problem_policy"], "require_exact_material_items_before_audit")
         self.assertTrue(config["oss_intake"]["enabled"])
         self.assertEqual(config["oss_intake"]["list_endpoint"], "/api/intake/jobs")
@@ -1745,13 +1909,31 @@ class OSSIntakeHTTPTests(unittest.TestCase):
         self.assertFalse(config["oss_intake"]["receive_only"])
         self.assertEqual(
             config["oss_intake"]["request_fields"],
-            ["verifyCode", "analyzeId", "downloadUrl"],
+            ["verifyCode", "analyzeId", "downloadUrl", "bizType", "largeVenueFee"],
         )
-        self.assertEqual(config["oss_intake"]["input_directory"], "input-oss")
+        self.assertEqual(config["oss_intake"]["optional_request_fields"], ["largeVenueFee"])
+        self.assertEqual(config["oss_intake"]["required_request_fields"], ["verifyCode", "analyzeId", "downloadUrl", "bizType"])
+        self.assertEqual(config["oss_intake"]["large_venue_fee_policy"], {
+            "type": "boolean", "scenario": "promotional_display", "material": "atrium_agreement",
+            "true": "required", "false": "not_required", "omitted": "legacy_material_evidence",
+        })
+        expected_mapping = {
+            "条码费": "audit-entry-fee", "陈列堆头": "audit-promotional-display",
+            "人员激励": "audit-personnel-incentive", "POS达标激励": "audit-pos-target-incentive",
+            "搭赠": "audit-giveaway-promotion", "KT板等物料制作": "audit-poster-material",
+            "补差": "audit-price-difference-support", "外采赠品": "audit-self-procured-gift-material",
+        }
+        self.assertEqual(config["oss_intake"]["biz_type_skill_map"], expected_mapping)
+        self.assertEqual(set(config["oss_intake"]["biz_type_values"]), set(expected_mapping))
+        self.assertEqual(config["oss_intake"]["biz_type_policy"], "exact_value_skill_mapping_then_material_gate")
+        self.assertEqual(config["oss_intake"]["other_biz_type_policy"], "complete_without_ai")
+        self.assertEqual(config["oss_intake"]["other_biz_type_message"], "该业务类型无需AI核销")
+        self.assertEqual(config["oss_intake"]["input_directory"], "input")
 
         with self.opener.open(self.base + "/api/intake/jobs", timeout=5) as response:
             listed = json.load(response)
         self.assertEqual(listed["count"], 2)
+        self.assertTrue(all(job["bizType"] == "人员激励" for job in listed["jobs"]))
         self.assertEqual(
             {job["job_id"] for job in listed["jobs"]},
             {job_id, replay_job["job_id"]},

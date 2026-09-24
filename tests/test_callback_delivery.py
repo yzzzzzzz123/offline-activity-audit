@@ -145,7 +145,7 @@ class CallbackDeliveryTests(unittest.TestCase):
         self.assertFalse(self.receipts())
 
     def test_summary_path_size_hash_empty_or_truncation_cannot_be_bypassed(self):
-        for mode in ("path", "size", "hash", "missing", "empty", "too_long", "truncated"):
+        for mode in ("path", "size", "hash", "missing", "empty", "too_long", "truncated", "plain_truncated"):
             with self.subTest(mode=mode):
                 self.summary = "可核对的完整小结"
                 self.write_fixture()
@@ -156,7 +156,8 @@ class CallbackDeliveryTests(unittest.TestCase):
                 elif mode == "missing":
                     (self.workspace / "ai-analysis-summary.md").unlink()
                 else:
-                    self.summary = {"empty": " \n", "too_long": "中" * (MAX_CALLBACK_RESULT_CHARS + 1), "truncated": "回调内容已截断；完整小结另存。"}[mode]
+                    self.summary = {"empty": " \n", "too_long": "中" * (MAX_CALLBACK_RESULT_CHARS + 1), "truncated": "回调内容已截断；完整小结另存。",
+                                    "plain_truncated": "问题较多，这里只显示部分。完整问题请在核销记录中查看。"}[mode]
                     self.write_fixture()
                 sender = self.sender()
                 with self.assertRaises(AuditError):

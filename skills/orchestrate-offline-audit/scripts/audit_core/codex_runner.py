@@ -1117,19 +1117,19 @@ def _validate_entry_fee_sources(
     returned_items = list(evidence.get("documents") or [])
     returned_names = [str(item.get("source_file") or "") for item in returned_items]
     if len(returned_names) != len(set(name.casefold() for name in returned_names)):
-        raise AuditError("进场费视觉证据重复返回同一来源文件")
+        raise AuditError("条码费视觉证据重复返回同一来源文件")
     if len(returned_names) != len(expected) or set(returned_names) != set(expected):
         missing = sorted(set(expected) - set(returned_names))
         unknown = sorted(set(returned_names) - set(expected))
         raise AuditError(
-            "进场费视觉证据必须逐文件完整覆盖："
+            "条码费视觉证据必须逐文件完整覆盖："
             f"missing={missing}，unknown={unknown}"
         )
     for item in returned_items:
         source_file = str(item["source_file"])
         if str(item["role"]) != expected[source_file]:
             raise AuditError(
-                f"进场费来源角色被改写：{source_file}={item['role']}，"
+                f"条码费来源角色被改写：{source_file}={item['role']}，"
                 f"期望{expected[source_file]}"
             )
 
@@ -1968,7 +1968,7 @@ def extract_with_codex(
         images, source_manifest = _prepare_other_expense_sources(
             case,
             model_root,
-            label="进场费",
+            label="条码费",
         )
         return _run_codex_json(
             codex=codex,
@@ -1980,7 +1980,7 @@ def extract_with_codex(
             images=images,
             selected_model=selected_model,
             model_catalog=model_catalog,
-            label="进场费材料",
+            label="条码费材料",
             max_attempts=max_attempts,
             attempt_timeout_seconds=attempt_timeout_seconds,
             reasoning_effort=selected_reasoning_effort,

@@ -210,7 +210,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             root = Path(temporary)
             for name in ("A-其他.zip", "B-堆头.zip"):
                 (root / name).touch()
-            with mock.patch("audit_core.workbench_runtime.discover_archives", return_value={"promotional_display": {"path": root / "B-堆头.zip"}}):
+            with mock.patch("audit_core.archive_input.discover_archives", side_effect=AssertionError("不能按名称分类")):
                 self.assertEqual(_input_archive_names(root, "promotional_display"), ["A-其他.zip", "B-堆头.zip"])
             self.assertEqual(_input_archive_names(root, None), ["A-其他.zip", "B-堆头.zip"])
 
@@ -418,7 +418,8 @@ class WorkbenchStoreTests(unittest.TestCase):
     def test_classification_failure_projection_preserves_saved_details(self) -> None:
         manifest = {"status": "failed", "failure": {"code": "classification_failed", "message": "完整逐类比对详情"}}
         original = json.dumps(manifest)
-        self.assertEqual(project_run_status(manifest)["failure"]["message"], "核销方式无法确认")
+        self.assertEqual(project_run_status(manifest)["status"], "completed")
+        self.assertIsNone(project_run_status(manifest)["failure"])
         self.assertEqual(json.dumps(manifest), original)
         execution_failure = {"status": "failed", "failure": {"message": "模型连接失败"}}
         self.assertEqual(project_run_status(execution_failure), execution_failure)
@@ -446,7 +447,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             self.assertEqual((workspace / ANALYSIS_SUMMARY_FILENAME).read_text(encoding="utf-8"), "旧版长小结")
             result = backfill_analysis_summaries(root, workspace_id="selected", apply=True)
             self.assertEqual(result["updated"], 1)
-            self.assertEqual((workspace / ANALYSIS_SUMMARY_FILENAME).read_text(encoding="utf-8"), "核销方式无法确认")
+            self.assertIn("缺少促销合同", (workspace / ANALYSIS_SUMMARY_FILENAME).read_text(encoding="utf-8"))
             snapshot = read_json_file(workspace / "snapshot.json")
             manifest = read_json_file(workspace / "manifest.json")
             self.assertEqual(manifest["analysis_summary"], snapshot["run"]["analysis_summary"])
@@ -673,6 +674,7 @@ class WorkbenchStoreTests(unittest.TestCase):
                 result = run_persistent_audit(
                     "20260828-persistent-test",
                     producer_model="codex",
+                    biz_type="KT板等物料制作",
                     worktrees_root=root,
                     input_dir=inputs,
                 )
@@ -766,6 +768,7 @@ class WorkbenchStoreTests(unittest.TestCase):
                 run_persistent_audit(
                     "20260828-failed-static-test",
                     producer_model="codex",
+                    biz_type="KT板等物料制作",
                     worktrees_root=root,
                 )
 
@@ -1859,11 +1862,11 @@ class WorkbenchServerTests(unittest.TestCase):
         primary_context = self._script_payload(primary, "audit-workbench-context")
         self.assertEqual(primary_context["mode"], "system")
         self.assertIsNone(primary_context["selected_run"])
-        self.assertEqual(primary_context["system_version"], "2.12.3")
+        self.assertEqual(primary_context["system_version"], "2.16.2")
         self.assertEqual(primary_context["delivery_mode"], "server")
         self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
         self.assertIn("audit-system-extension-script", primary)
-        self.assertIn('content="2.12.3"', primary)
+        self.assertIn('content="2.16.2"', primary)
         self.assertFalse(primary_context["oss_intake_enabled"])
         self.assertEqual(self._script_payload(primary, "audit-data")["sheets"], [])
         self.assertLess(
@@ -1875,14 +1878,14 @@ class WorkbenchServerTests(unittest.TestCase):
             primary,
         )
         self.assertIn('<link rel="icon" href="data:,">', primary)
-        self.assertIn("全部 worktree 运行记录", primary)
+        self.assertIn("全部已保存的核销记录", primary)
         self.assertNotIn("累计持久化运行次数", primary)
         self.assertIn(
             'class="as-toolbar" role="group" aria-label="核销记录筛选"',
             primary,
         )
         self.assertNotIn('id="as-status-filter"', primary)
-        self.assertIn("AUDIT LEDGER", primary)
+        self.assertIn("全部核销记录", primary)
         self.assertIn("const terminalRun = (run) => ['completed', 'failed'].includes(run?.status);", primary)
         self.assertIn(
             'role="tablist" aria-label="核销管理中心视图"', primary
@@ -1940,7 +1943,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(primary.count('role="tab" aria-controls="as-tech-panel-'), 4)
         self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tech-tab-'), 4)
         self.assertIn("const latestCompletedZipCount", primary)
-        self.assertIn("最近一次 input 的 ZIP 总数", primary)
+        self.assertIn("最近一次已完成核销的类型数", primary)
         self.assertGreaterEqual(primary.count("待人工核验"), 2)
         self.assertNotIn('id="as-recent-list"', primary)
         self.assertNotIn('id="as-tab-ledger"', primary)
@@ -1952,11 +1955,11 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn("renderOverviewRecords", primary)
         self.assertIn("const renderLedger = () => {", primary)
         self.assertNotIn("slice(0, 5)", primary)
-        self.assertIn("if (job?.status === 'failed') return { label: '失败', className: 'failed' };", primary)
-        self.assertIn("失败原因：${message}", primary)
+        self.assertIn("if (job?.status === 'failed') return { label: '未完成', className: 'failed' };", primary)
+        self.assertIn("资料接收或核销没有完成，具体原因请联系管理员查看。", primary)
         self.assertIn("data-as-delete-job=", primary)
-        self.assertIn("取消并删除这条投递任务？", primary)
-        self.assertIn("永久删除这条失败投递记录？", primary)
+        self.assertIn("取消并删除这条上传记录？", primary)
+        self.assertIn("永久删除这条未完成的上传记录？", primary)
         self.assertIn('data-as-review=', primary)
         self.assertIn('/manual-review', primary)
         self.assertIn("node.setAttribute('role', 'status')", primary)
@@ -1978,19 +1981,24 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.44")
+        self.assertEqual(config["api_version"], "1.54")
         self.assertEqual(config["audit_policy_source"], "费用核销类型-资料与标准清单-20260918.pdf")
-        self.assertEqual(config["scenario_classification_policy"], "material_content")
-        self.assertEqual(config["unclassified_archive_policy"], "fail_after_ai_and_callback_reason")
-        self.assertEqual(config["classification_failure_message"], "核销方式无法确认")
+        self.assertEqual(config["scenario_classification_policy"], "biz_type")
+        self.assertEqual(config["local_input_type_policy"], "ask_user_before_run")
+        self.assertEqual(config["unclassified_archive_policy"], "complete_with_specific_material_issues")
+        self.assertEqual(config["run_failure_policy"], "input_type_or_execution_errors")
+        self.assertEqual(config["business_result_policy"], "issues_for_human_review")
+        self.assertNotIn("classification_failure_message", config)
         self.assertEqual(config["error_text_policy"], "reason_and_action_separate")
         self.assertEqual(config["business_file_display"], "filenames_only")
+        self.assertEqual(config["customer_language_policy"], "plain_chinese_source_specific")
+        self.assertEqual(config["customer_reason_format"], "short_facts_without_archive_or_type_prefix")
         self.assertEqual(config["confidence_badge_display"], "hidden")
         self.assertEqual(config["result_summary_display"], "hidden")
         self.assertEqual(config["result_list_heading_display"], "hidden")
         self.assertEqual(config["filter_header_display"], "hidden")
         self.assertEqual(config["result_filters"], ["audit_type", "category"])
-        self.assertEqual(config["system_version"], "2.12.3")
+        self.assertEqual(config["system_version"], "2.16.2")
         self.assertEqual(config["material_problem_policy"], "require_exact_material_items_before_audit")
         self.assertEqual(config["refresh_policy"]["overview"]["record_count_statuses"], "all")
         self.assertEqual(config["refresh_policy"]["record_lists"], {

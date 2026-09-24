@@ -69,10 +69,10 @@ SCENARIO_SPECS = (
     ),
     ScenarioSpec(
         "entry_fee",
-        "进场费",
-        "进场费核销",
+        "条码费",
+        "条码费核销",
         "audit-entry-fee",
-        ("进场费", "条码费"),
+        ("条码费", "进场费"),
         "generic",
     ),
     ScenarioSpec(
@@ -99,8 +99,17 @@ GENERIC_SCENARIOS = frozenset(
     item.scenario for item in SCENARIO_SPECS if item.runtime == "generic"
 )
 SCENARIO_LABELS = {item.scenario: item.label for item in SCENARIO_SPECS}
+BIZ_TYPE_SCENARIOS = {item.label: item.scenario for item in SCENARIO_SPECS}
+
+
+def scenario_for_biz_type(value: object) -> str | None:
+    """Match only the eight agreed business values, without aliases or inference."""
+    return BIZ_TYPE_SCENARIOS.get(value) if isinstance(value, str) else None
+
+
 SCENARIO_SHEETS = {item.scenario: item.sheet_name for item in SCENARIO_SPECS}
 SHEET_SCENARIOS = {item.sheet_name: item.scenario for item in SCENARIO_SPECS}
+SHEET_SCENARIOS["进场费核销"] = "entry_fee"  # Read-only compatibility with old workbooks.
 SKILL_BY_SCENARIO = {item.scenario: item.skill_dir for item in SCENARIO_SPECS}
 EVIDENCE_SCHEMA_BY_SCENARIO = {
     item.scenario: item.evidence_schema for item in SCENARIO_SPECS

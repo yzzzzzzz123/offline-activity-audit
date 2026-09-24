@@ -714,7 +714,7 @@ def main() -> None:
         page.locator(f'[data-as-delete="{workspace_id}"]').click()
         job_id = "b" * 24
         receipt = ROOT / ".intake" / "jobs" / f"{job_id}.json"
-        source = ROOT.parent / "input-oss" / job_id
+        source = ROOT.parent / "input" / job_id
         source.mkdir(parents=True)
         (source / "fixture.zip").write_bytes(b"owned browser fixture")
         job = {"job_id": job_id, "status": "callback", "result": {"workspace_id": workspace_id}}

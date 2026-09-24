@@ -77,7 +77,7 @@ class MaterialIntakeTests(unittest.TestCase):
             ("海报物料", "poster_material"), ("其他费用", "other_expense"),
             ("维护费用", "maintenance_fee"), ("额外搭赠", "giveaway_promotion"),
             ("价格补差", "price_difference_support"), ("POS达标激励", "pos_target_incentive"),
-            ("进场费", "entry_fee"), ("自采赠品物料", "self_procured_gift_material"),
+            ("条码费", "entry_fee"), ("进场费", "entry_fee"), ("自采赠品物料", "self_procured_gift_material"),
         ):
             with self.subTest(label=label):
                 name = f"HX202601160053-客户-{label}-9.zip"
@@ -406,7 +406,7 @@ class MaterialIntakeTests(unittest.TestCase):
 
     def test_retained_maintenance_package_can_be_prepared_read_only(self) -> None:
         project = Path(__file__).resolve().parents[1]
-        original = project / "input-oss/8c3abb5ea4d2261de03d140b/HX202601160053-广州南雄维护费用申请-9.zip"
+        original = project / "input/8c3abb5ea4d2261de03d140b/HX202601160053-广州南雄维护费用申请-9.zip"
         if not original.is_file():
             self.skipTest("本机没有保留的客户维护费用包")
         before = original.read_bytes()

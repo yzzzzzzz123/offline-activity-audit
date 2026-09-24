@@ -15,7 +15,7 @@ class MaintenanceTests(unittest.TestCase):
             cache.parent.mkdir(parents=True)
             cache.write_bytes(b"cache")
             protected = [
-                "input/material.zip", "input-oss/job/material.zip", "worktrees/run/snapshot.json",
+                "input/material.zip", "input/job/material.zip", "worktrees/run/snapshot.json",
                 "artifacts/diagnostics/report.json", "shared/product-database/runtime/data.db",
                 "shared/product-database/.env", ".git/objects/pack/archive.pack",
                 "tests/fixtures/example.tmp", "tests/__pycache__/keep.txt",

@@ -1,4 +1,4 @@
 interface:
   display_name: "外采赠品核销"
-  short_description: "按指定PDF资料清单及审核要点核验外采赠品，保留来源和明确失败原因"
-  default_prompt: "使用 $audit-self-procured-gift-material，仅按指定PDF审核外采赠品资料。"
+  short_description: "外采赠品资料先过门禁，按本类要点及已确认POS通用规则核对"
+  default_prompt: "使用 $audit-self-procured-gift-material，按PDF及已确认补充做资料门禁，按本类审核要点/标准栏及用户确认的POS通用规则审核外采赠品，其他文字只作背景，按客户结果写法输出。"

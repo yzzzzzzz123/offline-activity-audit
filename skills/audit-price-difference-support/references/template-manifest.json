@@ -1,0 +1,64 @@
+{
+  "scenario": "price_difference_support",
+  "approved_on": "2026-09-22",
+  "authorization": "用户明确指定input根目录八个ZIP中的相应样张作为模板参考，并分别写入对应Skill。",
+  "source_zip": "input/SQ202512270003-HX202601160053-补差.zip",
+  "source_zip_sha256": "97a92c8e0d294d3d4cffafc751688d38a78a80c06e9fdba1534b44f70a3531e2",
+  "documents": [
+    {
+      "id": "template-reference-price_difference_support-promotion-contract",
+      "title": "促销合同",
+      "role": "promotion_contract",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/promotion-contract.jpg",
+      "sha256": "c3a9134c8e18799653f2673c3705c54f16069dfaaa624ac636777dc692ff7f27",
+      "source_member": "促销协议.jpg",
+      "source_sha256": "c3a9134c8e18799653f2673c3705c54f16069dfaaa624ac636777dc692ff7f27",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-price_difference_support-settlement",
+      "title": "市场费用结算单",
+      "role": "settlement",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/settlement.jpg",
+      "sha256": "7c610dc9f68a71efeaf2660567efc49e78d46a7111a5bde06444f0278c971207",
+      "source_member": "结算单.jpg",
+      "source_sha256": "7c610dc9f68a71efeaf2660567efc49e78d46a7111a5bde06444f0278c971207",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-price_difference_support-sales-list-1",
+      "title": "销售明细第一页",
+      "role": "sales_record",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-list-1.jpg",
+      "sha256": "c315a51cc088c40744a874b992d40498289604525763c271828e191e0a40e4c3",
+      "source_member": "陈列销售.jpg",
+      "source_sha256": "c315a51cc088c40744a874b992d40498289604525763c271828e191e0a40e4c3",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-price_difference_support-sales-list-2",
+      "title": "销售明细续页及合计",
+      "role": "sales_record",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-list-2.jpg",
+      "sha256": "df5ded625f2537388ec753c32e7825a258b424672cfe2ed45faa1dbe1e57e7f7",
+      "source_member": "陈列销售1.jpg",
+      "source_sha256": "df5ded625f2537388ec753c32e7825a258b424672cfe2ed45faa1dbe1e57e7f7",
+      "source_pages": [],
+      "preview_images": []
+    }
+  ],
+  "unselected_members": [
+    "芃之誉照片.rar"
+  ]
+}

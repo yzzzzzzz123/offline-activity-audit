@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any, TextIO
 from urllib.parse import quote
 
-from .common import AuditError
-from .archive_input import discover_archives
+from .common import AuditError, BizTypeRecognitionError, biz_type_skip_result
+from .scenario_registry import SCENARIO_LABELS, scenario_for_biz_type
+from .archive_input import ArchiveInputError, discover_zip_paths
 from .model_metrics import collect_model_artifacts
 from .codex_runner import (
     ALLOWED_REASONING_EFFORTS,
@@ -43,13 +44,45 @@ ROOT_HTML = PROJECT_ROOT / 'skills/orchestrate-offline-audit/assets/offline-acti
 DEFAULT_WORKBENCH_URL = "http://192.0.0.148:8080/"
 
 
+class LocalBizTypeRequiredError(AuditError):
+    def __init__(self) -> None:
+        super().__init__(
+            "请先询问用户本次本地 ZIP 的核销方式，确认后通过 --biz-type 传入。可选："
+            + "、".join(SCENARIO_LABELS.values())
+            + "。多个 ZIP 的核销方式不同时，请逐包确认并分别运行。"
+        )
+
+
+def _ask_local_biz_type() -> str:
+    """Ask on an interactive terminal before opening materials or creating a run."""
+    if not sys.stdin.isatty():
+        raise LocalBizTypeRequiredError()
+    labels = tuple(SCENARIO_LABELS.values())
+    print("本次本地 ZIP 使用哪种核销方式？", file=sys.stderr)
+    print("本次选择适用于所选的全部 ZIP；如各包方式不同，请取消后分别指定 ZIP 运行。", file=sys.stderr)
+    for index, label in enumerate(labels, 1):
+        print(f"{index}. {label}", file=sys.stderr)
+    while True:
+        print("请输入序号或完整名称（输入 q 取消）：", file=sys.stderr, flush=True)
+        try:
+            answer = input()
+        except (EOFError, KeyboardInterrupt):
+            raise LocalBizTypeRequiredError() from None
+        if answer == "q":
+            raise LocalBizTypeRequiredError()
+        if answer in labels:
+            return answer
+        if answer in {str(index) for index in range(1, len(labels) + 1)}:
+            return labels[int(answer) - 1]
+        print("尚未选择核销方式，请从上述八项中选择；不会自动判断。", file=sys.stderr)
+
+
 def _input_archive_names(input_dir: str | Path, scenario: str | None) -> list[str]:
-    root = Path(input_dir)
-    if not root.is_dir() or root.is_symlink():
+    try:
+        paths = discover_zip_paths(input_dir)
+    except ArchiveInputError:
         return []
-    paths = sorted((path for path in root.iterdir() if path.is_file() and path.suffix.lower() == ".zip"), key=lambda path: path.name.casefold())
-    # Every archive must be inspected before a content-derived type is known.
-    # --scenario filters confirmed types afterwards; names never select a Skill.
+    # Preserve all selected source names; the confirmed bizType alone selects a Skill.
     return [path.name for path in paths]
 
 
@@ -100,9 +133,19 @@ def run_persistent_audit(
     scenario: str | None = None,
     workbench_url: str | None = None,
     input_source: str = "input",
+    biz_type: str | None = None,
+    large_venue_fee: bool | None = None,
 ) -> dict[str, Any]:
+    if input_source != "oss" and (not isinstance(biz_type, str) or not biz_type.strip()):
+        raise LocalBizTypeRequiredError()
+    if large_venue_fee is not None and not isinstance(large_venue_fee, bool):
+        raise AuditError("largeVenueFee 必须是布尔值 true 或 false")
+    if input_source == "oss" and biz_type is None:
+        biz_type = ""
     normalized_run_id = normalize_run_id(run_id)
     normalized_model = normalize_producer_model(producer_model)
+    if isinstance(biz_type, str) and biz_type.strip() and scenario_for_biz_type(biz_type) is None:
+        return biz_type_skip_result(normalized_run_id, biz_type)
     selected_audit_model = str(
         model or (DEFAULT_MODEL if normalized_model == "codex" else normalized_model)
     ).strip()
@@ -154,6 +197,8 @@ def run_persistent_audit(
                     model=selected_audit_model,
                     reasoning_effort=selected_reasoning_effort,
                     scenario=scenario,
+                    biz_type=biz_type,
+                    large_venue_fee=large_venue_fee,
                     observer=store.observe,
                 )
             if "view_payload" in legacy:
@@ -183,7 +228,8 @@ def run_persistent_audit(
             )
         except Exception as archive_exc:
             print(f"静态运行页面生成失败：{archive_exc}", file=sys.stderr)
-        raise
+        if not isinstance(exc, BizTypeRecognitionError):
+            raise
 
     run_url = url + "?run=" + quote(store.workspace_id, safe="")
     return {
@@ -213,6 +259,9 @@ def build_parser() -> argparse.ArgumentParser:
             "发布到固定局域网工作台并生成运行目录离线静态页面"
         )
     )
+    parser.add_argument("--biz-type", help="用户已确认的本次核销方式；本地未传时先询问，非交互调用须先询问用户再传入")
+    parser.add_argument("--large-venue-fee", choices=("true", "false"),
+                        help="是否包含大型活动场地费；陈列堆头为true时须提供商场入场协议")
     parser.add_argument(
         "--run-id",
         required=True,
@@ -235,12 +284,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--scenario",
         choices=SCENARIO_ORDER,
-        help="按资料内容识别后，只审核指定类型；不能覆盖内容分类结果",
+        help="仅作类型一致性检查，须与 --biz-type 对应；不能代替用户确认核销方式",
     )
     parser.add_argument(
         "--input-dir",
         default=str(DEFAULT_INPUT_DIR),
-        help="本次运行的 ZIP 输入目录；默认使用项目 input/",
+        help="ZIP 文件或输入目录；默认扫描项目 input/ 及其一级任务子目录中的 ZIP",
     )
     parser.add_argument(
         "--worktrees",
@@ -262,6 +311,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        biz_type = args.biz_type
+        if args.input_source == "input" and (biz_type is None or not biz_type.strip()):
+            biz_type = _ask_local_biz_type()
         result = run_persistent_audit(
             args.run_id,
             producer_model=args.producer_model,
@@ -276,7 +328,12 @@ def main(argv: list[str] | None = None) -> int:
             scenario=args.scenario,
             workbench_url=args.workbench_url,
             input_source=args.input_source,
+            biz_type=biz_type if biz_type is not None else "",
+            large_venue_fee=None if args.large_venue_fee is None else args.large_venue_fee == "true",
         )
+    except LocalBizTypeRequiredError as exc:
+        print(f"尚未开始核销：{exc}", file=sys.stderr)
+        return 2
     except AuditError as exc:
         print(f"核销失败：{exc}", file=sys.stderr)
         return 2

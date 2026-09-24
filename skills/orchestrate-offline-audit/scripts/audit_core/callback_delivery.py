@@ -105,7 +105,9 @@ def prepare_callback_delivery(
         raise AuditError("AI 分析小结不是有效 UTF-8") from None
     if not summary:
         raise AuditError("AI 分析小结为空，不能补发")
-    if len(summary) > MAX_CALLBACK_RESULT_CHARS or "回调内容已截断" in summary:
+    if len(summary) > MAX_CALLBACK_RESULT_CHARS or any(marker in summary for marker in (
+        "回调内容已截断", "问题较多，这里只显示部分。完整问题请在核销记录中查看。",
+    )):
         raise AuditError("AI 分析小结超过回调上限或已截断，不能补发不完整结果")
     payload = {"verifyCode": verify_code, "analyzeId": analyze_id, "result": summary}
     payload_hash = _digest(_encoded(payload))

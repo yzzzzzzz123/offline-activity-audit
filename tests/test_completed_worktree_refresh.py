@@ -65,6 +65,23 @@ class CompletedWorktreeRefreshTests(unittest.TestCase):
     def refresh(self, **kwargs):
         return refresh_completed_worktree_archives(self.root, root_html=self.template, backup_dir=self.backup, **kwargs)
 
+    def test_one_archive_refresh_preserves_other_runs_and_saved_business_facts(self):
+        first = self.create_workspace()
+        second = self.create_workspace("20260910_1856_59-gpt6astra_medium")
+        before = self.workspace_bytes()
+        result = backfill_analysis_summaries(self.root, refresh_archives=True, backup_dir=self.backup,
+                                            root_html=self.template, workspace_id=first.name, apply=True)
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual([r["workspace_id"] for r in result["results"]], [first.name])
+        after = self.workspace_bytes()
+        for filename, content in before.items():
+            if filename.startswith(second.name + "/") or "/analysis/" in filename or "/logs/" in filename:
+                self.assertEqual(after[filename], content)
+        self.assertEqual(json.loads(after[first.name + "/snapshot.json"])["view"],
+                         json.loads(before[first.name + "/snapshot.json"])["view"])
+        with self.assertRaises(AuditError):
+            self.refresh(workspace_id="../other")
+
     def test_preview_is_read_only_and_all_changed_files_are_backed_up_before_first_write(self):
         first = self.create_workspace()
         second = self.create_workspace("20260910_1856_59-gpt6astra_medium")

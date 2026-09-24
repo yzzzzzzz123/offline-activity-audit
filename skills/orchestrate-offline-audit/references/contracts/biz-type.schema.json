@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "scenario": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "promotional_display",
+        "personnel_incentive",
+        "poster_material",
+        "self_procured_gift_material",
+        "price_difference_support",
+        "giveaway_promotion",
+        "entry_fee",
+        "pos_target_incentive",
+        null
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "scenario",
+    "reason"
+  ]
+}

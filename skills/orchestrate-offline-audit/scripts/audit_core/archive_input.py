@@ -28,7 +28,7 @@ SCENARIO_MARKERS: dict[str, tuple[str, ...]] = {
     "giveaway_promotion": ("额外搭赠", "搭赠"),
     "price_difference_support": ("价格补差", "补差"),
     "pos_target_incentive": ("pos激励达标", "pos达标激励", "pos激励"),
-    "entry_fee": ("进场费", "条码费"),
+    "entry_fee": ("条码费", "进场费"),
     "self_procured_gift_material": ("自采赠品物料", "自采赠品", "自采物料"),
 }
 
@@ -253,7 +253,7 @@ def _classify_archive(path: Path) -> dict[str, Any]:
         suffix in VISUAL_DOCUMENT_SUFFIXES
         and any(
             marker in name
-            for marker in ("产品推广协议", "进场费合同", "条码费合同", "进场合同")
+            for marker in ("产品推广协议", "条码费合同", "进场费合同", "进场合同")
         )
         for name, suffix in member_facts
     )
@@ -384,28 +384,52 @@ def _classify_archive(path: Path) -> dict[str, Any]:
     )
 
 
-def discover_archives(input_dir: str | Path) -> dict[str, dict[str, Any]]:
-    requested = Path(input_dir)
-    if requested.is_symlink():
-        raise ArchiveInputError("input 目录不能是符号链接")
+def discover_zip_paths(input_dir: str | Path) -> list[Path]:
+    """Accept one ZIP, or ZIPs in a directory and its immediate task folders.
+
+    Each directory retains the ten-archive limit. The material intake applies
+    its cumulative extraction budget to all discovered archives together.
+    """
+    requested = Path(input_dir).absolute()
+
+    def reject_link(path: Path) -> None:
+        if path.is_symlink() or (
+            path.exists() and getattr(path.lstat(), "st_file_attributes", 0)
+            & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+        ):
+            raise ArchiveInputError(f"input 路径不能是符号链接或目录联接：{path.name}")
+
+    for ancestor in (requested, *requested.parents):
+        reject_link(ancestor)
     root = requested.resolve()
+    if root.is_file():
+        if root.suffix.lower() != ".zip":
+            raise ArchiveInputError(f"input 文件必须是 ZIP：{root.name}")
+        return [root]
     if not root.is_dir():
-        raise ArchiveInputError(f"input 目录不存在：{root}")
-    archives = sorted(
-        (
-            path
-            for path in root.iterdir()
-            if path.is_file() and path.suffix.lower() == ".zip"
-        ),
-        key=lambda path: path.name.casefold(),
-    )
-    if not 1 <= len(archives) <= 10:
-        raise ArchiveInputError(
-            f"input/ 必须直接包含 1～10 个 ZIP；当前发现 {len(archives)} 个。"
-        )
-    linked = [path.name for path in archives if path.is_symlink()]
-    if linked:
-        raise ArchiveInputError("ZIP 不能是符号链接：" + "、".join(linked))
+        raise ArchiveInputError(f"input 路径不存在：{root}")
+
+    def scan(directory: Path, *, include_tasks: bool) -> list[Path]:
+        direct: list[Path] = []
+        tasks: list[Path] = []
+        for path in sorted(directory.iterdir(), key=lambda p: (p.name.casefold(), p.name)):
+            reject_link(path)
+            if path.is_file() and path.suffix.lower() == ".zip":
+                direct.append(path)
+            elif include_tasks and path.is_dir():
+                tasks.append(path)
+        if len(direct) > 10:
+            raise ArchiveInputError(f"input 每个目录最多包含 10 个 ZIP；{directory.name} 当前发现 {len(direct)} 个。")
+        return direct + [path for task in tasks for path in scan(task, include_tasks=False)]
+
+    archives = scan(root, include_tasks=True)
+    if not archives:
+        raise ArchiveInputError("input 目录及其一级任务子目录中未发现 ZIP；请放入至少 1 个 ZIP。")
+    return archives
+
+
+def discover_archives(input_dir: str | Path) -> dict[str, dict[str, Any]]:
+    archives = discover_zip_paths(input_dir)
 
     classified: dict[str, dict[str, Any]] = {}
     for archive in archives:
@@ -421,7 +445,7 @@ def discover_archives(input_dir: str | Path) -> dict[str, dict[str, Any]]:
                 "giveaway_promotion": "额外搭赠",
                 "price_difference_support": "价格补差",
                 "pos_target_incentive": "POS达标激励",
-                "entry_fee": "进场费",
+                "entry_fee": "条码费",
                 "self_procured_gift_material": "自采赠品物料",
             }[scenario]
             raise MaterialInputError(
@@ -1097,12 +1121,12 @@ def prepare_cases(
         elif scenario == "entry_fee":
             documents = _material_files(root, VISUAL_DOCUMENT_SUFFIXES)
             if not documents:
-                raise MaterialInputError(f"{archive.name} 没有进场费合同或扣款凭证")
+                raise MaterialInputError(f"{archive.name} 没有条码费合同或扣款凭证")
             lowered = [path.name.casefold() for path in documents]
             duplicates = sorted({name for name in lowered if lowered.count(name) > 1})
             if duplicates:
                 raise MaterialInputError(
-                    f"{archive.name} 中存在同名进场费资料，无法稳定绑定："
+                    f"{archive.name} 中存在同名条码费资料，无法稳定绑定："
                     + "、".join(duplicates)
                 )
 
@@ -1113,8 +1137,8 @@ def prepare_cases(
                 ]
 
             contract = _one(
-                entry_named("产品推广协议", "进场费合同", "条码费合同", "进场合同"),
-                "进场费合同",
+                entry_named("产品推广协议", "条码费合同", "进场费合同", "进场合同"),
+                "条码费合同",
                 archive.name,
             )
             rar_candidates = [

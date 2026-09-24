@@ -28,6 +28,7 @@ def payload(verify_code: str, analyze_id: int, name: str) -> dict:
     return {
         "verifyCode": verify_code,
         "analyzeId": analyze_id,
+        "bizType": "KT板等物料制作",
         "downloadUrl": f"https://{HOST}/incoming/{name}.zip?signature=fixture",
     }
 
@@ -143,7 +144,7 @@ def main() -> None:
 
     temporary = tempfile.TemporaryDirectory(prefix="offline-audit-intake-browser-")
     root = Path(temporary.name) / "worktrees"
-    input_root = Path(temporary.name) / "input-oss"
+    input_root = Path(temporary.name) / "input"
     root.mkdir(parents=True)
 
     failed_reason = {

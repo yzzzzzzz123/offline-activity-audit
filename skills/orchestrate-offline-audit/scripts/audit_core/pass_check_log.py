@@ -18,7 +18,7 @@ SCENARIO_PRESENTATION: dict[str, tuple[str, str]] = {
     "giveaway_promotion": ("额外搭赠", "额外搭赠核销"),
     "price_difference_support": ("价格补差", "价格补差核销"),
     "pos_target_incentive": ("POS达标激励", "POS达标激励核销"),
-    "entry_fee": ("进场费", "进场费核销"),
+    "entry_fee": ("条码费", "条码费核销"),
     "self_procured_gift_material": ("客户自采赠品物料", "客户自采赠品物料核销"),
 }
 
@@ -796,7 +796,7 @@ def attach_pass_check_log(
     enriched = deepcopy(view)
     enriched["pass_check_log"] = build_pass_check_log(enriched, results_by_scenario)
     for sheet in enriched.get("sheets") or []:
-        if sheet.get("projection_kind") in {"material_diagnostic", "pdf_policy"} or sheet.get("decision_source") == "material_content":
+        if sheet.get("projection_kind") in {"material_diagnostic", "pdf_policy"} or sheet.get("decision_source") in {"material_content", "biz_type", "plan_type"}:
             continue
         scenario = _text(sheet.get("scenario"))
         attach_sheet_evidence(sheet, EvidenceContext(scenario, results_by_scenario.get(scenario) or {}))

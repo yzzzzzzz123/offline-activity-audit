@@ -27,7 +27,7 @@ class _RunDeletionFixture:
         self.project = Path(self.temporary.name).resolve()
         self.root = self.project / "worktrees"
         self.root.mkdir()
-        self.inputs = self.project / "input-oss"
+        self.inputs = self.project / "input"
         self.workspace_id = "20260907_1200_00-codex_high"
         self.workspace = self.root / self.workspace_id
         self.store = self.seed(self.workspace_id)
@@ -83,6 +83,11 @@ class RunDeletionTests(_RunDeletionFixture, unittest.TestCase):
         shared.parent.mkdir()
         shared.write_bytes(b"do not delete")
         receipt, source = self.job()
+        local_input = self.inputs / "local.zip"
+        local_input.write_bytes(b"keep local input")
+        other_input = self.inputs / ("b" * 24) / "other.zip"
+        other_input.parent.mkdir()
+        other_input.write_bytes(b"keep other task input")
 
         self.assertEqual(self.plan().execute(), {
             "workspace_id": self.workspace_id, "deleted": True, "deleted_jobs": 1,
@@ -90,6 +95,8 @@ class RunDeletionTests(_RunDeletionFixture, unittest.TestCase):
         self.assertTrue(all(not path.exists() for path in (self.workspace, legacy, review, receipt, source)))
         self.assertEqual((other.workspace / "manifest.json").read_bytes(), before)
         self.assertEqual(shared.read_bytes(), b"do not delete")
+        self.assertEqual(local_input.read_bytes(), b"keep local input")
+        self.assertEqual(other_input.read_bytes(), b"keep other task input")
         self.assertFalse(list(self.project.rglob("*" + self.workspace_id + "*")))
 
     def test_failed_run_and_legacy_only_record_can_be_deleted(self):
@@ -352,7 +359,12 @@ class RunDeletionHTTPTests(_RunDeletionFixture, unittest.TestCase):
             {"Sec-Fetch-Site": "cross-site"},
         ):
             with self.subTest(headers=headers):
-                self.assertEqual(self.delete(headers=headers)[0], 403)
+                # These checks reject headers before reading a body. urllib sends
+                # headers and JSON separately; a late body after the 403/close can
+                # reset the Windows socket. Body validation has its own test below.
+                status, body, _ = self.delete(headers=headers, payload=None)
+                self.assertEqual(status, 403)
+                self.assertEqual(json.loads(body)["status"], 403)
                 self.assertTrue(self.workspace.exists())
 
     def test_confirmation_and_request_shape_are_strict(self):

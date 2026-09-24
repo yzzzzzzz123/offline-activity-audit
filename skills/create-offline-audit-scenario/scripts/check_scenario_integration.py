@@ -324,7 +324,7 @@ def _pdf_policy_checks(root: Path, scenario: str, skill_name: str, audit_module:
         checks.append(Check("policy_manifest", all((
             manifest.get("schema_version") == "2.0", manifest.get("scenario_id") == scenario,
             manifest.get("skill_name") == skill_name, manifest.get("policy_version") == catalogue["version"],
-            manifest.get("classification_policy") == "material_content",
+            manifest.get("classification_policy") == "biz_type",
             manifest.get("materials") == entry["materials"], manifest.get("audit_points") == entry["audit_points"],
         )), str(skill), "类型、资料、条件和审核要点须与PDF清单完全一致"))
         metadata = _frontmatter(_read_utf8(skill / "SKILL.md"))
@@ -342,6 +342,14 @@ def _pdf_policy_checks(root: Path, scenario: str, skill_name: str, audit_module:
         Draft202012Validator.check_schema(classification)
         checks.append(Check("classification_types", set(classification["properties"]["candidate_scenarios"]["items"]["enum"]) == set(catalogue["types"]),
                             str(root / "skills/orchestrate-offline-audit/references/contracts"), "内容分类候选与清单类型完全一致"))
+        gate = _read_json(skill / "references/material-gate.schema.json")
+        Draft202012Validator.check_schema(gate)
+        checks.append(Check("selected_material_gate", (
+            gate["properties"]["material_matches"]["minItems"] == 1
+            and gate["properties"]["material_matches"]["maxItems"] == 1
+            and gate["properties"]["material_matches"]["items"]["properties"]["scenario"]["enum"] == [scenario]
+            and gate["properties"]["candidate_scenarios"]["items"]["enum"] == [scenario]
+        ), str(skill), "资料门禁仅允许bizType确定的本类型"))
         checks.append(Check("workflow", audit_module == "pdf_workflow.py" and (root / "skills/orchestrate-offline-audit/scripts/audit_core" / audit_module).is_file(),
                             str(root / "skills/orchestrate-offline-audit/scripts/audit_core"), "正式审核使用PdfWorkflow，不接回历史处理器"))
         checks.append(Check("sheet_name", not sheet_name or sheet_name == entry["label"] + "核销", str(skill), "按当前类型标签展示"))

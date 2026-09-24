@@ -4,10 +4,10 @@
 
 ## 生命周期
 
-1. 可信上游调用 `POST /api/intake/oss`，并严格只传 `verifyCode`、正整数 `analyzeId` 及临时 `downloadUrl`。
+1. 可信上游调用 `POST /api/intake/oss`，传入必填的 `verifyCode`、正整数 `analyzeId` 及临时 `downloadUrl`，以及必填非空字符串 `bizType`（业务类型）。
 2. 服务校验准确的 HTTPS 下载主机，派生稳定的 `verifyCode:analyzeId` 业务身份；若最新 attempt 仍活动则复用，
    否则在 `worktrees/.intake/jobs/` 下创建持久 attempt 回执。最新 attempt 进入终态后再次提交，会创建新 attempt。
-3. 单个下载 worker 按接收顺序尽快将对象下载到 `<project>/input-oss/<job_id>/<object-basename>.zip`，
+3. 单个下载 worker 按接收顺序尽快将对象下载到 `<project>/input/<job_id>/<object-basename>.zip`，
    记录响应 ETag 和实际大小、计算 SHA-256，并确认它是 ZIP。后续对象的下载不等待前一任务的正式核销或回调结束。
    完整预签名 URL 只保留到本地 ZIP 验证完成，绝不能写入回执、日志或已下载任务队列。
    不同 attempt 绝不共享目录，也不覆盖同名归档。
@@ -15,7 +15,7 @@
    以持久 job 目录作为 `--input-dir`。
    深层归档安全、路由、证据提取、决策、验证和发布仍由正式 runner 负责。
 5. 默认模式下，正式 worktree 快照持久化后，runner 在 worktree 写入 `ai-analysis-summary.md`。
-   分类失败只写“核销方式无法确认”，八类匹配明细留在技术档案；混合批次保留其他包的业务审核错误，分类失败只提示一次。
+   资料问题列出具体缺少、多余或不能确认的资料及相关文件；混合批次同时保留其他包的业务问题，AI正常完成即记completed。
    该文件执行[统一错误原因与处理方式规范](error-reasons.md)：按资料内容确定的核销类型分节，每个不同错误只列具体原因，保留必要业务文件 basename、缺失字段、实际与应有数值及差额。
    重复原因合并，但不得截断不同问题或文件组，也不得替换为“另有 N 项”等占位。不重复错误标题，不含总数概况、逐文件识别过程、完整证据链、通过事实、结论、影响、运行元数据、置信度或处理建议；处理方式仅在客户界面的独立字段展示。
    适配器严格只把 `verifyCode`、`analyzeId` 和该确定性中文 Markdown 作为 `result`，POST 到已配置的完整
@@ -24,7 +24,7 @@
    明确配置的无回调部署跳过投递，将回调状态记录为 `not_required`，并以未经身份验证的任务状态轮询作为完成通道。
    明确配置的仅接收部署在验证持久化后停止，不启动正式 runner，也不创建正式 worktree。
    后续完成的 attempt 使用同一业务二元组发送最新结果，使上游记录可以被替换；更早 attempt 的本地回执、ZIP 和 worktree 保持不变。
-6. 已验证原始 ZIP 在成功或失败后仍保留在 `input-oss`，供本地追溯。
+6. 已验证原始 ZIP 在成功或失败后仍保留在 `input`，供本地追溯。
    删除不完整或传输无效的下载；解压目录、模型工作区及传输结果文件保持临时。
    成功任务指向普通本地 `worktrees/<YYYYMMDD_HHMM_SS>-<audit-model>_<reasoning-effort>/` 档案；完整时间戳取单核销 worker 实际认领并预留该运行时的上海时间，绝不取 `verifyCode` 中的业务日期。
 7. 一级工作台通过 `GET /api/intake/jobs?completed=0` 展示未完成及失败 attempt：`accepted/downloading/downloaded` 标为“排队中”，`running/callback` 标为“运行中”，`failed` 标为“失败”并显示安全失败原因。完成 attempt 不占用投递区，系统总览台账和技术档案均保留全部状态的 worktree。每张投递卡都提供同源确认的删除操作。
@@ -59,13 +59,20 @@ OSS 使用“单下载 worker → 单核销 worker”两级流水线：下载可
 {
   "verifyCode": "HX202603250014",
   "analyzeId": 123,
-  "downloadUrl": "https://exact-allowed-host/path/资料.zip?provider-signature=..."
+  "downloadUrl": "https://exact-allowed-host/path/资料.zip?provider-signature=...",
+  "bizType": "陈列堆头",
+  "largeVenueFee": true
 }
 ```
 
-- 三个字段都必需。`verifyCode` 必须是安全、非空的 ASCII 标识符，`analyzeId` 必须是 64 位正整数。
+- `verifyCode`、`analyzeId`、`downloadUrl`、`bizType` 必需。`verifyCode` 必须是安全、非空的 ASCII 标识符，`analyzeId` 必须是 64 位正整数。
+- 用户2026-09-23说明 `largeVenueFee` 是否必传不是关键问题；保留下面的省略兼容处理，不再作为待确认或阻塞事项。
+- API `1.53` 新增 `largeVenueFee`（是否包含大型活动场地费），传入时只接受JSON布尔值 `true`、`false`；字符串、数字和 `null` 返回400。陈列堆头为 `true` 时须交商场入场协议，为 `false` 时不要求。字段只确定条件，AI仍检查协议是否实际提供，不能重判活动规模或附加中庭位置条件；其他类型不新增资料项。为兼容旧调用允许省略，省略时不默认false，仍按已有资料确定适用条件，不能确认时说明暂时无法确定是否需要协议。
+- 字段原值保存在任务回执和正式运行manifest，以 `--large-venue-fee=true/false` 传给正式runner，再约束陈列堆头的 `atrium`。不加入三字段回调，不改历史指纹或档案；旧回执只读补 `largeVenueFee=null` 表示未传。活动attempt修改此字段返回409；终态后可用新值创建下一attempt。
+- 用户2026-09-21更正字段为业务类型 `bizType`；原误写的 `planType` 不作为新请求的别名或兜底，仅传旧字段按缺少bizType失败回调。混传时只使用bizType。
+- API `1.51` 要求非空字符串 `bizType`（业务类型）。缺失、null、空字符串或纯空白时，仍受理业务身份以保存失败回执和回调，跳过ZIP下载及AI；终态为failed，failure.code=biz_type_unrecognized，回调result准确为“无法识别核销类型”。其他JSON类型返回400。仅当字段原值精确命中八个规范值时才下载资料并调用正式runner，以固定映射进入对应Skill。其他非空值不下载、不创建正式worktree、不调用AI，正常完成，result.audit_required=false，回调result准确为“该业务类型无需AI核销”。资料缺少、多余只输出本类具体问题，状态completed。
 - API `1.25` 起接收、回调和任务状态统一使用 `analyzeId`；旧 `fileId` 请求（含混传）返回 `400`。旧回执只读映射到新字段，内部指纹保持兼容，历史文件与回调不自动迁移或重发。
-- URL 路径或响应 `Content-Disposition` 应保留 Windows 安全的 `.zip` basename，其中包含正式分类器需要的业务场景标记。
+- URL 路径或响应 `Content-Disposition` 应保留 Windows 安全的 `.zip` basename，文件名不参与类型选择。
 - `verifyCode` 中第一个有效 `YYYYMMDD` 作为运行业务日期；不存在时使用当前上海日期。
 - 默认只接受 HTTPS 443 端口、准确配置主机名、安全重定向及公网 DNS 结果。下载前拒绝 userinfo、URL fragment、任意主机及私有/链路本地/loopback 解析。
 - 下载使用专属直连 opener，显式禁用环境变量及 Windows 系统代理；不更改模型调用或全局代理；回调也使用自己独立的直连 opener。仍验证 TLS 证书和每次重定向目标。
@@ -74,8 +81,10 @@ OSS 使用“单下载 worker → 单核销 worker”两级流水线：下载可
 `verifyCode:analyzeId` 二元组及去除查询凭据的 URL 身份构成稳定提交指纹。
 同一二元组与对象路径在签名刷新后再次提交，有两种结果：
 
-- 最新 attempt 为 `accepted`、`downloading`、`downloaded`、`running` 或 `callback` 时，返回该 attempt，不排队重复 AI 工作；
-- 最新 attempt 为 `completed` 或 `failed` 后，创建 `attempt=2/3/...`，使用新的 24 位十六进制 job ID、独立 `input-oss/<job_id>/` 目录及全新正式运行。
+- 最新 attempt 为 `accepted`、`downloading`、`downloaded`、`running` 或 `callback` 时，返回该 attempt，不排队重复 AI 工作；此时bizType更改返回409，不能悄悄替换正在审核的类型；
+- 最新 attempt 为 `completed` 或 `failed` 后，创建 `attempt=2/3/...`，使用新的 24 位十六进制 job ID；只有命中八个规范值才创建独立 `input/<job_id>/` 目录及正式运行。
+
+空值失败与其他非空类型的正常跳过都没有已下载ZIP或正式worktree；跳过结果保存在任务回执，可通过状态接口查询。状态查询保留具体失败与回调送达状态。回调失败保留输入失败原因，投递失败另记callback_failed。明确无回调或仅接收模式仍不下载空值任务，按配置跳过回调，状态保持failed。历史回执只读将planType映射为bizType，两者都没有时补null，不重新判定或重发。
 
 同一二元组用于不同对象路径时仍返回 `409 Conflict`。业务记录有意移动到另一 OSS 路径时，应使用新的 `analyzeId`。
 
@@ -103,14 +112,14 @@ OSS 使用“单下载 worker → 单核销 worker”两级流水线：下载可
 工具复用既有回调环境配置及 `post_analysis_callback`，使用独立直连、相同三字段与幂等键，不重跑 AI、不下载、不修改业务历史。
 独立回执保存在 `worktrees/.intake/callback-deliveries/`，同一目标及结果已经 delivered 时跳过；失败只重试投递，互斥保护避免并发双发。回执不含地址、凭据或任意响应正文。
 API `1.32` 的 `oss_intake.callback_transport=direct` 表示普通 OSS 自动回调和显式补发都绕过环境与系统代理。
-`unclassified_archive_policy=fail_after_ai_and_callback_reason` 表示按内容识别后，未匹配、歧义或缺必交资料以AI事实形成具体原因并失败。分类报告先持久化，再按三字段回调；模型或读取故障不能伪装成客户缺件。混合批次保留其他已匹配包的核验结果。
+`unclassified_archive_policy=complete_with_specific_material_issues` 表示资料未严格匹配时正常完成检查并输出具体资料问题；不进入对应业务审核。报告先持久化，再按三字段回调；模型或读取故障不能伪装成客户缺件。混合批次保留其他包的检查结果。
 
 ## 响应与状态
 
 新接收任务返回 `202 Accepted`，包含安全任务投影及相对 `status_url`。`attempt=1` 表示第一次投递。
 终态重放返回一个新任务，其中 `attempt>1`、`supersedes_job_id=<previous-job-id>`、`duplicate=false`、`rerun=true`。
 活动重复提交返回当前任务，其中 `duplicate=true`、`rerun=false`。内部稳定身份哈希绝不暴露。
-`/api/config` 报告 `terminal_replay_policy=new_attempt`。
+`/api/config` 报告terminal_replay_policy=new_attempt；request_fields列五字段，required_request_fields仍为verifyCode/analyzeId/downloadUrl/bizType，optional_request_fields为largeVenueFee，large_venue_fee_policy声明布尔值及适用范围。biz_type_policy=exact_value_skill_mapping_then_material_gate，biz_type_values列出八个原值，biz_type_skill_map列出一一对应Skill；other_biz_type_policy=complete_without_ai。
 
 无需 Authorization 头即可轮询 `GET /api/intake/jobs/<24-hex-job-id>`；`GET /api/intake/jobs?completed=0` 返回除 `completed` 外的任务供一级工作台刷新，`GET /api/intake/jobs?completed=1` 只返回完成任务，旧的 `GET /api/intake/jobs?active=1` 仍返回当前活动任务。状态顺序为：
 
@@ -125,7 +134,7 @@ API `1.32` 的 `oss_intake.callback_transport=direct` 表示普通 OSS 自动回
 仅接收任务同样记录 `callback.status=not_required`，下载验证后立即完成，保持 `result=null`，
 并通过 `delivery.input_file` 暴露持久文件。
 失败任务包含有界且已去除 URL 的消息；如果正式 runner 在回调失败前已经完成，还包含保留的已完成结果。
-任务状态属于运行元数据，绝不能表示为业务证据。下载验证成功后，`delivery` 还包含 `input-oss` 下的本地持久
+任务状态属于运行元数据，绝不能表示为业务证据。下载验证成功后，`delivery` 还包含 `input` 下的本地持久
 `input_directory` 和 `input_file`。
 
 若服务在完成前重启，活动回执标记为失败，因为签名 URL 被有意设计为不持久化。
@@ -133,4 +142,4 @@ API `1.32` 的 `oss_intake.callback_transport=direct` 表示普通 OSS 自动回
 上游使用足够长有效期的新 URL，再次发送相同 `verifyCode`、`analyzeId` 和对象路径。
 这会创建下一个 attempt 及任务目录。此前验证通过的 ZIP 可以保留在原任务目录供诊断。
 
-资料项缺少、多余、适用条件不明或无法唯一严格匹配时，manifest、snapshot、正式收据及OSS job因 `classification_failed` 为 `failed`，CLI退出2。只有资料项不多不少且唯一匹配才进入对应Skill；审核严格覆盖本类及PDF明列的适用通用要点。资料存在后的内容不合规写入业务审核结果，流程为completed不代表业务通过。回调送达只表示传输完成；送达失败单独保留callback_failed。混合批次中有类型识别失败时整批failed，同时保留可识别包的完整审核结果。历史档案只读，不重写或重发。
+bizType已确定类型后，资料缺少、多余或适用条件不明时，正常输出本类型具体资料问题，manifest、snapshot、正式收据和OSS job记completed、failure为空、CLI退出0。只有指定类型资料门禁满足才进入对应业务审核，审核仅执行本类审核栏。业务问题和原文“0核销”只报具体错误，最终交人工复核。bizType输入失败或意外中断处理记运行失败；回调传输故障单独保留callback_failed和已完成结果。历史档案只读，不重写或重发。

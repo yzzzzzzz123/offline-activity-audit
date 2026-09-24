@@ -2245,20 +2245,20 @@ def _add_pos_target_incentive_sheet(wb: Workbook, result: dict[str, Any]) -> Any
 
 
 def _add_entry_fee_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
-    ws = wb.create_sheet("进场费核销")
+    ws = wb.create_sheet("条码费核销")
     summary = result["summary"]
     issues = list(result["entry_fee_audit"].get("issues") or [])
     note = (
-        "本页只列影响进场费/条码费核销的问题；合同条码费未明确按店计费时不得再乘门店数。"
+        "本页只列影响条码费核销的问题；合同条码费未明确按店计费时不得再乘门店数。"
         f"当前结论：{summary.get('decision_label')}；"
         f"申报金额{_number(summary.get('claimed_amount'))}元；"
         f"建议核销{_number(summary.get('suggested_approved_amount'))}元；"
         f"暂缓{_number(summary.get('temporarily_held_amount'))}元。"
     )
-    _style_title(ws, "进场费核销｜只显示错误", note)
+    _style_title(ws, "条码费核销｜只显示错误", note)
     _write_header(
         ws,
-        ["问题来源", "已识别内容", "进场费/条码费规则", "审核结论", "核销影响", "需要补交"],
+        ["问题来源", "已识别内容", "条码费规则", "审核结论", "核销影响", "需要补交"],
         height=36,
     )
     confidence_labels = {"high": "高", "medium": "中", "low": "低"}
@@ -2279,7 +2279,7 @@ def _add_entry_fee_sheet(wb: Workbook, result: dict[str, Any]) -> Any:
             row += 1
     else:
         values = [
-            "未发现影响进场费核销的问题",
+            "未发现影响条码费核销的问题",
             "双方签章合同、全部合同门店和商品上架照片、系统扣款凭证已形成闭环",
             "按实际完成全部门店上架的合同商品条码费合计，并受合同总额和扣款凭证金额约束",
             "审核结论：可核销\n置信度：高",
@@ -2419,7 +2419,7 @@ def verify_workbook(path: str | Path, scenarios: list[str]) -> dict[str, Any]:
             ("giveaway_promotion", "额外搭赠核销"),
             ("price_difference_support", "价格补差核销"),
             ("pos_target_incentive", "POS达标激励核销"),
-            ("entry_fee", "进场费核销"),
+            ("entry_fee", "条码费核销"),
             ("self_procured_gift_material", "自采赠品物料核销"),
         )
         if scenario in scenarios

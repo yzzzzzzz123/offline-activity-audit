@@ -22,10 +22,11 @@ SHEET_SCENARIOS = {
     "额外搭赠核销": "giveaway_promotion",
     "价格补差核销": "price_difference_support",
     "POS达标激励核销": "pos_target_incentive",
-    "进场费核销": "entry_fee",
+    "条码费核销": "entry_fee",
     "自采赠品物料核销": "self_procured_gift_material",
 }
 SCENARIO_SHEETS = {value: key for key, value in SHEET_SCENARIOS.items()}
+SHEET_SCENARIOS["进场费核销"] = "entry_fee"  # Preserve reads of existing archives.
 SUMMARY_PREFIXES = (
     "合计",
     "总计",

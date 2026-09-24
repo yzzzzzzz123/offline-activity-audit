@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .paths import PROJECT_ROOT
+from .paths import INPUT_ROOT, PROJECT_ROOT
 
 import argparse
 import json
@@ -18,7 +18,7 @@ from .common import AuditError, clean_identifier
 from .scenario_registry import EVIDENCE_SCHEMA_BY_SCENARIO as EVIDENCE_SCHEMA, SCENARIO_ORDER
 
 
-DEFAULT_INPUT_DIR = PROJECT_ROOT / "input"
+DEFAULT_INPUT_DIR = INPUT_ROOT
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "worktrees"
 RESULT_SCHEMA = PROJECT_ROOT / "skills/orchestrate-offline-audit/references/contracts" / "audit-result.schema.json"
 EvidenceProvider = Callable[[dict[str, Any], Path], dict[str, Any]]
@@ -183,6 +183,8 @@ def run_audit(
     model: str | None = None,
     reasoning_effort: str | None = None,
     scenario: str | None = None,
+    biz_type: str | None = None,
+    large_venue_fee: bool | None = None,
     observer: RunObserver | None = None,
 ) -> dict[str, Any]:
     normalized_run_id = normalize_run_id(run_id)
@@ -195,7 +197,8 @@ def run_audit(
     workflow = PdfWorkflow(
         run_id=normalized_run_id, producer_model=normalized_producer_model,
         input_dir=input_dir, temporary_root=temporary_root,
-        provider=provider, scenario=scenario, observer=observer,
+        provider=provider, scenario=scenario, observer=observer, biz_type=biz_type,
+        large_venue_fee=large_venue_fee,
     )
     try:
         return workflow.run()

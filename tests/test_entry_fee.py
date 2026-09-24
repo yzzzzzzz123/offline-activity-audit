@@ -222,7 +222,7 @@ class EntryFeeTests(unittest.TestCase):
             codes = {item["code"] for item in result["entry_fee_audit"]["issues"]}
             self.assertIn("system_deduction_proof_missing", codes)
             report = create_combined_report([result], root / "audit.xlsx")
-            self.assertEqual(verify_workbook(report, ["entry_fee"])["sheet_names"], ["进场费核销"])
+            self.assertEqual(verify_workbook(report, ["entry_fee"])["sheet_names"], ["条码费核销"])
             html = create_html_report_from_workbook(report, root / "audit.html")
             check = verify_html_report(html, ["entry_fee"], workbook_path=report)
             self.assertEqual(check["template_version"], "3.9.0")

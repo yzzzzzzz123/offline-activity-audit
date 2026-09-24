@@ -28,6 +28,7 @@ from .archive_input import (
     _extract_rar_archive,
     _open_zip,
     _zip_member_parts,
+    discover_zip_paths,
     scenario_from_archive_name,
     scenarios_from_archive_name,
 )
@@ -238,24 +239,11 @@ def prepare_material_diagnosis(
     must only expose readable ``visual`` entries to the model; spreadsheet
     bodies and original extraction directories stay outside its sandbox.
     """
-    requested = Path(input_dir)
-    if requested.is_symlink():
-        raise ArchiveInputError("input 目录不能是符号链接")
-    root = requested.resolve()
-    if not root.is_dir():
-        raise ArchiveInputError(f"input 目录不存在：{root}")
     if selected_scenarios is not None:
         unknown = set(selected_scenarios) - set(SCENARIO_MARKERS)
         if unknown:
             raise ArchiveInputError("不支持的核销场景：" + "、".join(sorted(unknown)))
-    sources = sorted(
-        (path for path in root.iterdir() if path.is_file() and path.suffix.lower() == ".zip"),
-        key=lambda path: path.name.casefold(),
-    )
-    if not 1 <= len(sources) <= 10:
-        raise ArchiveInputError(f"input/ 必须直接包含 1～10 个 ZIP；当前发现 {len(sources)} 个。")
-    if any(path.is_symlink() for path in sources):
-        raise ArchiveInputError("ZIP 不能是符号链接")
+    sources = discover_zip_paths(input_dir)
     requested_temp = Path(temporary_root)
     if requested_temp.is_symlink():
         raise ArchiveInputError("材料诊断临时目录不能是符号链接")

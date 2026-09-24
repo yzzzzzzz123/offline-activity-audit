@@ -43,6 +43,7 @@ class BenchmarkDriverTests(unittest.TestCase):
         self.assertEqual(command[command.index("--model") + 1], "gpt-6-astra")
         self.assertEqual(command[command.index("--producer-model") + 1], "codex")
         self.assertEqual(command[command.index("--scenario") + 1], "promotional_display")
+        self.assertEqual(command[command.index("--biz-type") + 1], "陈列堆头")
         self.assertNotIn("--input-dir", command)
         self.assertNotIn("--worktrees", command)
 
@@ -109,10 +110,17 @@ class BenchmarkDriverTests(unittest.TestCase):
             inputs = root / "input"
             inputs.mkdir()
             (inputs / "a.zip").write_bytes(b"input")
+            task = inputs / ("a" * 24)
+            task.mkdir()
+            (task / "a.zip").write_bytes(b"task input")
             (root / "skills/orchestrate-offline-audit/scripts/audit_core").mkdir(parents=True)
             code = root / "skills/orchestrate-offline-audit/scripts/audit_core/a.py"
             code.write_text("version=1", encoding="utf-8")
             baseline = driver.source_fingerprint(root, inputs)
+            (task / "a.zip").write_bytes(b"changed task input")
+            self.assertEqual(driver.fingerprint_changes(baseline, driver.source_fingerprint(root, inputs)),
+                             ["input/" + task.name + "/a.zip"])
+            (task / "a.zip").write_bytes(b"task input")
             source["read_at_utc"] = "next"
             self.assertEqual(driver.fingerprint_changes(baseline, driver.source_fingerprint(root, inputs)), [])
             source["sha256"] = "e" * 64

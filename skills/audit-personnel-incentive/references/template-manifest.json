@@ -1,0 +1,62 @@
+{
+  "scenario": "personnel_incentive",
+  "approved_on": "2026-09-22",
+  "authorization": "用户明确指定input根目录八个ZIP中的相应样张作为模板参考，并分别写入对应Skill。",
+  "source_zip": "input/SQ202604300025-HX202605260014-郑州雨瑶-人员激励.zip",
+  "source_zip_sha256": "d0f5754effbd4ad45db4d048da9dfd9c69bfebfc957cff78c7c15420c298a15f",
+  "documents": [
+    {
+      "id": "template-reference-personnel_incentive-settlement",
+      "title": "市场费用结算单",
+      "role": "settlement",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/settlement.jpg",
+      "sha256": "898a8061a91af8d681ccdb650b43a07a42b96272407ba249dd64dc53b4bbc4e6",
+      "source_member": "郑州雨瑶5.1-5.20人员激励活动结算单.jpg",
+      "source_sha256": "898a8061a91af8d681ccdb650b43a07a42b96272407ba249dd64dc53b4bbc4e6",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-personnel_incentive-sales-workbook",
+      "title": "销售原始工作簿",
+      "role": "pos_excel",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-workbook.xlsx",
+      "sha256": "5e1ac08e1c79fd721e2f0dcf60e09763452943309163bb2079e424b77837b5a6",
+      "source_member": "雨瑶人员激励参半销售数据2.xlsx",
+      "source_sha256": "5e1ac08e1c79fd721e2f0dcf60e09763452943309163bb2079e424b77837b5a6",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-personnel_incentive-payment-record-1",
+      "title": "转账截图样张一",
+      "role": "payment_record",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/payment-record-1.jpg",
+      "sha256": "8aeda7f356dcf9123086cb55e6e60b4fc2049bfeaf784513dffcffa6f15b2529",
+      "source_member": "雨瑶人员激励红包图片.jpg",
+      "source_sha256": "8aeda7f356dcf9123086cb55e6e60b4fc2049bfeaf784513dffcffa6f15b2529",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-personnel_incentive-payment-record-2",
+      "title": "转账截图样张二",
+      "role": "payment_record",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/payment-record-2.jpg",
+      "sha256": "de4aa8f6d75027e207571fcf365ed5d805a350ff7622b45f29bc7d803db8c8ca",
+      "source_member": "雨瑶人员激励红包图片2.jpg",
+      "source_sha256": "de4aa8f6d75027e207571fcf365ed5d805a350ff7622b45f29bc7d803db8c8ca",
+      "source_pages": [],
+      "preview_images": []
+    }
+  ],
+  "unselected_members": []
+}

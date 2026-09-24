@@ -6,6 +6,8 @@ import re
 from typing import Any
 
 from .archive_input import scenario_from_archive_name
+from .customer_language import POS_PAIR_REASON, concise_reason
+from .scenario_registry import SCENARIO_LABELS
 
 
 _FAILURE = re.compile(r"不匹配|不一致|不完整|不符合|不满足|不通过|不可核验|缺失|缺少|缺页|未提交|未显示|未识别|未覆盖|未确认|未明确|未见|未发现|未提供|未完成|未登记|未能|无法|不能|尚不能|难以|模糊|不清晰|不够清晰|重叠|损坏|待确认|歧义|相差|差额|差异|少\s*[\d.]|多\s*[\d.]|完全相同|重复提交")
@@ -370,8 +372,6 @@ def attach_error_reasons(view_payload: dict[str, Any] | None) -> dict[str, Any] 
     projected = deepcopy(view_payload)
     if not isinstance(projected, dict):
         return projected
-    archive_names = {_text(sheet.get("source_archive")) for sheet in projected.get("sheets") or []
-                     if isinstance(sheet, dict) and _text(sheet.get("source_archive"))}
     for sheet in projected.get("sheets") or []:
         if not isinstance(sheet, dict):
             continue
@@ -381,16 +381,36 @@ def attach_error_reasons(view_payload: dict[str, Any] | None) -> dict[str, Any] 
             if not isinstance(row, dict) or row.get("status") != "issue":
                 continue
             issue = diagnostic[index] if index < len(diagnostic) and isinstance(diagnostic[index], dict) else None
-            if sheet.get("projection_kind") == "pdf_policy" or sheet.get("decision_source") == "material_content":
-                reasons = list(row.get("error_reasons") or [])
+            if (sheet.get("projection_kind") == "pdf_policy" or sheet.get("decision_source") == "material_content"
+                    or (sheet.get("projection_kind") == "classification_rejection"
+                        and (row.get("error_reasons") or row.get("error_reason")))):
+                reasons = list(row.get("error_reasons") or ([row["error_reason"]] if row.get("error_reason") else []))
             else:
                 reasons = project_error_reasons(sheet, row, issue)
-            if len(archive_names) > 1 and sheet.get("source_archive"):
-                archive = _basename(_text(sheet["source_archive"]))
-                reasons = [reason if archive in reason else f"{archive}：{reason}" for reason in reasons]
+            files = list((row.get("card_evidence") or {}).get("source_files") or [])
+            files.extend(_source_files(sheet, row))
+            reasons = [concise_reason(reason, archive=_text(sheet.get("source_archive")),
+                                      label=SCENARIO_LABELS.get(sheet.get("scenario"), ""), files=files)
+                       for reason in reasons]
+            reasons = list(dict.fromkeys(reason for reason in reasons if reason))
             row["error_reasons"] = reasons
             row["error_reason"] = "\n".join(reasons)
             scoped = _attachment_reasons_by_scope(sheet, row)
             if scoped is not None:
                 row["error_reasons_by_scope"] = scoped
+        if sheet.get("projection_kind") == "classification_rejection":
+            rows = sheet.get("rows") or []
+            specific_pos_gap = any(re.search(r"缺少(?:盖章版销售明细|Excel版销售明细|销售明细盖章版|POS明细Excel版|销售明细Excel版)",
+                                             reason)
+                                   for row in rows for reason in row.get("error_reasons") or [])
+            if specific_pos_gap:
+                # The pair reminder is the same missing item, not a second problem.
+                sheet["rows"] = [row for row in rows if row.get("error_reasons") != [POS_PAIR_REASON]]
+                if len(sheet["rows"]) != len(rows):
+                    counts = dict(sheet.get("audit_counts") or {})
+                    issues = [row for row in sheet["rows"] if row.get("status") == "issue"]
+                    counts.update(source_row_count=len(sheet["rows"]), error_count=len(issues),
+                                  detail_error_count=sum(row.get("section") == "detail" for row in issues),
+                                  context_error_count=sum(row.get("section") != "detail" for row in issues))
+                    sheet["audit_counts"] = counts
     return projected

@@ -17,6 +17,23 @@ class AuditError(RuntimeError):
     """Raised when evidence cannot be audited safely."""
 
 
+BIZ_TYPE_FAILURE_MESSAGE = "无法识别核销类型"
+BIZ_TYPE_NOT_REQUIRED_MESSAGE = "该业务类型无需AI核销"
+
+
+def biz_type_skip_result(run_id: str, biz_type: str) -> dict[str, Any]:
+    return {"run_id": run_id, "status": "completed", "failure": None,
+            "bizType": biz_type, "audit_required": False,
+            "reason_code": "biz_type_not_required", "message": BIZ_TYPE_NOT_REQUIRED_MESSAGE}
+
+
+class BizTypeRecognitionError(AuditError):
+    """The submitted business type cannot select one supported audit Skill."""
+
+    def __init__(self) -> None:
+        super().__init__(BIZ_TYPE_FAILURE_MESSAGE)
+
+
 MONEY_QUANT = Decimal("0.01")
 POSTER_MATERIAL_QUANTITY_CALIBRATION_PREFIX = (
     "[deterministic-poster-material-quantity-calibration]"

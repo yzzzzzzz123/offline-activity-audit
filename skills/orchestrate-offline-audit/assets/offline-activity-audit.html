@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="canban-template-version" content="3.2.0">
-  <meta name="offline-audit-system-version" content="2.12.3">
+  <meta name="offline-audit-system-version" content="2.16.2">
   <link rel="icon" href="data:,">
   <script>
     if (window.location.protocol === 'file:') {
@@ -1695,7 +1695,7 @@
       top: 14px;
       right: 24px;
       color: rgba(255, 255, 255, .11);
-      content: "ERROR LIST";
+      content: "核销问题";
       font: 800 20px/1 Consolas, monospace;
       letter-spacing: .14em;
     }
@@ -2122,7 +2122,7 @@
           configurable: true,
         });
       }
-      document.title = '参半渠道活动核销｜核销主工作台｜错误清单';
+      document.title = '参半渠道活动核销｜核销结果';
 
       const escapeHtml = (value) => String(value ?? '')
         .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -2620,8 +2620,9 @@
           const problem = rowProblem(row, row.values?.[1]);
           const action = actionText(row);
           const issue = sheet.projection_kind === 'material_diagnostic' ? sheet.diagnostic_issues?.[index] : null;
-          const reasonCategory = sheet.projection_kind === 'classification_rejection' || issue?.code === 'scenario_unconfirmed'
-            ? '费用类型' : row.check_category || errorReasonCategory([title, ...(row.values || [])].join(' '));
+          const reasonCategory = sheet.projection_kind === 'classification_rejection'
+            ? (sheet.confirmed_scenario ? '核销资料' : '费用类型')
+            : issue?.code === 'scenario_unconfirmed' ? '费用类型' : row.check_category || errorReasonCategory([title, ...(row.values || [])].join(' '));
           return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [reasonCategory], evidence: row.card_evidence });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards };
@@ -2633,7 +2634,7 @@
           return { sheet, ...groupedIssueView(sheet, label), label };
         }
         if (sheet.projection_kind === 'material_diagnostic' || sheet.projection_kind === 'classification_rejection') {
-          const label = sheet.audit_type_label || (sheet.projection_kind === 'classification_rejection' ? '核销方式无法确认' : '核销类型待确认');
+          const label = sheet.audit_type_label || (sheet.projection_kind === 'classification_rejection' ? '核销资料问题' : '核销类型待确认');
           return { sheet, ...groupedIssueView(sheet, label), label };
         }
         if (sheet.scenario === 'personnel_incentive') return { sheet, ...personnelView(sheet), label: '人员激励' };
@@ -2644,7 +2645,7 @@
         if (sheet.scenario === 'giveaway_promotion') return { sheet, ...groupedIssueView(sheet, '额外搭赠'), label: '额外搭赠' };
         if (sheet.scenario === 'price_difference_support') return { sheet, ...groupedIssueView(sheet, '价格补差'), label: '价格补差' };
         if (sheet.scenario === 'pos_target_incentive') return { sheet, ...groupedIssueView(sheet, 'POS达标激励'), label: 'POS达标激励' };
-        if (sheet.scenario === 'entry_fee') return { sheet, ...groupedIssueView(sheet, '进场费'), label: '进场费' };
+        if (sheet.scenario === 'entry_fee') return { sheet, ...groupedIssueView(sheet, '条码费'), label: '条码费' };
         if (sheet.scenario === 'self_procured_gift_material') return { sheet, ...groupedIssueView(sheet, '客户自采赠品物料'), label: '客户自采赠品物料' };
         return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
       });
@@ -2717,12 +2718,12 @@
               item.confidence_score,
               [category, item.title, item.subject, item.basis, ...(item.source_files || [])].join(' '),
             );
-            const accessibleLabel = `正确检查项 ${passSequence}；核销类型：${auditType}；检查分类：${category}；${itemTitle}；核验对象：${itemSubject}`;
+            const accessibleLabel = `正确检查项 ${passSequence}；核销类型：${auditType}；检查分类：${category}；${itemTitle}；核对内容：${itemSubject}`;
             return `<article class="eo-pass-card" data-pass-check="${escapeHtml(item.check_id || `pass-${passSequence}`)}" data-pass-category="${escapeHtml(category)}" data-pass-confidence="${confidenceView.level}" data-pass-confidence-score="${confidenceView.scoreText}" aria-label="${escapeHtml(accessibleLabel)}">
-              <div class="eo-pass-index"><span>PASS</span><strong>${String(passSequence).padStart(4, '0')}</strong></div>
+              <div class="eo-pass-index"><span>通过</span><strong>${String(passSequence).padStart(4, '0')}</strong></div>
               <div class="eo-pass-main"><header class="eo-pass-head"><div><small>${escapeHtml(category)}</small><h3>${escapeHtml(itemTitle)}</h3></div></header>
-                <div class="eo-pass-field"><span>核验对象</span><strong>${escapeHtml(itemSubject)}</strong></div>
-                <div class="eo-pass-field"><span>判断依据</span><div>${textBlock(item.basis || '结构化核销结果已确认该检查项通过。')}</div></div>
+                <div class="eo-pass-field"><span>核对内容</span><strong>${escapeHtml(itemSubject)}</strong></div>
+                <div class="eo-pass-field"><span>判断依据</span><div>${textBlock(item.basis || '现有资料符合这一项要求。')}</div></div>
                 ${sourceFiles(item)}
               </div>
             </article>`;
@@ -2731,18 +2732,18 @@
         }).join('');
         const categorySummary = [...categories.entries()].map(([label, categoryItems]) => `<span data-pass-breakdown-category="${escapeHtml(label)}">${escapeHtml(label)} <b data-pass-breakdown-visible>${categoryItems.length}</b></span>`).join('');
         return `<section class="eo-pass-group" data-pass-scenario="${escapeHtml(group.scenario || `group-${groupIndex}`)}" data-pass-type="${escapeHtml(auditType)}">
-          <header class="eo-pass-group-head"><div class="eo-pass-group-code">${String(groupIndex + 1).padStart(2, '0')}<small>TYPE</small></div><div><small>核销类型 · ${escapeHtml(auditType)}</small><h2>${escapeHtml(group.title || group.audit_type || '正确检查项')}</h2><div class="eo-pass-breakdown">${categorySummary || '<span>暂无通过项</span>'}</div></div><div class="eo-pass-group-count"><span>当前显示</span><strong data-pass-group-visible>${items.length}</strong><em>项</em></div></header>
-          ${categoryHtml || '<div class="eo-pass-empty"><strong>本类型暂无可独立确认的通过项</strong><span>这不代表未执行核验；没有充分证据的检查不会被写成通过。</span></div>'}
+          <header class="eo-pass-group-head"><div class="eo-pass-group-code">${String(groupIndex + 1).padStart(2, '0')}<small>类型</small></div><div><small>核销类型 · ${escapeHtml(auditType)}</small><h2>${escapeHtml(group.title || group.audit_type || '正确检查项')}</h2><div class="eo-pass-breakdown">${categorySummary || '<span>暂无通过项</span>'}</div></div><div class="eo-pass-group-count"><span>当前显示</span><strong data-pass-group-visible>${items.length}</strong><em>项</em></div></header>
+          ${categoryHtml || '<div class="eo-pass-empty"><strong>本类型暂无通过项</strong><span>现有资料还不足以确认这些检查通过。</span></div>'}
         </section>`;
         }).join('');
       };
 
       document.body.className = 'error-only-page';
       document.body.innerHTML = `<header class="eo-topbar"><div class="eo-topbar-inner">
-        <div class="eo-brand"><div class="eo-brand-mark">参半<small>CANBAN</small></div><div class="eo-brand-copy"><strong>离线活动核销</strong><span>核销判断工作台 / AUDIT DESK</span></div></div>
+        <div class="eo-brand"><div class="eo-brand-mark">参半<small>CANBAN</small></div><div class="eo-brand-copy"><strong>线下活动核销</strong><span>核销结果</span></div></div>
       </div></header><main class="eo-shell"><div class="eo-app-grid"><aside class="eo-rail" aria-label="核销结果导航">
-        <div class="eo-rail-head"><div><div class="eo-rail-code">CB / OFFLINE AUDIT</div><h2>核销主工作台</h2></div><p>错误与正确检查日志</p></div>
-        <nav class="eo-rail-nav" role="tablist" aria-label="核销结果视图" aria-orientation="vertical"><button class="eo-tab" id="eo-tab-home" role="tab" type="button" data-eo-view="home" aria-selected="true" aria-current="page" aria-controls="home" tabindex="0"><span class="eo-nav-glyph">OV</span><span class="eo-nav-copy"><strong>错误总览</strong><small>本批次全部错误</small></span><em>${total}</em></button><button class="eo-tab eo-tab-pass" id="eo-tab-passed" role="tab" type="button" data-eo-view="passed" aria-selected="false" aria-controls="passed" tabindex="-1"><span class="eo-nav-glyph">OK</span><span class="eo-nav-copy"><strong>正确检查项</strong><small>按核销类型记录</small></span><em>${passTotal}</em></button></nav>
+        <div class="eo-rail-head"><div><div class="eo-rail-code">参半 · 活动核销</div><h2>核销结果</h2></div><p>查看问题和已通过的检查</p></div>
+        <nav class="eo-rail-nav" role="tablist" aria-label="核销结果视图" aria-orientation="vertical"><button class="eo-tab" id="eo-tab-home" role="tab" type="button" data-eo-view="home" aria-selected="true" aria-current="page" aria-controls="home" tabindex="0"><span class="eo-nav-glyph">查</span><span class="eo-nav-copy"><strong>错误总览</strong><small>本次发现的全部问题</small></span><em>${total}</em></button><button class="eo-tab eo-tab-pass" id="eo-tab-passed" role="tab" type="button" data-eo-view="passed" aria-selected="false" aria-controls="passed" tabindex="-1"><span class="eo-nav-glyph">对</span><span class="eo-nav-copy"><strong>正确检查项</strong><small>按核销类型记录</small></span><em>${passTotal}</em></button></nav>
         <div class="eo-rail-foot"><span>本次核销记录</span><strong>${Math.max(typeCount, passGroups.length)} 种核销类型</strong><em>${total} 组错误 · ${passTotal} 项通过</em></div>
       </aside><div class="eo-workspace"><section class="eo-view" id="home" role="tabpanel" aria-labelledby="eo-tab-home" tabindex="0"><div class="eo-home-cockpit">
         <section class="eo-pass-filter-panel eo-error-filter-panel" aria-label="筛选错误检查项">
@@ -3201,7 +3202,7 @@
       clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 0 100%);
     }
     .as-hero::before { position: absolute; top: 0; bottom: 0; left: 0; width: 6px; background: var(--eo-blue); content: ""; }
-    .as-hero::after { position: absolute; top: 25px; right: 28px; color: #edf2f4; content: "LEDGER / CONTROL"; font: 800 25px/1 var(--eo-mono); letter-spacing: .08em; }
+    .as-hero::after { position: absolute; top: 25px; right: 28px; color: #edf2f4; content: "核销管理"; font: 800 25px/1 var(--eo-mono); letter-spacing: .08em; }
     .as-kicker { display: inline-flex; color: #b2443a; align-items: center; gap: 9px; font: 800 9px/1 var(--eo-mono); letter-spacing: .14em; }
     .as-kicker::before { width: 24px; height: 2px; background: var(--eo-danger); content: ""; }
     .as-hero h1 { position: relative; z-index: 1; margin: 10px 0 7px; font-size: clamp(31px, 4vw, 47px); line-height: 1.08; letter-spacing: -.055em; }
@@ -3409,7 +3410,7 @@
     .as-record-context strong { color: var(--eo-dark); font: 800 10px/1.2 var(--eo-mono); }
     .as-record-page { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 18px 0 52px; }
     .as-record-status-hero { position: relative; padding: 28px 30px; color: #fff; background: var(--eo-dark); border-top: 5px solid var(--run-tone, var(--eo-danger)); overflow: hidden; }
-    .as-record-status-hero::after { position: absolute; top: 21px; right: 24px; color: rgba(255,255,255,.06); content: "RUN ARCHIVE"; font: 800 28px/1 var(--eo-mono); letter-spacing: .08em; }
+    .as-record-status-hero::after { position: absolute; top: 21px; right: 24px; color: rgba(255,255,255,.06); content: "核销记录"; font: 800 28px/1 var(--eo-mono); letter-spacing: .08em; }
     .as-record-status-hero small { color: #78c9ec; font: 800 8px/1 var(--eo-mono); letter-spacing: .14em; }
     .as-record-status-hero h1 { position: relative; z-index: 1; margin: 12px 0 7px; font-size: 35px; }
     .as-record-status-hero p { position: relative; z-index: 1; max-width: 760px; margin: 0; color: #a8bdc6; font-size: 11px; }
@@ -3560,7 +3561,7 @@
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
-      const statusLabels = { completed: '核销完成', failed: '核销失败', running: '运行中', created: '已创建' };
+      const statusLabels = { completed: '核销完成', failed: '核销未完成', running: '正在核销', created: '等待开始' };
       const scenarioLabels = {
         personnel_incentive: '人员激励',
         promotional_display: '陈列堆头',
@@ -3570,7 +3571,7 @@
         giveaway_promotion: '搭赠',
         price_difference_support: '补差',
         pos_target_incentive: 'POS达标激励',
-        entry_fee: '进场费',
+        entry_fee: '条码费',
         self_procured_gift_material: '外采赠品',
       };
       if (!Array.isArray(context.main_flow_tasks) || context.main_flow_tasks.length !== 6) {
@@ -3613,6 +3614,7 @@
         deleteKind: '',
         deleteBusy: false,
         deleteTrigger: null,
+        clientDiagnostics: [],
       };
       const PRIMARY_RUNNING_PROBE_MS = 2500;
       const PRIMARY_IDLE_PROBE_MS = 15000;
@@ -3705,7 +3707,9 @@
         if (!response.ok) {
           let detail = '';
           try { detail = (await response.json()).error || ''; } catch (error) { detail = await response.text(); }
-          throw new Error(detail || `请求失败：${response.status}`);
+          const error = new Error(detail || `请求失败：${response.status}`);
+          error.httpStatus = response.status;
+          throw error;
         }
         return response.json();
       };
@@ -3715,7 +3719,15 @@
         if (!response.ok) throw new Error(`请求失败：${response.status}`);
         return response.text();
       };
-      const runStatus = (run) => statusLabels[run?.status] || run?.status || '状态未知';
+      const customerOperationError = (error, operation) => {
+        state.clientDiagnostics.push({ operation, message: String(error?.message || error), time: new Date().toISOString() });
+        state.clientDiagnostics = state.clientDiagnostics.slice(-20);
+        if (error?.httpStatus === 404) return '这条记录已不存在，请返回系统总览查看。';
+        if (error?.httpStatus === 409) return `${operation}未完成，记录正在处理或暂时不能修改，请稍后重试。`;
+        if (error?.httpStatus === 403) return `${operation}未完成，请刷新页面后重试。`;
+        return `${operation}未完成，请稍后重试；仍有问题时请联系管理员。`;
+      };
+      const runStatus = (run) => statusLabels[run?.status] || '状态待确认';
       const runTone = (run) => run?.status === 'failed' ? '#d84b3e' : run?.status === 'completed' ? '#18845e' : '#d79a20';
       const runDate = (run) => {
         const date = new Date(run?.analysis_started_at || run?.created_at || '');
@@ -3726,12 +3738,12 @@
         const value = (type) => parts.find((part) => part.type === type)?.value;
         return `${value('year')}-${value('month')}-${value('day')}`;
       };
-      const scenarioName = (value) => scenarioLabels[value] || value || '未知场景';
+      const scenarioName = (value) => scenarioLabels[value] || '核销方式待确认';
       const intakeQueuedStatuses = new Set(['accepted', 'downloading', 'downloaded']);
       const intakeRunningStatuses = new Set(['running', 'callback']);
       const intakeStatusMeta = (job) => {
-        if (job?.status === 'failed') return { label: '失败', className: 'failed' };
-        if (intakeRunningStatuses.has(job?.status)) return { label: '运行中', className: 'running' };
+        if (job?.status === 'failed') return { label: '未完成', className: 'failed' };
+        if (intakeRunningStatuses.has(job?.status)) return { label: job.status === 'callback' ? '正在发送结果' : '正在核销', className: 'running' };
         return { label: '排队中', className: 'queued' };
       };
       const intakeCreatedAt = (job) => {
@@ -3741,29 +3753,29 @@
           : `接收于 ${date.toLocaleString('zh-CN', { hour12: false })}`;
       };
       const intakeDetail = (job, queuePosition) => {
-        if (job?.status === 'accepted') return `已接收，等待下载${queuePosition ? ` · 队列第 ${queuePosition} 位` : ''}`;
-        if (job?.status === 'downloading') return '正在下载并校验 OSS ZIP';
-        if (job?.status === 'downloaded') return `ZIP 已安全落盘，等待串行核销${queuePosition ? ` · 队列第 ${queuePosition} 位` : ''}`;
-        if (job?.status === 'callback') return job?.result?.status === 'failed' ? '核销失败，正在回传失败原因' : '核销完成，正在回传业务结果';
+        if (job?.status === 'accepted') return `已接到上传请求，等待接收资料${queuePosition ? ` · 排在第 ${queuePosition} 位` : ''}`;
+        if (job?.status === 'downloading') return '正在接收并检查上传的资料';
+        if (job?.status === 'downloaded') return `资料已收到，等待核销${queuePosition ? ` · 排在第 ${queuePosition} 位` : ''}`;
+        if (job?.status === 'callback') return job?.result?.status === 'failed' ? '核销未完成，正在向业务系统发送原因' : '核销已完成，正在向业务系统发送结果';
         if (job?.status === 'failed') {
-          const message = String(job?.failure?.message || '').trim();
-          return message ? `失败原因：${message}` : '投递或核销失败，可删除记录后重新投递';
+          if (job?.failure?.code === 'classification_failed' || job?.result?.failure?.code === 'classification_failed') return '核销方式无法确认';
+          return '资料接收或核销没有完成，具体原因请联系管理员查看。';
         }
-        return '正在执行正式 AI 核销';
+        return '正在检查资料，请等待结果';
       };
       const runForIntakeJob = (job) => state.runs.find((run) => run.run_id && run.run_id === job?.run_id);
       const intakeJobForRun = (run) => state.intakeJobs.find((job) => job.run_id && job.run_id === run?.run_id);
       const runSource = (run) => run?.input_source || (intakeJobForRun(run)
         || /^\d{8}-oss-[a-f0-9]{12}$/.test(String(run?.run_id || '')) ? 'oss' : 'input');
-      const sourceTag = (source) => `<span class="as-source ${source === 'oss' ? 'oss' : 'input'}" data-input-source="${source === 'oss' ? 'oss' : 'input'}">${source === 'oss' ? 'OSS 上传' : 'input 导入'}</span>`;
+      const sourceTag = (source) => `<span class="as-source ${source === 'oss' ? 'oss' : 'input'}" data-input-source="${source === 'oss' ? 'oss' : 'input'}">${source === 'oss' ? '系统上传' : '本地导入'}</span>`;
       const terminalRun = (run) => ['completed', 'failed'].includes(run?.status);
-      const runTitle = (run) => run?.display_name || run?.workspace_id || run?.run_id || '核销资料';
+      const runTitle = (run) => run?.display_name || (Array.isArray(run?.source_archives) && run.source_archives.length ? String(run.source_archives[0]).replace(/\\/g, '/').split('/').pop().replace(/\.zip$/i, '') : '') || '未命名核销资料';
       const modelLabel = (run) => {
         const model = String(run?.audit_model || run?.producer_model || 'unknown').toLowerCase().replace(/[-_\s]+/g, '');
         const effort = run?.reasoning_effort ? `_${String(run.reasoning_effort).toLowerCase()}` : '';
         return model + effort;
       };
-      const modelTag = (run) => `<span class="as-tag as-model-tag">${escapeHtml(modelLabel(run))}</span>`;
+      const modelTag = (run) => `<span class="as-tag as-model-tag">审核工具：${escapeHtml(modelLabel(run))}</span>`;
       const routeToRecord = (workspaceId) => {
         if (isStaticArchive) {
           if (workspaceId !== context.selected_run) {
@@ -3822,30 +3834,30 @@
         node._hideTimer = setTimeout(() => node.classList.remove('show'), 2600);
       };
 
-      const brandMarkup = (subtitle = '核销管理中心 / LEDGER SYSTEM') => `
+      const brandMarkup = (subtitle = '核销管理中心') => `
         <div class="as-brand">
           <div class="as-brand-mark">参半<small>CANBAN</small></div>
-          <div class="as-brand-copy"><strong>离线活动核销</strong><span>${escapeHtml(subtitle)}</span></div>
+          <div class="as-brand-copy"><strong>线下活动核销</strong><span>${escapeHtml(subtitle)}</span></div>
         </div>`;
       const primaryHeader = (subtitle) => `<header class="as-topbar"><div class="as-topbar-inner">
-        ${brandMarkup(subtitle)}<div class="as-connection"><span>${context.delivery_mode === 'static_archive' ? '离线静态档案' : '局域网工作台已连接'}</span></div>
+        ${brandMarkup(subtitle)}<div class="as-connection"><span>${context.delivery_mode === 'static_archive' ? '已保存的核销记录' : '核销管理页面'}</span></div>
       </div></header>`;
       const statusBadge = (run) => `<span class="as-status ${escapeHtml(run?.status || '')}">${escapeHtml(runStatus(run))}</span>`;
       const scenarioTags = (run) => {
         const values = Array.isArray(run?.scenarios) ? run.scenarios : [];
         return values.length
           ? values.map((item) => `<span class="as-tag">${escapeHtml(scenarioName(item))}</span>`).join('')
-          : '<span class="as-tag">场景待识别</span>';
+          : '<span class="as-tag">核销方式待确认</span>';
       };
       const runCard = (run) => {
         const completed = run.status === 'completed';
         const reviewed = completed && Boolean(run.manual_reviewed);
-        const countLabel = completed ? reviewed ? '人工核验' : '待人工核验' : '已识别场景';
+        const countLabel = completed ? reviewed ? '人工核验' : '待人工核验' : '已确定的核销类型';
         const count = completed ? reviewed ? '✓' : Number(run.error_count || 0) : Number(run.scenario_count || 0);
-        const countUnit = completed ? reviewed ? '' : '项' : '场景';
+        const countUnit = completed ? reviewed ? '' : '项' : '种';
         const reviewLabel = reviewed
-          ? `取消 ${run.workspace_id} 的人工核验标记`
-          : `将 ${run.workspace_id} 标记为已人工核验`;
+          ? `取消 ${runTitle(run)} 的人工核验标记`
+          : `将 ${runTitle(run)} 标记为已人工核验`;
         const reviewControl = run.status === 'completed'
           ? `<label class="as-review-toggle"><input type="checkbox" data-as-review="${escapeHtml(run.workspace_id)}" aria-label="${escapeHtml(reviewLabel)}" ${reviewed ? 'checked' : ''} ${isStaticArchive ? 'disabled title="离线档案只读"' : ''}><span>${reviewed ? '已人工核验' : '人工核验'}${isStaticArchive ? '（只读）' : ''}</span></label>`
           : '';
@@ -3856,18 +3868,18 @@
           : `data-as-delete="${escapeHtml(run.workspace_id)}"`;
         const deleteTitle = linkedIntakeJob
           ? linkedIntakeJob.status === 'failed'
-            ? '永久删除失败投递记录及其专属档案'
-            : '终止核销并删除本条投递任务及其专属档案'
+            ? '永久删除这条未完成的上传记录及其资料'
+            : '停止核销并删除这条上传记录及其资料'
           : deletable
-            ? '永久删除本条运行记录及其全部档案'
-            : '非 OSS 运行中的记录暂不能安全终止';
+            ? '永久删除这条核销记录及其全部资料'
+            : '本地导入的资料正在核销，暂不能删除';
         const deleteControl = isStaticArchive ? ''
-          : `<button class="as-button danger" type="button" ${deleteAttribute} aria-label="删除记录 ${escapeHtml(run.workspace_id)}" title="${deleteTitle}" ${deletable ? '' : 'disabled'}>删除记录</button>`;
+          : `<button class="as-button danger" type="button" ${deleteAttribute} aria-label="删除记录 ${escapeHtml(runTitle(run))}" title="${deleteTitle}" ${deletable ? '' : 'disabled'}>删除记录</button>`;
         const action = `<div class="as-run-action">${reviewControl}
             <button class="as-button" type="button" data-as-open="${escapeHtml(run.workspace_id)}">展开核销记录 →</button>${deleteControl}</div>`;
         return `<article class="as-run-card ledger-record" style="--run-tone:${runTone(run)}" data-run-card="${escapeHtml(run.workspace_id)}" role="listitem">
           <div class="as-run-main"><small>${escapeHtml(runDate(run))}</small>
-            <h3 title="${escapeHtml(run.workspace_id)}">${escapeHtml(runTitle(run))}</h3><p>${statusBadge(run)} · ${Number(run.scenario_count || 0)} 个核销场景</p></div>
+            <h3 title="${escapeHtml(runTitle(run))}">${escapeHtml(runTitle(run))}</h3><p>${statusBadge(run)} · ${Number(run.scenario_count || 0)} 种核销类型</p></div>
           <div class="as-run-tags">${sourceTag(runSource(run))}${scenarioTags(run)}${modelTag(run)}</div>
           <div class="as-run-count"><span>${countLabel}</span><strong>${count}</strong><em>${countUnit}</em></div>
           ${action}
@@ -3876,27 +3888,26 @@
       const intakeCard = (job, queuePosition) => {
         const run = runForIntakeJob(job);
         const status = intakeStatusMeta(job);
-        const title = job?.object?.basename || job?.verifyCode || job?.job_id || '未命名 OSS 任务';
-        const fileId = job?.fileId == null ? '' : `FILE ${job.fileId}`;
-        const metadata = [job?.verifyCode, fileId, `ATTEMPT ${Number(job?.attempt || 1)}`].filter(Boolean).join(' / ');
+        const title = job?.object?.basename || '未命名上传资料';
+        const metadata = `第 ${Number(job?.attempt || 1)} 次提交`;
         const openControl = run
-          ? `<button class="as-button secondary" type="button" data-as-open="${escapeHtml(run.workspace_id)}">查看运行详情</button>`
+          ? `<button class="as-button secondary" type="button" data-as-open="${escapeHtml(run.workspace_id)}">查看核销记录</button>`
           : '';
         return `<article class="as-intake-card ${status.className}" data-intake-job="${escapeHtml(job.job_id)}" role="listitem">
           <div class="as-intake-main"><small>${escapeHtml(run ? runDate(run) : metadata)}</small><h3 title="${escapeHtml(title)}">${escapeHtml(run ? runTitle(run) : title)}</h3><p>${sourceTag('oss')}${run ? scenarioTags(run) + modelTag(run) : escapeHtml(intakeCreatedAt(job))}</p></div>
           <div class="as-intake-progress"><strong><span class="as-intake-pulse" aria-hidden="true"></span>${escapeHtml(status.label)}</strong><p>${escapeHtml(intakeDetail(job, queuePosition))}</p></div>
-          <div class="as-intake-actions">${openControl}<button class="as-button danger" type="button" data-as-delete-job="${escapeHtml(job.job_id)}" aria-label="删除投递记录 ${escapeHtml(title)}">删除记录</button></div>
+          <div class="as-intake-actions">${openControl}<button class="as-button danger" type="button" data-as-delete-job="${escapeHtml(job.job_id)}" aria-label="删除上传记录 ${escapeHtml(title)}">删除记录</button></div>
         </article>`;
       };
       const runningCard = (run) => `<article class="as-intake-card running" data-active-run="${escapeHtml(run.workspace_id)}" role="listitem">
-        <div class="as-intake-main"><small>${escapeHtml(runDate(run))}</small><h3 title="${escapeHtml(run.workspace_id)}">${escapeHtml(runTitle(run))}</h3><p>${sourceTag(runSource(run))}${scenarioTags(run)}${modelTag(run)}</p></div>
-        <div class="as-intake-progress"><strong><span class="as-intake-pulse" aria-hidden="true"></span>${escapeHtml(runStatus(run))}</strong><p>正在执行正式 AI 核销</p></div>
-        <div class="as-intake-actions"><button class="as-button secondary" type="button" data-as-open="${escapeHtml(run.workspace_id)}">查看运行详情</button></div>
+        <div class="as-intake-main"><small>${escapeHtml(runDate(run))}</small><h3 title="${escapeHtml(runTitle(run))}">${escapeHtml(runTitle(run))}</h3><p>${sourceTag(runSource(run))}${scenarioTags(run)}${modelTag(run)}</p></div>
+        <div class="as-intake-progress"><strong><span class="as-intake-pulse" aria-hidden="true"></span>${escapeHtml(runStatus(run))}</strong><p>正在检查资料，请等待结果</p></div>
+        <div class="as-intake-actions"><button class="as-button secondary" type="button" data-as-open="${escapeHtml(run.workspace_id)}">查看核销记录</button></div>
       </article>`;
       const archiveCard = (run) => `<article class="as-archive-card" style="--run-tone:${runTone(run)}" data-run-status="${escapeHtml(run.status)}" role="listitem">
         <div>${statusBadge(run)} <small>${escapeHtml(run.storage_type || 'worktree')}</small>
           <h3 title="${escapeHtml(run.workspace_id)}">${escapeHtml(runTitle(run))}</h3>
-          <p>${escapeHtml(runDate(run))} · ${Number(run.scenario_count || 0)} 个场景${run.status === 'completed' ? ` · ${run.manual_reviewed ? '已人工核验' : `${Number(run.error_count || 0)} 项待人工核验`}` : ''}</p><div class="as-run-tags">${sourceTag(runSource(run))}${scenarioTags(run)}${modelTag(run)}</div></div>
+          <p>${escapeHtml(runDate(run))} · ${Number(run.scenario_count || 0)} 种核销类型${run.status === 'completed' ? ` · ${run.manual_reviewed ? '已人工核验' : `${Number(run.error_count || 0)} 项待人工核验`}` : ''}</p><div class="as-run-tags">${sourceTag(runSource(run))}${scenarioTags(run)}${modelTag(run)}</div></div>
         <div class="as-archive-actions"><button class="as-button secondary" data-as-technical="${escapeHtml(run.workspace_id)}" type="button">日志与断点</button></div>
       </article>`;
       const emptyMarkup = (title, note) => `<div class="as-empty"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(note)}</span></div>`;
@@ -3969,7 +3980,7 @@
         return `<div class="as-toolbar" role="group" aria-label="核销记录筛选">
           <label class="as-filter" for="as-${view}-date-from">开始日期<input class="as-input" id="as-${view}-date-from" data-as-filter="date_from" type="date" value="${escapeHtml(state.filters.date_from)}" aria-describedby="as-${view}-filter-note"></label>
           <label class="as-filter" for="as-${view}-date-to">结束日期<input class="as-input" id="as-${view}-date-to" data-as-filter="date_to" type="date" value="${escapeHtml(state.filters.date_to)}" aria-describedby="as-${view}-filter-note"></label>
-          <label class="as-filter" for="as-${view}-source">资料来源<select class="as-select" id="as-${view}-source" data-as-filter="source">${selectOptions([['', '全部来源'], ['input', 'input'], ['input-oss', 'input-oss']], state.filters.source)}</select></label>
+          <label class="as-filter" for="as-${view}-source">资料来源<select class="as-select" id="as-${view}-source" data-as-filter="source">${selectOptions([['', '全部来源'], ['input', '本地导入'], ['input-oss', '系统上传']], state.filters.source)}</select></label>
           <label class="as-filter" for="as-${view}-scenario">核销方式<select class="as-select" id="as-${view}-scenario" data-as-filter="scenario">${selectOptions([['', '全部核销方式'], ...Object.entries(scenarioLabels)], state.filters.scenario)}</select></label>
           <div class="as-filter-footer"><span class="as-filter-note" id="as-${view}-filter-note" role="status" aria-live="polite"></span><button class="as-button secondary" data-as-clear-filters type="button">清除筛选</button></div>
         </div>`;
@@ -3983,7 +3994,7 @@
         });
         document.querySelectorAll('.as-filter-note').forEach((note) => {
           note.dataset.invalid = String(invalidRange);
-          note.textContent = invalidRange ? '结束日期不能早于开始日期，请调整日期范围。' : '按分析开始日期筛选（北京时间），包含起止当天；无分析时间时使用创建日期。';
+          note.textContent = invalidRange ? '结束日期不能早于开始日期，请调整日期范围。' : '按开始核销日期（北京时间）筛选，包含起止当天；没有开始时间时按记录创建日期筛选。';
         });
         document.querySelectorAll('[data-as-clear-filters]').forEach((button) => { button.disabled = !Object.values(state.filters).some(Boolean); });
       };
@@ -3993,22 +4004,22 @@
         document.title = '参半渠道活动核销｜核销管理中心';
         document.body.innerHTML = `${primaryHeader()}<main class="as-shell"><div class="as-app-grid">
           <aside class="as-rail" aria-label="核销管理中心导航">
-            <div class="as-rail-head"><div><div class="as-rail-code">CB / AUDIT LEDGER</div><h2>核销管理中心</h2></div><p>一级系统工作台</p></div>
+            <div class="as-rail-head"><div><div class="as-rail-code">参半 · 活动核销</div><h2>核销管理中心</h2></div><p>查看核销进度和结果</p></div>
             <nav class="as-nav" role="tablist" aria-label="核销管理中心视图" aria-orientation="vertical">
-              <button class="as-nav-button" id="as-tab-overview" data-as-view="overview" role="tab" aria-controls="as-view-overview" aria-selected="true" aria-current="page" tabindex="0" type="button"><span class="as-nav-code">OV</span><span class="as-nav-copy"><strong>系统总览</strong><small>运行概况与核销台账</small></span><em id="as-nav-overview">0</em></button>
-              <button class="as-nav-button" id="as-tab-archive" data-as-view="archive" role="tab" aria-controls="as-view-archive" aria-selected="false" tabindex="-1" type="button"><span class="as-nav-code">AR</span><span class="as-nav-copy"><strong>技术档案</strong><small>分析、日志与DOM断点</small></span><em id="as-nav-archive">0</em></button>
+              <button class="as-nav-button" id="as-tab-overview" data-as-view="overview" role="tab" aria-controls="as-view-overview" aria-selected="true" aria-current="page" tabindex="0" type="button"><span class="as-nav-code">览</span><span class="as-nav-copy"><strong>系统总览</strong><small>核销进度与全部记录</small></span><em id="as-nav-overview">0</em></button>
+              <button class="as-nav-button" id="as-tab-archive" data-as-view="archive" role="tab" aria-controls="as-view-archive" aria-selected="false" tabindex="-1" type="button"><span class="as-nav-code">档</span><span class="as-nav-copy"><strong>技术档案</strong><small>供管理员查看问题详情</small></span><em id="as-nav-archive">0</em></button>
             </nav>
-            <div class="as-rail-foot"><span>核销运行记录</span><strong id="as-rail-total">读取中</strong><em id="as-rail-note">AI 仅写入 worktrees</em></div>
+            <div class="as-rail-foot"><span>核销记录</span><strong id="as-rail-total">读取中</strong><em id="as-rail-note">每次核销单独保存</em></div>
           </aside>
           <div class="as-workspace">
             <section class="as-view" id="as-view-overview" role="tabpanel" aria-labelledby="as-tab-overview" tabindex="0"><div class="as-stack">
-              <header class="as-hero"><div><span class="as-kicker">AUDIT CONTROL CENTER</span><h1>核销管理中心</h1></div>
-                <div class="as-hero-command"><span>核销运行记录</span><strong id="as-hero-count">0</strong><em>每条记录均可展开</em></div></header>
+              <header class="as-hero"><div><span class="as-kicker">核销进度与结果</span><h1>核销管理中心</h1></div>
+                <div class="as-hero-command"><span>核销记录</span><strong id="as-hero-count">0</strong><em>点击记录可查看详情</em></div></header>
               <section class="as-metric-grid" id="as-metrics"></section>
-              <section class="as-panel as-intake-panel" id="as-intake-panel" hidden><header class="as-panel-head"><div><small>ACTIVE AUDIT RECORDS</small><h2>运行中的记录</h2></div><p><span class="as-intake-count" id="as-intake-count">0</span> 条运行或排队记录</p></header><div class="as-panel-body"><div class="as-intake-list" id="as-intake-list" role="list" aria-label="运行中的记录"></div></div></section>
-              <section class="as-panel as-intake-panel" id="as-intake-failed-panel" hidden><header class="as-panel-head"><div><small>INTAKE FAILURES</small><h2>投递失败</h2></div><p>尚未创建核销运行的失败投递</p></header><div class="as-panel-body"><div class="as-intake-list" id="as-intake-failed-list" role="list" aria-label="投递失败记录"></div></div></section>
+              <section class="as-panel as-intake-panel" id="as-intake-panel" hidden><header class="as-panel-head"><div><small>正在处理</small><h2>正在核销的记录</h2></div><p><span class="as-intake-count" id="as-intake-count">0</span> 条正在核销或排队的记录</p></header><div class="as-panel-body"><div class="as-intake-list" id="as-intake-list" role="list" aria-label="正在核销的记录"></div></div></section>
+              <section class="as-panel as-intake-panel" id="as-intake-failed-panel" hidden><header class="as-panel-head"><div><small>尚未开始核销</small><h2>上传未完成</h2></div><p>这些资料尚未进入核销</p></header><div class="as-panel-body"><div class="as-intake-list" id="as-intake-failed-list" role="list" aria-label="未完成的上传记录"></div></div></section>
               <section class="as-panel">
-              <header class="as-panel-head"><div><small>AUDIT LEDGER</small><h2>核销台账</h2></div><p id="as-ledger-count" aria-live="polite">0 条记录</p></header>
+              <header class="as-panel-head"><div><small>全部核销记录</small><h2>核销台账</h2></div><p id="as-ledger-count" aria-live="polite">0 条记录</p></header>
               ${recordFiltersMarkup('overview')}
               <div class="as-panel-body"><div class="as-run-list" id="as-ledger-list" role="list" aria-label="核销台账记录"></div><div class="as-list-window" id="as-ledger-window"></div></div>
               </section>
@@ -4056,9 +4067,9 @@
         document.getElementById('as-nav-overview').textContent = state.runs.length;
         document.getElementById('as-nav-archive').textContent = state.runs.length;
         document.getElementById('as-metrics').innerHTML = [
-          ['核销记录', state.runs.length, '全部 worktree 运行记录', '#159edb'],
-          ['核销完成', latestCompletedZipCount, '最近一次 input 的 ZIP 总数', '#18845e'],
-          ['运行 / 排队', `${running}/${queued}`, 'OSS 与 input 处理状态', '#d79a20'],
+          ['核销记录', state.runs.length, '全部已保存的核销记录', '#159edb'],
+          ['核销完成', latestCompletedZipCount, '最近一次已完成核销的类型数', '#18845e'],
+          ['核销中 / 排队中', `${running}/${queued}`, '正在核销和等待核销的记录数', '#d79a20'],
           ['待人工核验', errors, '完成记录中的待处理明细', '#173743'],
         ].map(([label,value,note,color]) => `<article class="as-metric" style="--metric-accent:${color}"><div><span>${label}</span>${note ? `<small>${note}</small>` : ''}</div><strong>${value}</strong></article>`).join('');
         const intakePanel = document.getElementById('as-intake-panel');
@@ -4110,7 +4121,7 @@
       };
       const renderArchive = () => {
         const { values, total, visible } = recordListWindow();
-        document.getElementById('as-archive-count').textContent = `${values.length} / ${total} 条运行记录`;
+        document.getElementById('as-archive-count').textContent = `${values.length} / ${total} 条核销记录`;
         document.getElementById('as-archive-list').innerHTML = visible
           ? values.slice(0, visible).map(archiveCard).join('')
           : emptyMarkup(total ? '没有匹配的技术档案' : '技术档案为空', total ? '请调整筛选条件；台账与技术档案的筛选条件同步' : '创建运行后，技术档案会与台账同步显示');
@@ -4121,7 +4132,7 @@
         const root = document.getElementById('as-ledger-list');
         if (!root) return;
         const { values, total, visible } = recordListWindow();
-        document.getElementById('as-ledger-count').textContent = `${values.length} / ${total} 条运行记录`;
+        document.getElementById('as-ledger-count').textContent = `${values.length} / ${total} 条核销记录`;
         root.innerHTML = visible ? values.slice(0, visible).map(runCard).join('') : emptyMarkup(total ? '没有匹配的核销记录' : '还没有核销记录', total ? '请调整筛选条件' : '开始核销后，记录会自动出现在这里');
         document.getElementById('as-ledger-window').innerHTML = listWindowMarkup('overview', visible, values.length);
         state.ledgerRenderRevision = state.primaryRenderRevision;
@@ -4219,8 +4230,8 @@
         document.body.insertAdjacentHTML('beforeend', `<dialog class="as-delete-dialog" id="as-delete-dialog" aria-labelledby="as-delete-title" aria-describedby="as-delete-description">
           <h2 id="as-delete-title">永久删除这条核销记录？</h2>
           <code id="as-delete-workspace"></code>
-          <p id="as-delete-description">将删除该记录的页面、核销结果、分析文件、日志、数据断点、人工核验标记，以及专属的 Git worktree 登记、分支和投递资料。删除后无法恢复。</p>
-          <p class="as-delete-note">共享原始材料、主仓库及其共享提交历史不属于本条记录的删除范围。</p>
+          <p id="as-delete-description">这条记录的核销结果、人工核验标记和专属资料都会永久删除，删除后无法恢复。</p>
+          <p class="as-delete-note">其他核销记录和共用的原始资料会保留。</p>
           <p class="as-delete-error" id="as-delete-error" role="status" aria-live="polite"></p>
           <footer><button class="as-button secondary" id="as-delete-cancel" type="button" autofocus>取消</button><button class="as-button danger" id="as-delete-confirm" type="button">永久删除</button></footer>
         </dialog>`);
@@ -4247,9 +4258,9 @@
         state.deleteKind = 'run';
         state.deleteWorkspaceId = workspaceId;
         state.deleteTrigger = trigger;
-        document.getElementById('as-delete-workspace').textContent = workspaceId;
+        document.getElementById('as-delete-workspace').textContent = runTitle(run);
         document.getElementById('as-delete-title').textContent = '永久删除这条核销记录？';
-        document.getElementById('as-delete-description').textContent = '将删除该记录的页面、核销结果、分析文件、日志、数据断点、人工核验标记，以及专属的 Git worktree 登记、分支和投递资料。删除后无法恢复。';
+        document.getElementById('as-delete-description').textContent = '这条记录的核销结果、人工核验标记和专属资料都会永久删除，删除后无法恢复。';
         document.getElementById('as-delete-confirm').textContent = '永久删除';
         document.getElementById('as-delete-error').textContent = '';
         dialog.showModal();
@@ -4264,14 +4275,14 @@
         state.deleteKind = 'intake';
         state.deleteJobId = jobId;
         state.deleteTrigger = trigger;
-        const title = job?.object?.basename || job?.verifyCode || jobId;
-        document.getElementById('as-delete-workspace').textContent = `${title}\n${jobId}`;
+        const title = job?.object?.basename || '未命名上传资料';
+        document.getElementById('as-delete-workspace').textContent = `${title}（第 ${Number(job?.attempt || 1)} 次提交）`;
         document.getElementById('as-delete-title').textContent = failed
-          ? '永久删除这条失败投递记录？'
-          : '取消并删除这条投递任务？';
+          ? '永久删除这条未完成的上传记录？'
+          : '取消并删除这条上传记录？';
         document.getElementById('as-delete-description').textContent = failed
-          ? '将删除失败任务收据、专属 OSS ZIP 和唯一关联的运行档案（如有）。删除后无法恢复；该操作不会重新核销，也不会补发业务回调。'
-          : '排队中的任务将从队列跳过；运行中的任务会先终止其正式核销子进程并阻止尚未发出的回调，再删除任务收据、专属 OSS ZIP 和未完成运行档案。已经发出的业务回调无法撤回，删除后的本地档案也无法恢复。';
+          ? '这条上传记录、上传的资料和对应核销记录都会永久删除，删除后无法恢复。不会重新核销或再次发送结果。'
+          : '这条资料将停止排队或停止核销，随后删除上传资料及对应记录。删除后无法恢复；已经发送给业务系统的结果不能撤回。';
         document.getElementById('as-delete-confirm').textContent = failed ? '永久删除' : '取消并删除';
         document.getElementById('as-delete-error').textContent = '';
         dialog.showModal();
@@ -4328,10 +4339,10 @@
           renderPrimaryData();
           document.getElementById('as-delete-dialog').close();
           toast(deleteKind === 'intake'
-            ? deletingFailedIntake ? '失败投递记录已永久删除' : '投递任务已取消并删除'
-            : '记录及其全部专属档案已永久删除');
+            ? deletingFailedIntake ? '未完成的上传记录已永久删除' : '上传记录已取消并删除'
+            : '核销记录及其专属资料已永久删除');
         } catch (error) {
-          document.getElementById('as-delete-error').textContent = error.message;
+          document.getElementById('as-delete-error').textContent = customerOperationError(error, '删除');
         } finally {
           state.deleteBusy = false;
           confirm.disabled = cancel.disabled = false;
@@ -4360,7 +4371,7 @@
         } catch (error) {
           control.checked = !reviewed;
           control.disabled = false;
-          toast(error.message);
+          toast(customerOperationError(error, '保存人工核验标记'));
         }
       };
       const legacyRecordLabels = new Map();
@@ -4474,8 +4485,9 @@
           const next = await fetchPrimaryState(false);
           if (!next.unchanged) commitPrimaryState(next);
         } catch (error) {
-          document.getElementById(state.primaryView === 'archive' ? 'as-archive-list' : 'as-ledger-list').innerHTML = emptyMarkup('核销服务暂不可用', error.message);
-          toast(error.message);
+          const message = customerOperationError(error, '读取核销记录');
+          document.getElementById(state.primaryView === 'archive' ? 'as-archive-list' : 'as-ledger-list').innerHTML = emptyMarkup('暂时读不到核销记录', message);
+          toast(message);
         }
       };
       const probePrimaryCatalog = async () => {
@@ -4636,6 +4648,8 @@
           ['分析文件', (snapshot.analysis_files || []).length],
           ['DOM 数据断点', (snapshot.dom_checkpoints || []).length],
           ['快照哈希', run.snapshot_sha256 || '—'],
+          ['失败详情', run.failure?.message || '—'],
+          ['本页操作诊断', state.clientDiagnostics.map((item) => `${item.time} ${item.operation}: ${item.message}`).join('\n') || '—'],
         ];
         const events = (snapshot.recent_events || []).slice(-12).reverse();
         return `<div class="as-tech-summary"><article class="as-tech-card"><h3>运行身份</h3>
@@ -4695,11 +4709,11 @@
         const tools = document.createElement('div');
         tools.className = 'as-record-toolbar';
         tools.innerHTML = `<button class="as-button secondary" id="as-back-ledger" type="button">← 返回系统总览</button>
-          <select class="as-record-select" id="as-record-select" aria-label="切换核销记录"><option value="${escapeHtml(context.selected_run)}">${escapeHtml(context.selected_run)} · ${escapeHtml(runStatus(run))}</option></select>
+          <select class="as-record-select" id="as-record-select" aria-label="切换核销记录"><option value="${escapeHtml(context.selected_run)}">${escapeHtml(runTitle(run))} · ${escapeHtml(runStatus(run))}</option></select>
           <button class="as-button" id="as-record-technical" type="button">技术档案</button>`;
         topbar.appendChild(tools);
         const workspace = document.querySelector('.eo-workspace');
-        if (workspace) workspace.insertAdjacentHTML('afterbegin', `<div class="as-record-context"><span>当前二级核销页面：<strong>${escapeHtml(context.selected_run)}</strong></span><span>${escapeHtml(runDate(run))} · ${escapeHtml(runStatus(run))} · ${Number(run.scenario_count || 0)} 种核销类型</span></div>`);
+        if (workspace) workspace.insertAdjacentHTML('afterbegin', `<div class="as-record-context"><span>本次资料：<strong>${escapeHtml(runTitle(run))}</strong></span><span>${escapeHtml(runDate(run))} · ${escapeHtml(runStatus(run))} · ${Number(run.scenario_count || 0)} 种核销类型</span></div>`);
         ensureTechnicalDrawer();
         document.getElementById('as-back-ledger').addEventListener('click', routeToSystem);
         document.getElementById('as-record-technical').addEventListener('click', () => openTechnical(context.selected_run));
@@ -4709,9 +4723,9 @@
           const value = await apiJson('/api/runs');
           const runs = Array.isArray(value.runs) ? value.runs : [];
           const select = document.getElementById('as-record-select');
-          select.innerHTML = runs.map((item) => `<option value="${escapeHtml(item.workspace_id)}">${escapeHtml(item.workspace_id)} · ${escapeHtml(runStatus(item))}</option>`).join('');
+          select.innerHTML = runs.map((item) => `<option value="${escapeHtml(item.workspace_id)}">${escapeHtml(runTitle(item))} · ${escapeHtml(runStatus(item))}</option>`).join('');
           select.value = context.selected_run;
-        } catch (error) { toast(error.message); }
+        } catch (error) { toast(customerOperationError(error, '读取核销记录列表')); }
       };
       const renderRecordStatus = () => {
         const run = context.run || {};
@@ -4720,21 +4734,21 @@
         const classificationMessage = '核销方式无法确认';
         const events = context.recent_events || [];
         document.body.className = 'audit-system-page';
-        document.title = `参半渠道活动核销｜${context.selected_run}`;
+        document.title = `参半渠道活动核销｜${runTitle(run)}`;
         document.body.innerHTML = `${primaryHeader()}<main class="as-record-page"><div class="as-stack">
           <div class="as-record-context"><button class="as-button secondary" id="as-back-ledger" type="button">← 返回系统总览</button>
-            <span>当前二级运行档案：<strong>${escapeHtml(context.selected_run)}</strong></span>
+            <span>本次资料：<strong>${escapeHtml(runTitle(run))}</strong></span>
             <button class="as-button" id="as-record-technical" type="button">打开技术档案</button></div>
-          <header class="as-record-status-hero" style="--run-tone:${runTone(run)}"><small>RUN RECORD / ${escapeHtml(String(run.status || 'unknown').toUpperCase())}</small>
-            <h1>${escapeHtml(runStatus(run))}</h1>${classificationFailed ? '' : '<p>本次运行尚未形成可展示的业务核销页面，但运行身份、结构化分析、事件日志和 DOM 数据断点已经作为该条核销记录持久化保存。</p>'}</header>
-          ${classificationFailed ? `<div class="as-failure">${classificationMessage}</div>` : failure.message ? `<div class="as-failure"><strong>${escapeHtml(failure.type || '核销失败')}</strong>${escapeHtml(failure.message)}</div>` : ''}
+          <header class="as-record-status-hero" style="--run-tone:${runTone(run)}"><small>本次核销进度</small>
+            <h1>${escapeHtml(runStatus(run))}</h1>${classificationFailed ? '' : `<p>${run.status === 'running' ? '正在检查本次资料，完成后会显示核销结果。' : run.status === 'created' ? '本次资料正在等待核销。' : '本次核销尚未完成，具体原因请联系管理员查看技术档案。'}</p>`}</header>
+          ${['biz_type_unrecognized', 'plan_type_unrecognized'].includes(failure.code) ? '<div class="as-failure">无法识别核销类型</div>' : classificationFailed ? `<div class="as-failure">${classificationMessage}</div>` : failure.message ? '<div class="as-failure">系统处理没有完成，暂时不能提供完整核销结果。</div>' : ''}
           <section class="as-metric-grid">
-            <article class="as-metric" style="--metric-accent:#159edb"><div><span>核销场景</span><small>本次已识别场景</small></div><strong>${Number(run.scenario_count || 0)}</strong></article>
-            <article class="as-metric" style="--metric-accent:#173743"><div><span>运行事件</span><small>可观察执行节点</small></div><strong>${events.length}</strong></article>
-            <article class="as-metric" style="--metric-accent:#18845e"><div><span>分析文件</span><small>结构化事实与结果</small></div><strong>${(context.analysis_files || []).length}</strong></article>
-            <article class="as-metric" style="--metric-accent:#d84b3e"><div><span>DOM 断点</span><small>可恢复页面阶段</small></div><strong>${(context.dom_checkpoints || []).length}</strong></article>
+            <article class="as-metric" style="--metric-accent:#159edb"><div><span>已确定的核销类型</span><small>本次已确定的核销类型数量</small></div><strong>${Number(run.scenario_count || 0)}</strong></article>
+            <article class="as-metric" style="--metric-accent:#173743" hidden><div><span>运行事件</span><small>技术档案中查看</small></div><strong>${events.length}</strong></article>
+            <article class="as-metric" style="--metric-accent:#18845e" hidden><div><span>分析文件</span><small>技术档案中查看</small></div><strong>${(context.analysis_files || []).length}</strong></article>
+            <article class="as-metric" style="--metric-accent:#d84b3e" hidden><div><span>DOM 断点</span><small>技术档案中查看</small></div><strong>${(context.dom_checkpoints || []).length}</strong></article>
           </section>
-          <section class="as-panel"><header class="as-panel-head"><div><small>RUN EVENT LEDGER</small><h2>运行轨迹</h2></div><p>模型私有思维过程不持久化；这里只保存可观察事件与结构化事实</p></header>
+          <section class="as-panel" hidden><header class="as-panel-head"><div><small>RUN EVENT LEDGER</small><h2>运行轨迹</h2></div><p>技术人员可在技术档案中查看这些记录</p></header>
             <div class="as-panel-body"><div class="as-event-list">${events.length ? events.slice().reverse().map((event) => `<div class="as-event"><code>#${escapeHtml(event.seq || '—')}</code><strong>${escapeHtml(event.type || event.event || 'event')}<small>${escapeHtml(classificationFailed && (event.type || event.event) === 'run.failed' ? classificationMessage : event.message || '')}</small></strong><time>${escapeHtml(event.timestamp || '')}</time></div>`).join('') : emptyMarkup('没有运行事件','该记录可能来自旧版结果')}</div></div></section>
         </div></main>`;
         ensureTechnicalDrawer();

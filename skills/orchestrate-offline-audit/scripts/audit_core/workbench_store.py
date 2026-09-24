@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .common import AuditError
+from .common import AuditError, BizTypeRecognitionError
 from .codex_runner import DEFAULT_REASONING_EFFORT
 from .orchestrator import normalize_producer_model, output_date_from_run_id
 from .pass_check_log import attach_pass_check_log, load_workspace_results
@@ -23,7 +23,6 @@ from .pass_check_log import attach_pass_check_log, load_workspace_results
 
 DEFAULT_WORKTREES_ROOT = PROJECT_ROOT / "worktrees"
 ANALYSIS_SUMMARY_FILENAME = "ai-analysis-summary.md"
-CLASSIFICATION_FAILURE_MESSAGE = "核销方式无法确认"
 MAIN_FLOW_TASKS: tuple[tuple[str, str, str], ...] = (
     ("bootstrap", "运行初始化", "建立持久化运行目录"),
     ("intake", "材料分流", "识别场景与资料角色"),
@@ -177,7 +176,7 @@ def render_analysis_summary_markdown(
     view_payload: dict[str, Any],
     manifest: dict[str, Any],
 ) -> str:
-    """Summarize audit errors; keep classification failures to one fixed message."""
+    """Report business and material problems for human review, including gate issues."""
     def escape(value: Any) -> str:
         text = " ".join(str(value or "").split()).replace("\\", "\\\\")
         for character in ("`", "*", "[", "]", "<", ">", "#", "_"):
@@ -185,7 +184,7 @@ def render_analysis_summary_markdown(
         return text
 
     projected = attach_error_reasons(view_payload)
-    groups: dict[str, list[str]] = {}
+    groups: dict[str, dict[str, list[str]]] = {}
     classification_rejected = bool(
         projected.get("classification_rejection") or manifest.get("classification_rejection")
         or (manifest.get("failure") or {}).get("code") == "classification_failed"
@@ -195,39 +194,38 @@ def render_analysis_summary_markdown(
             continue
         if sheet.get("projection_kind") == "classification_rejection":
             classification_rejected = True
-            continue
         reasons = [reason for row in sheet.get("rows") or [] if isinstance(row, dict)
                    and row.get("status") == "issue" for reason in row.get("error_reasons") or []]
         if not reasons:
             continue
-        name = str(sheet.get("audit_type_label") or sheet.get("name") or sheet.get("scenario") or "核销结果")
-        group = groups.setdefault(name, [])
+        name = ("核销资料问题" if sheet.get("projection_kind") == "classification_rejection" and not sheet.get("scenario") else
+                str(sheet.get("audit_type_label") or sheet.get("name") or sheet.get("scenario") or "核销结果"))
+        archive = str(sheet.get("source_archive") or "")
+        group = groups.setdefault(name, {}).setdefault(archive, [])
         for reason in reasons:
             if reason not in group:
                 group.append(reason)
-    if not groups and not classification_rejected:
-        return "具体错误原因未记录。" if int(manifest.get("error_count") or 0) else "未发现错误。"
-    sections = [CLASSIFICATION_FAILURE_MESSAGE] if classification_rejected else []
-    sections.extend(f"## {escape(name)}\n\n" + "\n".join(f"- {escape(reason)}" for reason in reasons)
-                    for name, reasons in groups.items())
+    if not groups:
+        return ("具体资料问题未记录，请人工核对。" if classification_rejected else
+                "具体错误原因未记录。" if int(manifest.get("error_count") or 0) else "未发现错误。")
+    sections = []
+    multiple_archives = len({str(sheet.get("source_archive") or "")
+                            for sheet in projected.get("sheets") or [] if isinstance(sheet, dict)}) > 1
+    for name, archives in groups.items():
+        parts = [f"## {escape(name)}"]
+        for index, (archive, reasons) in enumerate(archives.items(), 1):
+            if multiple_archives:
+                # Name each bundle once; never repeat it before every problem.
+                parts.append(f"### {escape(archive or f'第{index}份资料')}")
+            parts.append("\n".join(f"- {escape(reason)}" for reason in reasons))
+        sections.append("\n\n".join(parts))
     return "\n\n".join(sections)
 
 
-def classification_failure(result: dict[str, Any] | None) -> dict[str, str]:
-    return {
-        "type": "ArchiveClassificationError",
-        "code": "classification_failed",
-        "message": CLASSIFICATION_FAILURE_MESSAGE,
-    }
-
-
 def project_run_status(manifest: dict[str, Any], view: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Project classification status and concise wording without changing history."""
-    if manifest.get("status") == "completed" and manifest.get("classification_rejection"):
-        return {**manifest, "status": "failed",
-                "failure": classification_failure((view or {}).get("classification_rejection"))}
+    """Display completed material checks without rewriting historical records."""
     if (manifest.get("failure") or {}).get("code") == "classification_failed":
-        return {**manifest, "failure": {**manifest["failure"], "message": CLASSIFICATION_FAILURE_MESSAGE}}
+        return {**manifest, "status": "completed", "failure": None}
     return dict(manifest)
 
 
@@ -404,11 +402,20 @@ class WorkbenchRunStore:
 
     def observe(self, event_type: str, payload: dict[str, Any]) -> None:
         if event_type == "material_classification.started":
-            event = self.append_event(event_type, "开始按资料内容识别八类核销", stage="analysis")
+            self.manifest["largeVenueFee"] = payload.get("large_venue_fee")
+            policy = payload.get("classification_policy") or "material_content"
+            event = self.append_event(event_type, "开始根据业务类型选择核销Skill" if policy == "biz_type" else "开始按资料内容识别八类核销", stage="analysis")
             if not self.manifest.get("analysis_started_at"):
                 self.manifest["analysis_started_at"] = event["timestamp"]
-            self.manifest["scenario_classification_policy"] = "material_content"
+            self.manifest["scenario_classification_policy"] = policy
             self._write_manifest()
+            return
+        if event_type == "biz_type.resolved":
+            self.write_analysis("pdf-policy/biz-type.json", payload, label="业务类型与核销Skill对应结果")
+            self.manifest["bizType"] = payload["biz_type"]
+            self.manifest["selected_scenario"] = payload["scenario"]
+            self._write_manifest()
+            self.append_event(event_type, "已完成业务类型识别", stage="analysis")
             return
         if event_type == "pdf_materials.validated":
             packets = sanitize_case(payload["packets"])
@@ -432,18 +439,19 @@ class WorkbenchRunStore:
 
             result = payload.get("result") or {}
             validate_json(result, CLASSIFICATION_REJECTION_SCHEMA)
-            content_route = result.get("decision_source") == "material_content"
+            content_route = result.get("decision_source") in {"material_content", "biz_type", "plan_type"}
             self.write_analysis("classification-rejection/result.json", result,
-                                label="资料内容分类失败结果" if content_route else "ZIP 名称分类退回结果")
+                                label="资料清单核对结果" if content_route else "ZIP 名称分类退回结果")
             names = [item["source_archive"] for item in result["archives"]]
-            self.manifest["source_archives"] = list(dict.fromkeys([
-                *(self.manifest.get("source_archives") or []), *names,
-            ]))
+            from .workbench_labels import merge_archive_names
+            self.manifest["source_archives"] = merge_archive_names(
+                self.manifest.get("source_archives") or [], names,
+            )
             self.manifest["classification_rejection"] = True
             self._write_manifest()
-            self.append_event(event_type, "核销方式无法确认，保留具体原因" if content_route else "核销方式无法确认，资料已退回", stage="decision")
-            self.write_checkpoint("decision", "资料分类失败" if content_route else "名称分类退回", {
-                "conclusion": "rejected", "archive_count": len(names),
+            self.append_event(event_type, "资料检查已完成，列出具体资料问题" if content_route else "核销方式无法确认，保留历史原因", stage="decision")
+            self.write_checkpoint("decision", "资料清单核对完成" if content_route else "历史分类记录", {
+                "conclusion": result["summary"]["conclusion"], "archive_count": len(names),
             })
             return
 
@@ -454,9 +462,10 @@ class WorkbenchRunStore:
                 names = [str(name) for name in case.get("source_archives") or []]
                 if not names:
                     names = [str(item.get("source_archive") or "") for item in case.get("archives") or []]
-                self.manifest["source_archives"] = list(dict.fromkeys([
-                    *(self.manifest.get("source_archives") or []), *(name for name in names if name),
-                ]))
+                from .workbench_labels import merge_archive_names
+                self.manifest["source_archives"] = merge_archive_names(
+                    self.manifest.get("source_archives") or [], [name for name in names if name],
+                )
             event = self.append_event("material_diagnostic.started", "开始 AI 材料用途识别", stage="analysis")
             if not self.manifest.get("analysis_started_at"):
                 self.manifest["analysis_started_at"] = event["timestamp"]
@@ -603,7 +612,6 @@ class WorkbenchRunStore:
                 from .material_diagnostic_output import CLASSIFICATION_REJECTION_SCHEMA
 
                 validate_json(rejection, CLASSIFICATION_REJECTION_SCHEMA)
-            failure = classification_failure(rejection) if rejection is not None else None
             self._view_payload = attach_error_reasons(attach_pass_check_log(
                 view_payload,
                 load_workspace_results(self.workspace),
@@ -614,12 +622,14 @@ class WorkbenchRunStore:
             )
             self.manifest.update(
                 {
-                    "status": "failed" if failure else "completed",
+                    "status": "completed",
                     "completed_at": utc_now(),
                     "scenarios": scenarios,
                     "scenario_count": len(scenarios),
                     "error_count": error_count,
-                    "failure": failure,
+                    "failure": None,
+                    "business_result_policy": "issues_for_human_review",
+                    "run_failure_policy": "execution_errors_only",
                 }
             )
             summary = render_analysis_summary_markdown(
@@ -636,8 +646,8 @@ class WorkbenchRunStore:
             }
             self._verification = verification
             self.write_checkpoint(
-                "failed" if failure else "ready",
-                ("核销方式无法确认" if rejection.get("decision_source") == "material_content" else "核销方式无法确认") if failure else "固定工作台数据已就绪",
+                "ready",
+                "资料检查及问题清单已就绪",
                 {
                     "scenarios": scenarios,
                     "error_count": error_count,
@@ -645,11 +655,11 @@ class WorkbenchRunStore:
                 },
             )
             self.append_event(
-                "run.failed" if failure else "run.completed",
-                failure["message"] if failure else f"核销完成，共 {len(scenarios)} 个场景、{error_count} 个错误项",
-                stage="failed" if failure else "complete",
-                details=failure or {"scenarios": scenarios, "error_count": error_count},
-                level="error" if failure else "info",
+                "run.completed",
+                f"资料检查完成，共 {len(scenarios)} 个类型、{error_count} 个问题",
+                stage="complete",
+                details={"scenarios": scenarios, "error_count": error_count},
+                level="info",
             )
             self._write_snapshot()
             self._write_manifest()
@@ -660,6 +670,8 @@ class WorkbenchRunStore:
                 "type": type(exc).__name__,
                 "message": str(exc),
             }
+            if isinstance(exc, BizTypeRecognitionError):
+                failure["code"] = "biz_type_unrecognized"
             self.manifest.update(
                 {
                     "status": "failed",

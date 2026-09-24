@@ -162,7 +162,7 @@ def main() -> None:
             has_text="核销完成"
         )
         assert overview_completed_metric.count() == 1
-        assert overview_completed_metric.locator("small").inner_text() == "最近一次 input 的 ZIP 总数"
+        assert overview_completed_metric.locator("small").inner_text() == "最近一次已完成核销的类型数"
         assert overview_completed_metric.locator(":scope > strong").inner_text() == str(
             expected_completed_zip_count
         )
@@ -468,7 +468,7 @@ def main() -> None:
             page.wait_for_load_state("networkidle")
             page.wait_for_selector("body.audit-system-page")
             assert f"run={running_id}" in page.url
-            assert page.get_by_role("heading", name="运行中").is_visible()
+            assert page.get_by_role("heading", name="正在核销").is_visible()
             assert page.get_by_role("button", name="打开技术档案").is_visible()
             running_screenshot = args.screenshot.with_name(
                 args.screenshot.stem + "-running" + args.screenshot.suffix

@@ -24,6 +24,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .html_report import DATA_CLOSE, DATA_OPEN
+from .scenario_registry import SCENARIO_SPECS
 from .error_reason import attach_error_reasons
 from .pass_check_log import attach_pass_check_log, load_workspace_results
 from .oss_intake import (
@@ -55,7 +56,6 @@ from .workbench_html import (
     replace_audit_payload as _replace_audit_payload,
 )
 from .workbench_store import (
-    CLASSIFICATION_FAILURE_MESSAGE,
     read_event_records,
     DEFAULT_WORKTREES_ROOT,
     WORKSPACE_ID_PATTERN,
@@ -1257,7 +1257,7 @@ class WorkbenchHTTPServer(ThreadingHTTPServer):
 
     def delete_run(self, workspace_id: str) -> dict[str, Any]:
         intake_lock = self.intake.store._lock if self.intake is not None else contextlib.nullcontext()
-        input_root = self.intake.input_root if self.intake is not None else self.catalog.root.parent / "input-oss"
+        input_root = self.intake.input_root if self.intake is not None else self.catalog.root.parent / "input"
         with intake_lock, self._html_cache_lock:
             try:
                 return self.catalog.delete_run(workspace_id, input_root=input_root)
@@ -1538,9 +1538,11 @@ class Handler(BaseHTTPRequestHandler):
             "api_version": API_VERSION,
             "system_version": SYSTEM_VERSION,
             "material_problem_policy": "require_exact_material_items_before_audit",
-            "scenario_classification_policy": "material_content",
-            "unclassified_archive_policy": "fail_after_ai_and_callback_reason",
-            "classification_failure_message": CLASSIFICATION_FAILURE_MESSAGE,
+            "scenario_classification_policy": "biz_type",
+            "local_input_type_policy": "ask_user_before_run",
+            "unclassified_archive_policy": "complete_with_specific_material_issues",
+            "run_failure_policy": "input_type_or_execution_errors",
+            "business_result_policy": "issues_for_human_review",
             "audit_policy_source": SOURCE_TITLE,
             "confidence_badge_display": "hidden",
             "result_summary_display": "hidden",
@@ -1548,6 +1550,8 @@ class Handler(BaseHTTPRequestHandler):
             "filter_header_display": "hidden",
             "result_filters": ["audit_type", "category"],
             "error_text_policy": "reason_and_action_separate",
+            "customer_language_policy": "plain_chinese_source_specific",
+            "customer_reason_format": "short_facts_without_archive_or_type_prefix",
             "business_file_display": "filenames_only",
             "main_flow_tasks": main_flow_task_list(),
             "refresh_policy": {
@@ -1648,7 +1652,19 @@ class Handler(BaseHTTPRequestHandler):
                 "terminal_replay_policy": "new_attempt",
                 "callback_result_format": "scenario_error_facts_markdown",
                 "callback_transport": "direct",
-                "request_fields": ["verifyCode", "analyzeId", "downloadUrl"],
+                "request_fields": ["verifyCode", "analyzeId", "downloadUrl", "bizType", "largeVenueFee"],
+                "optional_request_fields": ["largeVenueFee"],
+                "required_request_fields": ["verifyCode", "analyzeId", "downloadUrl", "bizType"],
+                "large_venue_fee_policy": {
+                    "type": "boolean", "scenario": "promotional_display", "material": "atrium_agreement",
+                    "true": "required", "false": "not_required", "omitted": "legacy_material_evidence",
+                },
+                "biz_type_policy": "exact_value_skill_mapping_then_material_gate",
+                "biz_type_values": [spec.label for spec in SCENARIO_SPECS],
+                "biz_type_skill_map": {spec.label: spec.skill_name for spec in SCENARIO_SPECS},
+                "other_biz_type_policy": "complete_without_ai",
+                "other_biz_type_message": "该业务类型无需AI核销",
+                "biz_type_failure_message": "无法识别核销类型",
                 "callback_path": CALLBACK_PATH,
                 "callback_configured": (
                     bool(self.server.intake.config.callback_url)
@@ -1763,7 +1779,7 @@ class Handler(BaseHTTPRequestHandler):
                     else None
                 )
                 jobs = [
-                    public_job(job)
+                    public_job(job, input_root=self.server.intake.input_root)
                     for job in intake.list(
                         active_only=active_only,
                         completed=completed,
@@ -1778,7 +1794,7 @@ class Handler(BaseHTTPRequestHandler):
                 if intake is None:
                     return
                 job = intake.get(intake_match.group(1))
-                self._json({"job": public_job(job)})
+                self._json({"job": public_job(job, input_root=self.server.intake.input_root)})
                 return
 
             match = re.fullmatch(r"/api/runs/([^/]+)(?:/(.*))?", route)
@@ -1934,7 +1950,7 @@ class Handler(BaseHTTPRequestHandler):
             active = str(job.get("status")) not in {"completed", "failed"}
             self._json(
                 {
-                    "job": public_job(job),
+                    "job": public_job(job, input_root=self.server.intake.input_root),
                     "duplicate": not created,
                     "rerun": created and int(job.get("attempt") or 1) > 1,
                     "status_url": f"/api/intake/jobs/{job['job_id']}",

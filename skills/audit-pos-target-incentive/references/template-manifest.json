@@ -1,0 +1,49 @@
+{
+  "scenario": "pos_target_incentive",
+  "approved_on": "2026-09-22",
+  "authorization": "用户明确指定input根目录八个ZIP中的相应样张作为模板参考，并分别写入对应Skill。",
+  "source_zip": "input/SQ202512310105-HX202602050027-POS激励达标(1).zip",
+  "source_zip_sha256": "5778747264d22c7bd91b6943f96e4163455f94d99b2c996890a3f2947e1cc3b6",
+  "documents": [
+    {
+      "id": "template-reference-pos_target_incentive-settlement",
+      "title": "市场费用结算单",
+      "role": "settlement",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/settlement.jpg",
+      "sha256": "17332d7566b6da99b1660e5728f4be06f0f0e580018277c44baf9f2deef51e5b",
+      "source_member": "1月结算单 华润.jpg",
+      "source_sha256": "17332d7566b6da99b1660e5728f4be06f0f0e580018277c44baf9f2deef51e5b",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-pos_target_incentive-sales-summary",
+      "title": "盖章门店销售汇总",
+      "role": "sales_record",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-summary.jpg",
+      "sha256": "9bdb65f61fd0e0fcca264854582a61f06119a31c33a1a3729ac6c6262b678a99",
+      "source_member": "1月20家数据.jpg",
+      "source_sha256": "9bdb65f61fd0e0fcca264854582a61f06119a31c33a1a3729ac6c6262b678a99",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-pos_target_incentive-sales-workbook",
+      "title": "销售原始工作簿",
+      "role": "pos_excel",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-workbook.xlsx",
+      "sha256": "bf82709c4cba8dcdf161782ac9aa15e3febbcc6a8b8b60d7f48f183821dc963d",
+      "source_member": "华润万家  2026.1月参半(1).xlsx",
+      "source_sha256": "bf82709c4cba8dcdf161782ac9aa15e3febbcc6a8b8b60d7f48f183821dc963d",
+      "source_pages": [],
+      "preview_images": []
+    }
+  ],
+  "unselected_members": []
+}

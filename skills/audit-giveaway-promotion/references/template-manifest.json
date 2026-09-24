@@ -1,0 +1,88 @@
+{
+  "scenario": "giveaway_promotion",
+  "approved_on": "2026-09-22",
+  "authorization": "用户明确指定input根目录八个ZIP中的相应样张作为模板参考，并分别写入对应Skill。",
+  "source_zip": "input/SQ202512170055-HX202601150043-搭赠.zip",
+  "source_zip_sha256": "b5ad40e7007d2dc4f0817063318535ab1bae78ebd23819ebd068f463e0307664",
+  "documents": [
+    {
+      "id": "template-reference-giveaway_promotion-promotion-contract",
+      "title": "促销合同及赠送规则",
+      "role": "promotion_contract",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/promotion-contract.jpg",
+      "sha256": "12df7f5612a45ca41bc6d5ec208386bd38a54c480969f358615b8faefe9ed00a",
+      "source_member": "mmexport1768477746591.jpg",
+      "source_sha256": "12df7f5612a45ca41bc6d5ec208386bd38a54c480969f358615b8faefe9ed00a",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-giveaway_promotion-settlement",
+      "title": "市场费用结算单",
+      "role": "settlement",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/settlement.jpg",
+      "sha256": "bc53db1672355ca79520a49f4b83e4458f6f54d0de161c39002fc5c1eed5c450",
+      "source_member": "mmexport1768477742187.jpg",
+      "source_sha256": "bc53db1672355ca79520a49f4b83e4458f6f54d0de161c39002fc5c1eed5c450",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-giveaway_promotion-sales-list",
+      "title": "盖章销售单",
+      "role": "sales_record",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-list.jpg",
+      "sha256": "3517f50f8f07b3fa1f130f05ba9645d86c225f4d0eeacac65456fa0f5d5d3dab",
+      "source_member": "mmexport1768477733896.jpg",
+      "source_sha256": "3517f50f8f07b3fa1f130f05ba9645d86c225f4d0eeacac65456fa0f5d5d3dab",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-giveaway_promotion-shopping-receipt-1",
+      "title": "购物小票样张一",
+      "role": "receipt",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/shopping-receipt-1.jpg",
+      "sha256": "8c2898ff8595f4d39b23f9d878f108df1205a9f37341a788298fc34076430999",
+      "source_member": "mmexport1768477723657.jpg",
+      "source_sha256": "8c2898ff8595f4d39b23f9d878f108df1205a9f37341a788298fc34076430999",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-giveaway_promotion-shopping-receipt-2",
+      "title": "购物小票样张二",
+      "role": "receipt",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/shopping-receipt-2.jpg",
+      "sha256": "5c91554e3da82176350092504a107c775293e69898090acf423aa0282675126e",
+      "source_member": "mmexport1768477727435.jpg",
+      "source_sha256": "5c91554e3da82176350092504a107c775293e69898090acf423aa0282675126e",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-giveaway_promotion-shopping-receipt-3",
+      "title": "购物小票样张三",
+      "role": "receipt",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/shopping-receipt-3.jpg",
+      "sha256": "24ff9b82cb931e5d2683255a929583d8ba2dda4f429315b5db9211c729fa1d4f",
+      "source_member": "mmexport1768477730598.jpg",
+      "source_sha256": "24ff9b82cb931e5d2683255a929583d8ba2dda4f429315b5db9211c729fa1d4f",
+      "source_pages": [],
+      "preview_images": []
+    }
+  ],
+  "unselected_members": []
+}

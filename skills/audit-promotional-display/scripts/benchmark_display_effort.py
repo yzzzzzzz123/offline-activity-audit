@@ -21,6 +21,7 @@ if str(PROJECT_ROOT / 'skills/orchestrate-offline-audit/scripts') not in sys.pat
     sys.path.insert(0, str(PROJECT_ROOT / 'skills/orchestrate-offline-audit/scripts'))
 
 from audit_core.effort_benchmark import rank_display_runs, score_display_run
+from audit_core.archive_input import discover_zip_paths
 from audit_core.product_oss import reference_fingerprint
 from audit_core.product_database import load_product_catalog
 
@@ -68,11 +69,10 @@ def source_fingerprint(project_root: Path, input_dir: Path, codex_binary: Path |
     """冻结原始ZIP、代码规则、数据库快照和 OSS 清单/图片字节。"""
     root, inputs = project_root.resolve(), input_dir.resolve()
     files: dict[str, Path] = {}
-    zips = sorted(path for path in inputs.iterdir() if path.is_file() and path.suffix.lower() == ".zip")
-    if not zips:
-        raise ValueError("输入目录没有 ZIP，不能开始真实档位评测")
+    zips = discover_zip_paths(input_dir)
     for path in zips:
-        files["input/" + path.name] = path
+        relative = path.relative_to(inputs) if inputs.is_dir() else Path(path.name)
+        files["input/" + relative.as_posix()] = path
     for name in ("AGENTS.md",):
         path = root / name
         if path.is_file():
@@ -138,6 +138,7 @@ def build_command(
         "--model", MODEL,
         "--reasoning-effort", effort,
         "--scenario", "promotional_display",
+        "--biz-type", "陈列堆头",
         "--result-json", str(receipt),
     ]
     # 未显式覆盖时，正式 runner 继续使用自身默认 input/ 与 worktrees/。

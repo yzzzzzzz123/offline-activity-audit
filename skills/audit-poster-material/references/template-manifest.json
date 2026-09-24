@@ -1,0 +1,72 @@
+{
+  "scenario": "poster_material",
+  "approved_on": "2026-09-22",
+  "authorization": "用户明确指定input根目录八个ZIP中的相应样张作为模板参考，并分别写入对应Skill。",
+  "source_zip": "input/SQ202512250099-HX202601060019-展示道具.zip",
+  "source_zip_sha256": "e11f0e06114f62d5a4cab114cfb096e11e0b94a17bc6ca43c169b0463424f772",
+  "documents": [
+    {
+      "id": "template-reference-poster_material-promotion-contract",
+      "title": "促销合同",
+      "role": "promotion_contract",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/promotion-contract.jpg",
+      "sha256": "36c6424b43bb0b4f0b7adb01b3c51ec6febdd5637dee1dfa7463bba4eac191a8",
+      "source_member": "核销-新吴区12月物料制作促销合同.jpg",
+      "source_sha256": "36c6424b43bb0b4f0b7adb01b3c51ec6febdd5637dee1dfa7463bba4eac191a8",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-poster_material-template-reference-poster_material-settlement",
+      "title": "市场费用结算单",
+      "role": "settlement",
+      "usage": "template_check",
+      "rule_ids": [
+        "settlement_template_seal"
+      ],
+      "file": "assets/templates/template-reference-poster_material-settlement.jpg",
+      "sha256": "5b75c8a175dfc41769b8680a21c1749f7019e45e62ed6f57c8160e3ea562c1cf",
+      "source_member": "核销-新吴区12月物料制作结算单.jpg",
+      "source_sha256": "5b75c8a175dfc41769b8680a21c1749f7019e45e62ed6f57c8160e3ea562c1cf",
+      "source_pages": [],
+      "preview_images": [
+        {
+          "file": "assets/templates/template-reference-poster_material-settlement.jpg",
+          "sha256": "5b75c8a175dfc41769b8680a21c1749f7019e45e62ed6f57c8160e3ea562c1cf",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "id": "template-reference-poster_material-receipt",
+      "title": "收据（原文件名写发票）",
+      "role": "purchase_receipt",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/receipt.jpg",
+      "sha256": "bc3684d1a1e4e05e901fc1847ca9e4e4eb44b08f448edd6adaa6e9bbec6957d3",
+      "source_member": "核销-新吴区12月物料制作发票.jpg",
+      "source_sha256": "bc3684d1a1e4e05e901fc1847ca9e4e4eb44b08f448edd6adaa6e9bbec6957d3",
+      "source_pages": [],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-poster_material-sales-list",
+      "title": "销售清单（附带样张）",
+      "role": "sales_record",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-list.jpg",
+      "sha256": "2819796ac9b78c822b630241a35ea98ae43fa17b767f1ebf6886a7a258c18164",
+      "source_member": "核销-新吴区12月pos.jpg",
+      "source_sha256": "2819796ac9b78c822b630241a35ea98ae43fa17b767f1ebf6886a7a258c18164",
+      "source_pages": [],
+      "preview_images": []
+    }
+  ],
+  "unselected_members": [
+    "核销-新吴区物料制作返图.zip"
+  ]
+}

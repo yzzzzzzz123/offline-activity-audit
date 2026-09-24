@@ -4,8 +4,8 @@
   "skill_name": "audit-self-procured-gift-material",
   "display_name": "外采赠品",
   "scope": "外采赠品，包含客户自采赠品物料",
-  "policy_version": "2026-09-18.pdf.3",
-  "classification_policy": "material_content",
+  "policy_version": "2026-09-23.pdf.33",
+  "classification_policy": "biz_type",
   "label": "外采赠品",
   "materials": [
     {
@@ -20,7 +20,12 @@
     },
     {
       "id": "pos",
-      "text": "经销商盖章 POS 数据",
+      "text": "经销商盖章 POS 数据（客户公章或财务章的盖章版，与Excel版完整内容一致）",
+      "when": "always"
+    },
+    {
+      "id": "pos_excel",
+      "text": "POS 明细 Excel 版（与盖章版成套提供，完整内容一致）",
       "when": "always"
     },
     {
@@ -46,116 +51,68 @@
   ],
   "audit_points": [
     {
-      "id": "submission_deadline",
-      "text": "核销自活动结束日起3个月内提交，超期不再核销。月份按日历月；必须有真实活动结束与提交日期，不能拿文件名或分析日期代替。进场费按原文“无时间要求”不作活动时限拒付，仍检查水印日期是否存在。",
-      "effect": "reject",
-      "when": "activity_deadline",
-      "numeric": false
-    },
-    {
-      "id": "review_deadline",
-      "text": "财务一审已超2个月且资料有误或缺失，不再补，直接0核销；只有同时具备时间和错误/缺失证据才触发。起算事件不清不能猜测。",
-      "effect": "zero",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "scene_authenticity",
-      "text": "确保费用场景真实；张冠李戴不予核销，额度不返还。仅有模糊或读不清不能认定张冠李戴。",
-      "effect": "reject",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "fraud",
-      "text": "有充分证据确认核销造假时0核销并记录罚款要求（先费用池后经销商额度）；不推测造假，不执行罚款、扣款或通知。",
-      "effect": "zero",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "bi_quota",
-      "text": "BI额度不足不允许先做活动后补申请；以业务发生时的额度与申请、活动时间证据判断，不能用当前余额代替。",
-      "effect": "reject",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "settlement_template_seal",
-      "text": "结算单须为公司统一模板并由客户盖章。",
+      "id": "gift_rule_present",
+      "text": "核销时未备注赠送规则，按缺资料处理。",
       "effect": "missing_material",
       "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "contract_signed",
-      "text": "促销合同已签章。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
+      "numeric": false,
+      "source": "PDF第1页·外采赠品·审核要点1"
     },
     {
       "id": "pos_fields",
-      "text": "POS必含5+2：活动时间、SKU/69码、商品名称、销售数量、销售单价、销售金额、销售金额及数量合计；缺项即不完整。",
+      "text": "以POS Excel版为准，只检查5+2项：活动时间、商品SKU/编码（69码）、商品名称、销售数量、销售单价、销售金额及销售金额和数量合计，缺项即不完整。额外产品编码及其他列不审核。",
       "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": false
-    },
-    {
-      "id": "pos_seal",
-      "text": "要求提交的POS数据有经销商盖章。",
-      "effect": "missing_material",
-      "when": "required_pos",
-      "numeric": false
+      "numeric": false,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
     },
     {
       "id": "pos_arithmetic",
-      "text": "销售金额=数量×销售单价，并核对销售金额、数量合计。",
+      "text": "用户2026-09-22确认：POS列示销售金额须大于等于数量×销售单价，列示金额合计须大于等于对应明细金额之和；数量合计仍须相等。逐字引用原始数值，由程序按十进制原精度复算，不用舍入或容差掩盖不足。",
       "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": true
+      "numeric": true,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
     },
     {
-      "id": "application_quantity_price",
-      "text": "数量、单价与申请不符或填错，直接0核销。必须区分销售单价与奖励/补差单价，不把实际销量低于计划自行解释为填错；比较口径不清记无法核验。",
-      "effect": "zero",
+      "id": "pos_product_identity",
+      "text": "以POS Excel中的商品名称加69码查询商品库，名称允许模糊匹配且须唯一对应，69码须准确一致。额外产品编码即使与我方库不一致也不审核、不报错、不参与定位。缺失字段不从库内或盖章版补写；库内没有对应商品时说明‘库内无参考商品’并保留商品名称或69码。",
+      "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": true
-    },
-    {
-      "id": "invoice_details",
-      "text": "发票或收据抬头为公司名称，包含明细、金额、开票时间。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "gift_rule_present",
-      "text": "核销时备注清楚活动赠送规则，未备注为缺资料。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
+      "numeric": false,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
     },
     {
       "id": "gift_rule_quantity",
-      "text": "按照赠送规则核验赠送赠品数量；按单或累计等计数口径必须来自实际规则，不能自行设置。",
+      "text": "按品牌方本次合同的赠送规则及数量约定核对经销商申报的赠品数量；不能自定公式，也不能把发票采购数当作实际赠出数。用户2026-09-22确认：外采赠品数量核对以品牌方本次促销合同约定的赠送规则和数量为准。合同直接约定本次赠品数量时引用该约定；按销量计算时，实际销量来自本次POS，购买门槛、赠送比例及计算范围和单位来自合同。结算单中的赠品数量仅为经销商申报数，经销商备注的赠送规则不能替代或覆盖合同标准；发票采购数也不等于实际赠出数。合同的约定数量不能写成已实际赠出数量；缺少可核对的申报或执行数量时说明具体依据缺口，不新增发放记录作为必交项。逐笔或汇总、是否取整等算法按本次合同实际写明的规则执行，合同未说明且会影响结果时记无法核验，不自定统一公式。",
       "effect": "missing_material",
       "when": "always",
-      "numeric": true
+      "numeric": true,
+      "source": "PDF第1页·外采赠品·审核要点2"
     },
     {
       "id": "gift_finished_photos",
-      "text": "按门店提供全量成品水印照片，包含外采赠品。",
+      "text": "按门店提供全量成品水印照片，包含外采赠品；缺少按缺资料处理。不从资料栏另加促销内容、客户自采物料或活动期间检查。用户2026-09-21确认：搭赠、补差、外采赠品已有照片审核中的水印，均须包含拍摄时间和门店地址，缺一即不完整。具体指出哪份照片缺哪项；看不清时说明无法确认，不把已交照片说成未交。补差的满减证明采用现场照片时同样适用；采用小票等其他证明时不套用照片水印要求，线上小象超市截图的既有例外保留。本次只明确水印的组成，不新增日期范围、地址一致性、定位距离或固定水印样式的检查，也不另立外采赠品门店现场照片的独立审核项，不扩展KT或条码费的水印要求；人员临促照片按用户2026-09-22单独确认执行。",
       "effect": "missing_material",
       "when": "always",
-      "numeric": false
+      "numeric": false,
+      "source": "PDF第1页·外采赠品·审核要点3"
     },
     {
-      "id": "gift_all_store_photos",
-      "text": "活动期间所有门店现场水印照片清晰展示促销内容和客户自采物料。",
+      "id": "settlement_seal",
+      "text": "结算单未由客户盖章，按缺资料处理；本类审核栏未要求统一模板，不检查模板。用户2026-09-21确认：审核要点要求盖章或签章但未限定章的种类时，默认有盖章即可，不额外要求必须是公章、财务专用章或合同专用章；后续业务明确调整时再修改。已能确认盖章时，不因无法区分章的种类认定不合格或无法核验；盖章本身看不清时说明具体情况。原文明写的客户盖章、双方盖章仍按原要求核对，不能把双方盖章改为任意一方盖章。本口径仅解释已有签章审核，不新增其他类型的印章检查，不因缺章把已交文件说成未交。",
       "effect": "missing_material",
       "when": "always",
-      "numeric": false
+      "numeric": false,
+      "source": "PDF第1页·外采赠品·审核要点4"
+    },
+    {
+      "id": "contract_signed",
+      "text": "促销合同未签章，按缺资料处理。用户2026-09-21确认：审核要点要求盖章或签章但未限定章的种类时，默认有盖章即可，不额外要求必须是公章、财务专用章或合同专用章；后续业务明确调整时再修改。已能确认盖章时，不因无法区分章的种类认定不合格或无法核验；盖章本身看不清时说明具体情况。原文明写的客户盖章、双方盖章仍按原要求核对，不能把双方盖章改为任意一方盖章。本口径仅解释已有签章审核，不新增其他类型的印章检查，不因缺章把已交文件说成未交。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "PDF第1页·外采赠品·审核要点4"
     }
   ]
 }

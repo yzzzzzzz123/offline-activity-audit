@@ -144,6 +144,7 @@ def refresh_completed_worktree_archives(
     root_html: Path | None = None,
     backup_dir: Path | None = None,
     apply: bool = False,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Prepare the whole refresh before backing up and writing any worktree."""
     root = Path(worktrees_root).absolute()
@@ -153,6 +154,10 @@ def refresh_completed_worktree_archives(
     root, template = root.resolve(), template.resolve()
     if not root.is_dir():
         raise AuditError(f"worktrees 目录不存在：{root}")
+    if workspace_id is not None and (
+        WORKSPACE_ID_PATTERN.fullmatch(workspace_id) is None or not (root / workspace_id).is_dir()
+    ):
+        raise AuditError("指定的 worktree 不存在或名称不安全")
     if not template.is_file():
         raise AuditError(f"固定工作台不存在：{template}")
     backup = Path(backup_dir).absolute() if backup_dir is not None else None
@@ -172,6 +177,8 @@ def refresh_completed_worktree_archives(
 
     prepared, skipped = [], []
     for workspace in sorted(root.iterdir(), key=lambda path: path.name):
+        if workspace_id is not None and workspace.name != workspace_id:
+            continue
         if workspace.name.startswith("."):
             continue
         _assert_plain_path(workspace)

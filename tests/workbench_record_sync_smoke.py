@@ -92,8 +92,8 @@ def main() -> None:
                 page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
                 page.goto(base)
                 config = page.request.get(base + "/api/config").json()
-                assert config["api_version"] == "1.40" and config["system_version"] == "2.11.27"
-                assert config["material_problem_policy"] == "analyze_and_report"
+                assert config["api_version"] == "1.51" and config["system_version"] == "2.16.0"
+                assert config["material_problem_policy"] == "require_exact_material_items_before_audit"
                 expect(page.locator("#as-nav-overview")).to_have_text("107")
 
                 def counts(expected: int) -> None:
@@ -115,9 +115,9 @@ def main() -> None:
                 counts(107)
                 assert page.locator("[data-as-view]").count() == 2
                 assert page.locator("#as-tab-ledger, #as-view-ledger, #as-recent-list").count() == 0
-                expect(page.get_by_role("heading", name="运行中的记录", exact=True)).to_be_visible()
+                expect(page.get_by_role("heading", name="正在核销的记录", exact=True)).to_be_visible()
                 active = page.locator(f'[data-active-run="{stores[105].workspace.name}"]')
-                expect(active).to_contain_text("input 导入")
+                expect(active).to_contain_text("本地导入")
                 expect(page.locator("#as-intake-count")).to_have_text("1")
                 assert len(ids("overview")) == 100
                 page.locator('[data-as-load-more="overview"]').click()
@@ -129,10 +129,10 @@ def main() -> None:
                 assert ledger_ids == [run["workspace_id"] for run in catalog.list_runs()]
                 assert len(ledger_ids) == 107
                 expect(page.locator(f'[data-as-delete="{stores[105].workspace.name}"]')).to_be_disabled()
-                expect(page.locator(f'[data-run-card="{stores[104].workspace.name}"]')).to_contain_text("OSS 上传")
+                expect(page.locator(f'[data-run-card="{stores[104].workspace.name}"]')).to_contain_text("系统上传")
                 expect(page.locator('.as-run-main small').first).to_have_text("2026-09-10")
                 expect(page.locator('.as-run-main h3').first).to_have_text("HX202606040013-核销资料-诚成26年4月【堆头20家】")
-                expect(page.locator('.as-model-tag').first).to_have_text("gpt6astra_ultra")
+                expect(page.locator('.as-model-tag').first).to_have_text("审核工具：gpt6astra_ultra")
                 select("archive")
                 assert ids("archive") == ledger_ids and not ids("overview")
                 colors = {}
@@ -158,7 +158,7 @@ def main() -> None:
                 expect(page.locator("#as-archive-date-to")).to_have_attribute("aria-invalid", "true")
                 expect(page.locator("#as-archive-filter-note")).to_contain_text("结束日期不能早于开始日期")
                 page.locator("#as-archive-date-to").fill("2026-09-10")
-                expect(page.locator("#as-archive-count")).to_have_text("105 / 107 条运行记录")
+                expect(page.locator("#as-archive-count")).to_have_text("105 / 107 条核销记录")
                 assert len(ids("archive")) == 100  # Filter changes reset the shared window.
                 page.locator("#as-archive-source").select_option("input-oss")
                 assert ids("archive") == [stores[104].workspace.name]
@@ -212,13 +212,13 @@ def main() -> None:
                 expect(page.locator('#as-intake-list')).to_have_text("", timeout=20000)
                 counts(107)
                 select("overview")
-                expect(page.locator("#as-ledger-count")).to_have_text("107 / 107 条运行记录")
+                expect(page.locator("#as-ledger-count")).to_have_text("107 / 107 条核销记录")
                 create(107, oss=True)
                 expect(page.locator("#as-nav-overview")).to_have_text("108", timeout=20000)
-                expect(page.locator("#as-intake-list")).to_contain_text("OSS 上传")
-                expect(page.locator("#as-ledger-count")).to_have_text("108 / 108 条运行记录")
+                expect(page.locator("#as-intake-list")).to_contain_text("系统上传")
+                expect(page.locator("#as-ledger-count")).to_have_text("108 / 108 条核销记录")
                 stores[107].fail(RuntimeError("transition from running to failed"))
-                expect(page.locator("#as-ledger-count")).to_have_text("108 / 108 条运行记录", timeout=20000)
+                expect(page.locator("#as-ledger-count")).to_have_text("108 / 108 条核销记录", timeout=20000)
                 expect(page.locator('#as-intake-panel')).to_be_hidden()
                 select("archive")
                 page.locator('[data-as-load-more="archive"]').click()
@@ -261,8 +261,13 @@ def main() -> None:
                     if index == 106:
                         select("overview")
                         page.locator('[data-as-open]').click()
+                        expect(page.get_by_role("heading", name="核销未完成", exact=True)).to_be_visible()
+                        expect(page.locator(".as-failure")).to_have_text("系统处理没有完成，暂时不能提供完整核销结果。")
+                        assert "isolated failure fixture" not in page.locator("body").inner_text()
+                        assert "RUN RECORD" not in page.locator("body").inner_text()
                         page.locator("#as-record-technical").click()
                         expect(page.locator("#as-tech-panel-summary .as-status.failed")).to_be_visible()
+                        expect(page.locator("#as-tech-panel-summary")).to_contain_text("isolated failure fixture")
                 context.close()
                 browser.close()
         finally:
@@ -273,7 +278,7 @@ def main() -> None:
     assert not errors, errors
     assert not server_errors, server_errors
     report = {
-        "status": "passed", "system_version": "2.11.27", "api_version": "1.40",
+        "status": "passed", "system_version": "2.16.0", "api_version": "1.51",
         "checks": ["all worktrees in ledger/archive with identical order/filters/pagination", "overview contains the complete ledger and its actions",
                    "active input and OSS records with source tags", "creation changes total; completion keeps total and updates status", "failure preserves the run in the overview ledger",
                    "shared date/source/scenario filters and clear action", "inclusive Shanghai dates and creation fallback", "invalid date range", "combined filters and multiple scenarios", "legacy and explicit OSS source", "filter persistence after opening a record", "pagination beyond 100", "inactive DOM released", "manual review/automatic refresh/delete synchronized",

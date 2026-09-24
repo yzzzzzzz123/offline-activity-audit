@@ -4,10 +4,20 @@
   "skill_name": "audit-poster-material",
   "display_name": "KT板等物料制作",
   "scope": "海报制作、张贴、宣传单页、展示道具",
-  "policy_version": "2026-09-18.pdf.3",
-  "classification_policy": "material_content",
+  "policy_version": "2026-09-23.pdf.33",
+  "classification_policy": "biz_type",
   "label": "KT板等物料制作",
   "materials": [
+    {
+      "id": "pos",
+      "text": "经销商盖章 POS 数据（客户公章或财务章的盖章版，与Excel版完整内容一致）；实际涉及POS时提供",
+      "when": "uses_pos"
+    },
+    {
+      "id": "pos_excel",
+      "text": "POS 明细 Excel 版（与盖章版成套提供，完整内容一致）；实际涉及POS时提供",
+      "when": "uses_pos"
+    },
     {
       "id": "invoice",
       "text": "发票或收据，抬头为公司名称，含明细、金额、开票时间",
@@ -31,95 +41,52 @@
   ],
   "audit_points": [
     {
-      "id": "submission_deadline",
-      "text": "核销自活动结束日起3个月内提交，超期不再核销。月份按日历月；必须有真实活动结束与提交日期，不能拿文件名或分析日期代替。进场费按原文“无时间要求”不作活动时限拒付，仍检查水印日期是否存在。",
-      "effect": "reject",
-      "when": "activity_deadline",
-      "numeric": false
-    },
-    {
-      "id": "review_deadline",
-      "text": "财务一审已超2个月且资料有误或缺失，不再补，直接0核销；只有同时具备时间和错误/缺失证据才触发。起算事件不清不能猜测。",
-      "effect": "zero",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "scene_authenticity",
-      "text": "确保费用场景真实；张冠李戴不予核销，额度不返还。仅有模糊或读不清不能认定张冠李戴。",
-      "effect": "reject",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "fraud",
-      "text": "有充分证据确认核销造假时0核销并记录罚款要求（先费用池后经销商额度）；不推测造假，不执行罚款、扣款或通知。",
-      "effect": "zero",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "bi_quota",
-      "text": "BI额度不足不允许先做活动后补申请；以业务发生时的额度与申请、活动时间证据判断，不能用当前余额代替。",
-      "effect": "reject",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "settlement_template_seal",
-      "text": "结算单须为公司统一模板并由客户盖章。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "contract_signed",
-      "text": "促销合同已签章。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "invoice_details",
-      "text": "发票/收据抬头为经销商公司，包含明细、金额和开票时间。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "finished_photo",
-      "text": "有成品水印照片（地址+拍摄时间），展示尺寸、内容、展示位置；无成品照为缺资料。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
-    },
-    {
       "id": "pos_fields",
-      "text": "POS必含5+2：活动时间、SKU/69码、商品名称、销售数量、销售单价、销售金额、销售金额及数量合计；缺项即不完整。",
+      "text": "以POS Excel版为准，只检查5+2项：活动时间、商品SKU/编码（69码）、商品名称、销售数量、销售单价、销售金额及销售金额和数量合计，缺项即不完整。额外产品编码及其他列不审核。",
       "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": false
-    },
-    {
-      "id": "pos_seal",
-      "text": "要求提交的POS数据有经销商盖章。",
-      "effect": "missing_material",
-      "when": "required_pos",
-      "numeric": false
+      "numeric": false,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
     },
     {
       "id": "pos_arithmetic",
-      "text": "销售金额=数量×销售单价，并核对销售金额、数量合计。",
+      "text": "用户2026-09-22确认：POS列示销售金额须大于等于数量×销售单价，列示金额合计须大于等于对应明细金额之和；数量合计仍须相等。逐字引用原始数值，由程序按十进制原精度复算，不用舍入或容差掩盖不足。",
       "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": true
+      "numeric": true,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
     },
     {
-      "id": "application_quantity_price",
-      "text": "数量、单价与申请不符或填错，直接0核销。必须区分销售单价与奖励/补差单价，不把实际销量低于计划自行解释为填错；比较口径不清记无法核验。",
-      "effect": "zero",
+      "id": "pos_product_identity",
+      "text": "以POS Excel中的商品名称加69码查询商品库，名称允许模糊匹配且须唯一对应，69码须准确一致。额外产品编码即使与我方库不一致也不审核、不报错、不参与定位。缺失字段不从库内或盖章版补写；库内没有对应商品时说明‘库内无参考商品’并保留商品名称或69码。",
+      "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": true
+      "numeric": false,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
+    },
+    {
+      "id": "invoice_details",
+      "text": "发票/收据抬头为经销商公司，并有金额和开票时间；制作明细可结合本次合同、结算单确认，联合核对后仍缺少时具体说明。用户2026-09-23确认：KT板等物料制作的发票或收据明细允许结合本次合同、结算单认定齐全。票据只写‘物料制作’和总金额，而本次合同、结算单已能确认对应的具体制作项目时，不得仅因票据未逐项列出而报缺少明细，也不要求另补一份票据明细附件。先读取票据原文，再联合读取能对应本次制作业务的合同、结算单；保留各文件实际记载的事实，不能把合同或结算单内容写成票据原文，source_ids须包含本次票据及实际用于补充明细的来源。联合读取后确实没有明细时说明具体缺项；内容看不清、冲突或不能确认对应关系时说明具体无法确认之处，不猜测齐全。本项仅解释KT物料已有票据明细检查，不免除发票或收据资料及其抬头、金额、开票时间检查，不新增制作数量、单价、金额比较或固定明细字段，也不扩展外采赠品等其他类型的票据审核。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "PDF第1页·KT板等物料制作·审核要点1及用户2026-09-23确认的合同、结算单补充明细口径"
+    },
+    {
+      "id": "finished_photo",
+      "text": "未提供成品照片，按缺资料处理；本条仅检查成品照片是否提供，不从资料栏扩出水印、尺寸、内容或展示位置审核。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "PDF第1页·KT板等物料制作·审核要点2"
+    },
+    {
+      "id": "settlement_template_seal",
+      "text": "结算单非公司统一模板或未由客户盖章，按缺资料处理；仅本类审核栏明确要求时执行。用户2026-09-21确认：陈列堆头、KT板等物料制作的结算单及条码费的产品推广协议必须使用公司指定模板。用户2026-09-22已明确指定input根目录八个ZIP内的相应样张作为模板参考，已分别提取并写入各自Skill的references/template-reference.md，不再等待另交公司空白范本。陈列使用合同PDF原第2页结算单，KT使用独立结算单，条码费使用四页产品推广协议（原件2026V2）。须对照指定参考核对固定版式、栏目及条款；客户自行调整排版或栏目位置，即使栏目和内容齐全也不符合要求，不能以信息齐全代替使用规定模板。正常填写的主体、业务数值、商品和门店不要求与样张相同；扫描角度、缩放或旋转不是擅改模板。模板只提供版式参考，样本金额、门店、日期和签章不证明本次业务，不进入本次来源或数值比较；不能把其他未指定历史文件自行当标准。指定参考无法读取、看不清或无法确认适用版本时，模板是否符合要求记无法核验，说明具体对照缺口，不能猜测通过或认定客户用错模板，也不能算成客户缺交资料或要求客户每单另交空白模板。只解释这三类审核栏已有的模板要求，不扩展其他类型，也不改变原有盖章检查。用户2026-09-21确认：审核要点要求盖章或签章但未限定章的种类时，默认有盖章即可，不额外要求必须是公章、财务专用章或合同专用章；后续业务明确调整时再修改。已能确认盖章时，不因无法区分章的种类认定不合格或无法核验；盖章本身看不清时说明具体情况。原文明写的客户盖章、双方盖章仍按原要求核对，不能把双方盖章改为任意一方盖章。本口径仅解释已有签章审核，不新增其他类型的印章检查，不因缺章把已交文件说成未交。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "PDF第1页·KT板等物料制作·审核要点3"
     }
   ]
 }

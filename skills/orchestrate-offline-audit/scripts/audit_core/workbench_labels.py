@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any
@@ -9,11 +10,27 @@ from typing import Any
 
 def source_archive_names(cases: dict[str, Any]) -> list[str]:
     names = []
+    sources: set[tuple[str, str]] = set()
     for case in cases.values():
         if isinstance(case, dict) and case.get("source_archive"):
-            name = PurePosixPath(str(case["source_archive"]).replace("\\", "/")).name
-            if name and name not in names:
+            source = str(case["source_archive"]).replace("\\", "/")
+            name = PurePosixPath(source).name
+            identity = ("id", str(case["archive_id"])) if case.get("archive_id") else ("path", source)
+            if name and identity not in sources:
+                sources.add(identity)
                 names.append(name)
+    return names
+
+
+def merge_archive_names(existing: list[str], incoming: list[str]) -> list[str]:
+    """Merge event projections without collapsing separate same-named inputs."""
+    names = list(existing)
+    remaining = Counter(existing)
+    for name in incoming:
+        if remaining[name]:
+            remaining[name] -= 1
+        else:
+            names.append(name)
     return names
 
 

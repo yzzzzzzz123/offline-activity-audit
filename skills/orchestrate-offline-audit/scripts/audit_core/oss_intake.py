@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .paths import PROJECT_ROOT
+from .paths import INPUT_ROOT, PROJECT_ROOT
 
 import errno
 import hashlib
@@ -27,7 +27,9 @@ from typing import Any, Callable
 from urllib.parse import quote, unquote, urljoin, urlparse
 from zoneinfo import ZoneInfo
 
-from .common import AuditError
+from .common import AuditError, BIZ_TYPE_FAILURE_MESSAGE, BIZ_TYPE_NOT_REQUIRED_MESSAGE, biz_type_skip_result
+from .scenario_registry import scenario_for_biz_type
+from .customer_language import SYSTEM_FAILURE_MESSAGE
 from .codex_runner import DEFAULT_MODEL, DEFAULT_REASONING_EFFORT
 from .orchestrator import (
     SCENARIO_ORDER,
@@ -37,10 +39,10 @@ from .orchestrator import (
 )
 from .workbench_store import (
     ANALYSIS_SUMMARY_FILENAME,
-    CLASSIFICATION_FAILURE_MESSAGE,
     atomic_write_json,
     read_json_file,
     render_analysis_summary_markdown,
+    project_run_status,
     utc_now,
 )
 from .workbench_delete import RunDeletionConflict, prepare_intake_job_deletion
@@ -49,7 +51,7 @@ from .workbench_delete import RunDeletionConflict, prepare_intake_job_deletion
 FORMAL_RUNNER = (
     PROJECT_ROOT / "skills" / "orchestrate-offline-audit" / "scripts" / "run.py"
 )
-DEFAULT_OSS_INPUT_ROOT = PROJECT_ROOT / "input-oss"
+DEFAULT_OSS_INPUT_ROOT = INPUT_ROOT
 DEFAULT_MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024
 DEFAULT_DOWNLOAD_TIMEOUT_SECONDS = 60
 DEFAULT_CALLBACK_TIMEOUT_SECONDS = 30
@@ -374,6 +376,14 @@ def _normalize_compact_submission(
     if not 1 <= analyze_id <= 9_223_372_036_854_775_807:
         raise OSSIntakeRequestError("analyzeId 必须是 64 位正整数")
 
+    biz_type = payload.get("bizType")
+    if biz_type is not None and not isinstance(biz_type, str):
+        raise OSSIntakeRequestError("bizType 必须是字符串或 null")
+
+    large_venue_fee = payload.get("largeVenueFee")
+    if "largeVenueFee" in payload and not isinstance(large_venue_fee, bool):
+        raise OSSIntakeRequestError("largeVenueFee 必须是布尔值 true 或 false")
+
     raw_download_url = payload.get("downloadUrl")
     if not isinstance(raw_download_url, str):
         raise OSSIntakeRequestError("downloadUrl 必须是字符串")
@@ -409,6 +419,9 @@ def _normalize_compact_submission(
         "event_id": event_id,
         "verify_code": verify_code,
         "analyze_id": analyze_id,
+        # Keep the historical object fingerprint; this value selects the Skill.
+        "biz_type": biz_type,
+        "large_venue_fee": large_venue_fee,
         "bucket": host,
         "object_key": object_key,
         "basename": basename,
@@ -751,6 +764,8 @@ def run_formal_audit_subprocess(
     scenario: str | None,
     workbench_url: str | None,
     cancel_event: threading.Event | None = None,
+    biz_type: str | None = None,
+    large_venue_fee: bool | None = None,
 ) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(
         prefix="offline-audit-oss-result-"
@@ -779,6 +794,10 @@ def run_formal_audit_subprocess(
         ]
         if scenario:
             command.extend(["--scenario", scenario])
+        if biz_type is not None:
+            command.append("--biz-type=" + biz_type)
+        if large_venue_fee is not None:
+            command.append("--large-venue-fee=" + json.dumps(large_venue_fee))
         if workbench_url:
             command.extend(["--workbench-url", workbench_url])
         environment = os.environ.copy()
@@ -848,18 +867,28 @@ def run_formal_audit_subprocess(
             and isinstance(result.get("failure"), dict)
             and result["failure"].get("code") == "classification_failed"
         )
-        if returncode != 0 and not (returncode == 2 and classification_failed):
+        biz_type_failed = bool(
+            isinstance(result, dict) and result.get("status") == "failed"
+            and isinstance(result.get("failure"), dict)
+            and result["failure"].get("code") == "biz_type_unrecognized"
+        )
+        if returncode != 0 and not (returncode == 2 and (classification_failed or biz_type_failed)):
             detail = output.strip()[-2000:]
             raise OSSIntakeExecutionError(
                 "正式核销运行失败" + (f"：{detail}" if detail else "")
             )
         if result is None:
             raise OSSIntakeExecutionError("正式核销运行未返回结果收据")
-        if (str(result.get("status")) != "completed" and not classification_failed) or not result.get(
+        if (result.get("status") == "completed" and result.get("audit_required") is False
+                and result.get("reason_code") == "biz_type_not_required"
+                and isinstance(biz_type, str) and biz_type.strip()
+                and scenario_for_biz_type(biz_type) is None):
+            return result
+        if (str(result.get("status")) != "completed" and not classification_failed and not biz_type_failed) or not result.get(
             "workspace_id"
         ):
             raise OSSIntakeExecutionError("正式核销运行返回的结果收据无效")
-        return result
+        return project_run_status(result)
 
 
 def _terminate_formal_process(process: subprocess.Popen[str]) -> None:
@@ -881,6 +910,16 @@ def _terminate_formal_process(process: subprocess.Popen[str]) -> None:
 
 
 def build_callback_result(result: dict[str, Any]) -> str:
+    if (result.get("status") == "completed" and result.get("audit_required") is False
+            and result.get("reason_code") == "biz_type_not_required"):
+        return BIZ_TYPE_NOT_REQUIRED_MESSAGE
+    failure = result.get("failure") or {}
+    if result.get("status") == "failed" and failure.get("code") in {"biz_type_unrecognized", "plan_type_unrecognized"}:
+        return BIZ_TYPE_FAILURE_MESSAGE
+    if result.get("status") == "failed" and failure.get("code") != "classification_failed":
+        if not str(failure.get("message") or "").strip():
+            raise OSSIntakeExecutionError("核销失败结果缺少具体原因")
+        return SYSTEM_FAILURE_MESSAGE
     summary_value = str(result.get("analysis_summary") or "").strip()
     worktree_value = str(result.get("worktree") or "").strip()
     if summary_value and worktree_value:
@@ -912,11 +951,7 @@ def build_callback_result(result: dict[str, Any]) -> str:
     scenarios = [str(value) for value in result.get("scenarios") or []]
     if result.get("status") == "failed" and not view_payload.get("sheets"):
         if (result.get("failure") or {}).get("code") == "classification_failed":
-            return CLASSIFICATION_FAILURE_MESSAGE
-        message = str((result.get("failure") or {}).get("message") or "").strip()
-        if not message:
-            raise OSSIntakeExecutionError("核销失败结果缺少具体原因")
-        return _bounded_callback_result("## 核销失败\n\n" + message)
+            return "具体资料问题未记录，请人工核对。"
     callback_result = render_analysis_summary_markdown(
         view_payload,
         {
@@ -930,7 +965,7 @@ def build_callback_result(result: dict[str, Any]) -> str:
 def _bounded_callback_result(value: str) -> str:
     if len(value) <= MAX_CALLBACK_RESULT_CHARS:
         return value
-    suffix = "\n\n> 回调内容已截断；完整小结已保存在本地运行档案。"
+    suffix = "\n\n> 问题较多，这里只显示部分。完整问题请在核销记录中查看。"
     return value[: MAX_CALLBACK_RESULT_CHARS - len(suffix)].rstrip() + suffix
 
 
@@ -1097,6 +1132,11 @@ class OSSIntakeStore:
                         f"{identity}已用于另一个 OSS 对象"
                     )
                 if str(existing.get("status")) not in TERMINAL_JOB_STATUSES:
+                    existing_biz_type = existing.get("bizType", existing.get("planType"))
+                    if submission.get("contract") == "oss_ai_v1" and (existing_biz_type or "") != (submission.get("biz_type") or ""):
+                        raise OSSIntakeConflictError("活动任务的bizType不能更改，请等待本次处理结束后重新提交")
+                    if existing.get("largeVenueFee") is not submission.get("large_venue_fee"):
+                        raise OSSIntakeConflictError("活动任务的largeVenueFee不能更改，请等待本次处理结束后重新提交")
                     return existing, False
                 attempt = max(int(item.get("attempt") or 1) for item in identity_jobs) + 1
                 supersedes_job_id = str(existing["job_id"])
@@ -1118,7 +1158,7 @@ class OSSIntakeStore:
             now = utc_now()
             callback_required = bool(submission.get("callback_required"))
             job = {
-                "schema_version": "1.4",
+                "schema_version": "1.7",
                 "job_id": job_id,
                 "identity_job_id": identity_job_id,
                 "attempt": attempt,
@@ -1126,6 +1166,8 @@ class OSSIntakeStore:
                 "event_id": submission["event_id"],
                 "verifyCode": submission.get("verify_code"),
                 "analyzeId": submission.get("analyze_id"),
+                "bizType": submission.get("biz_type"),
+                "largeVenueFee": submission.get("large_venue_fee"),
                 "idempotency_fingerprint": submission["fingerprint"],
                 "status": "accepted",
                 "created_at": now,
@@ -1411,6 +1453,26 @@ class OSSIntakeService:
 
     def _download(self, submission: dict[str, Any], control: _JobControl) -> None:
         job_id = str(submission["job_id"])
+        biz_type = submission.get("biz_type")
+        if submission.get("contract") == "oss_ai_v1" and scenario_for_biz_type(biz_type) is None:
+            # Empty input fails; other non-matching values complete without AI.
+            # Neither case downloads materials or creates a formal worktree.
+            submission.pop("download_url", None)
+            if not (biz_type or "").strip():
+                failure = {"code": "biz_type_unrecognized", "message": BIZ_TYPE_FAILURE_MESSAGE}
+                result = {"run_id": submission["run_id"], "status": "failed", "failure": failure}
+            else:
+                failure = None
+                result = biz_type_skip_result(submission["run_id"], biz_type)
+            try:
+                self._raise_if_cancelled(control)
+                self.store.update(job_id, started_at=utc_now())
+                self._finish_job(submission, control, result, failure=failure)
+            except OSSIntakeCancelledError:
+                pass
+            except BaseException as exc:
+                self._fail_job(submission, exc)
+            return
         self.store.update(
             job_id,
             status="downloading",
@@ -1501,66 +1563,75 @@ class OSSIntakeService:
                 input_dir=input_dir,
                 worktrees_root=self.worktrees_root,
                 scenario=submission.get("scenario"),
+                biz_type=submission.get("biz_type"),
+                large_venue_fee=submission.get("large_venue_fee"),
                 workbench_url=self.config.workbench_url,
                 cancel_event=control.cancel_event,
             )
             self._raise_if_cancelled(control)
-            classification_failed = (
-                result.get("status") == "failed"
-                and (result.get("failure") or {}).get("code") == "classification_failed"
-            )
-            if result.get("status") != "completed" and not classification_failed:
+            result = project_run_status(result)
+            biz_type_failed = (result.get("status") == "failed"
+                                and (result.get("failure") or {}).get("code") == "biz_type_unrecognized")
+            if result.get("status") != "completed" and not biz_type_failed:
                 raise OSSIntakeExecutionError("正式核销运行返回的结果收据无效")
-            callback: dict[str, Any]
-            if submission.get("callback_required"):
-                callback_payload = {
-                    "verifyCode": submission["verify_code"],
-                    "analyzeId": submission["analyze_id"],
-                    "result": build_callback_result(result),
-                }
-                self.store.update(
-                    job_id,
-                    status="callback",
-                    result=result,
-                    failure=result.get("failure") if classification_failed else None,
-                    callback={
-                        "required": True,
-                        "status": "sending",
-                        "attempts": 0,
-                        "http_status": None,
-                        "delivered_at": None,
-                    },
-                )
-                self._raise_if_cancelled(control)
-                callback = self.callback_sender(callback_payload, self.config)
-                self._raise_if_cancelled(control)
-                callback = {
-                    "required": True,
-                    "status": "delivered",
-                    "attempts": int(callback.get("attempts") or 1),
-                    "http_status": int(callback.get("http_status") or 200),
-                    "delivered_at": callback.get("delivered_at") or utc_now(),
-                }
-            else:
-                callback = {
-                    "required": False,
-                    "status": "not_required",
-                    "attempts": 0,
-                    "http_status": None,
-                    "delivered_at": None,
-                }
-            self.store.update(
-                job_id,
-                status="failed" if classification_failed else "completed",
-                result=result,
-                callback=callback,
-                failure=result.get("failure") if classification_failed else None,
-                finished_at=utc_now(),
-            )
+            self._finish_job(submission, control, result,
+                             failure=result["failure"] if biz_type_failed else None)
         except OSSIntakeCancelledError:
             return
         except BaseException as exc:
             self._fail_job(submission, exc)
+
+    def _finish_job(
+        self, submission: dict[str, Any], control: _JobControl,
+        result: dict[str, Any], *, failure: dict[str, Any] | None = None,
+    ) -> None:
+        job_id = str(submission["job_id"])
+        callback: dict[str, Any]
+        if submission.get("callback_required"):
+            callback_payload = {
+                "verifyCode": submission["verify_code"],
+                "analyzeId": submission["analyze_id"],
+                "result": build_callback_result(result),
+            }
+            self.store.update(
+                job_id,
+                status="callback",
+                result=result,
+                failure=failure,
+                callback={
+                    "required": True,
+                    "status": "sending",
+                    "attempts": 0,
+                    "http_status": None,
+                    "delivered_at": None,
+                },
+            )
+            self._raise_if_cancelled(control)
+            callback = self.callback_sender(callback_payload, self.config)
+            self._raise_if_cancelled(control)
+            callback = {
+                "required": True,
+                "status": "delivered",
+                "attempts": int(callback.get("attempts") or 1),
+                "http_status": int(callback.get("http_status") or 200),
+                "delivered_at": callback.get("delivered_at") or utc_now(),
+            }
+        else:
+            callback = {
+                "required": False,
+                "status": "not_required",
+                "attempts": 0,
+                "http_status": None,
+                "delivered_at": None,
+            }
+        self.store.update(
+            job_id,
+            status="failed" if failure else "completed",
+            result=result,
+            callback=callback,
+            failure=failure,
+            finished_at=utc_now(),
+        )
 
     def _fail_job(
         self,
@@ -1646,7 +1717,7 @@ class OSSIntakeService:
         return message[-2000:]
 
 
-def public_job(job: dict[str, Any]) -> dict[str, Any]:
+def public_job(job: dict[str, Any], *, input_root: Path = DEFAULT_OSS_INPUT_ROOT) -> dict[str, Any]:
     """Return the public API projection without internal fingerprints."""
 
     result = {
@@ -1657,4 +1728,19 @@ def public_job(job: dict[str, Any]) -> dict[str, Any]:
     # Project old receipts without rewriting immutable job history.
     if "fileId" in result:
         result.setdefault("analyzeId", result.pop("fileId"))
+    if "planType" in result:
+        result.setdefault("bizType", result.pop("planType"))
+    result.setdefault("bizType", None)
+    result.setdefault("largeVenueFee", None)
+    delivery = result.get("delivery")
+    job_id = str(result.get("job_id") or "")
+    if isinstance(delivery, dict) and JOB_ID_PATTERN.fullmatch(job_id):
+        old_dir = PurePosixPath(str(delivery.get("input_directory") or "").replace("\\", "/"))
+        old_file = PurePosixPath(str(delivery.get("input_file") or "").replace("\\", "/"))
+        if (old_dir.parent.name == "input-oss" and old_dir.name == job_id
+                and old_file.parent == old_dir and old_file.suffix.lower() == ".zip"):
+            directory = input_root.resolve() / job_id
+            migrated = directory / old_file.name
+            if migrated.is_file() and not directory.is_symlink() and not migrated.is_symlink():
+                result["delivery"] = {**delivery, "input_directory": str(directory), "input_file": str(migrated)}
     return result

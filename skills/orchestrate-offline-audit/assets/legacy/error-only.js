@@ -1,4 +1,4 @@
-    (() => {
+(() => {
       const style = document.getElementById('error-only-preview-style');
       document.head.appendChild(style);
       const archiveRecord = document.querySelector('meta[name="offline-audit-delivery-mode"]')?.content === 'static_archive'
@@ -15,7 +15,7 @@
           configurable: true,
         });
       }
-      document.title = '参半渠道活动核销｜核销主工作台｜错误清单';
+      document.title = '参半渠道活动核销｜核销结果';
 
       const escapeHtml = (value) => String(value ?? '')
         .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -513,8 +513,9 @@
           const problem = rowProblem(row, row.values?.[1]);
           const action = actionText(row);
           const issue = sheet.projection_kind === 'material_diagnostic' ? sheet.diagnostic_issues?.[index] : null;
-          const reasonCategory = sheet.projection_kind === 'classification_rejection' || issue?.code === 'scenario_unconfirmed'
-            ? '费用类型' : row.check_category || errorReasonCategory([title, ...(row.values || [])].join(' '));
+          const reasonCategory = sheet.projection_kind === 'classification_rejection'
+            ? (sheet.confirmed_scenario ? '核销资料' : '费用类型')
+            : issue?.code === 'scenario_unconfirmed' ? '费用类型' : row.check_category || errorReasonCategory([title, ...(row.values || [])].join(' '));
           return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [reasonCategory], evidence: row.card_evidence });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards };
@@ -526,7 +527,7 @@
           return { sheet, ...groupedIssueView(sheet, label), label };
         }
         if (sheet.projection_kind === 'material_diagnostic' || sheet.projection_kind === 'classification_rejection') {
-          const label = sheet.audit_type_label || (sheet.projection_kind === 'classification_rejection' ? '核销方式无法确认' : '核销类型待确认');
+          const label = sheet.audit_type_label || (sheet.projection_kind === 'classification_rejection' ? '核销资料问题' : '核销类型待确认');
           return { sheet, ...groupedIssueView(sheet, label), label };
         }
         if (sheet.scenario === 'personnel_incentive') return { sheet, ...personnelView(sheet), label: '人员激励' };
@@ -537,7 +538,7 @@
         if (sheet.scenario === 'giveaway_promotion') return { sheet, ...groupedIssueView(sheet, '额外搭赠'), label: '额外搭赠' };
         if (sheet.scenario === 'price_difference_support') return { sheet, ...groupedIssueView(sheet, '价格补差'), label: '价格补差' };
         if (sheet.scenario === 'pos_target_incentive') return { sheet, ...groupedIssueView(sheet, 'POS达标激励'), label: 'POS达标激励' };
-        if (sheet.scenario === 'entry_fee') return { sheet, ...groupedIssueView(sheet, '进场费'), label: '进场费' };
+        if (sheet.scenario === 'entry_fee') return { sheet, ...groupedIssueView(sheet, '条码费'), label: '条码费' };
         if (sheet.scenario === 'self_procured_gift_material') return { sheet, ...groupedIssueView(sheet, '客户自采赠品物料'), label: '客户自采赠品物料' };
         return { sheet, ...groupedIssueView(sheet, '其他费用'), label: '其他费用' };
       });
@@ -610,12 +611,12 @@
               item.confidence_score,
               [category, item.title, item.subject, item.basis, ...(item.source_files || [])].join(' '),
             );
-            const accessibleLabel = `正确检查项 ${passSequence}；核销类型：${auditType}；检查分类：${category}；${itemTitle}；核验对象：${itemSubject}`;
+            const accessibleLabel = `正确检查项 ${passSequence}；核销类型：${auditType}；检查分类：${category}；${itemTitle}；核对内容：${itemSubject}`;
             return `<article class="eo-pass-card" data-pass-check="${escapeHtml(item.check_id || `pass-${passSequence}`)}" data-pass-category="${escapeHtml(category)}" data-pass-confidence="${confidenceView.level}" data-pass-confidence-score="${confidenceView.scoreText}" aria-label="${escapeHtml(accessibleLabel)}">
-              <div class="eo-pass-index"><span>PASS</span><strong>${String(passSequence).padStart(4, '0')}</strong></div>
+              <div class="eo-pass-index"><span>通过</span><strong>${String(passSequence).padStart(4, '0')}</strong></div>
               <div class="eo-pass-main"><header class="eo-pass-head"><div><small>${escapeHtml(category)}</small><h3>${escapeHtml(itemTitle)}</h3></div></header>
-                <div class="eo-pass-field"><span>核验对象</span><strong>${escapeHtml(itemSubject)}</strong></div>
-                <div class="eo-pass-field"><span>判断依据</span><div>${textBlock(item.basis || '结构化核销结果已确认该检查项通过。')}</div></div>
+                <div class="eo-pass-field"><span>核对内容</span><strong>${escapeHtml(itemSubject)}</strong></div>
+                <div class="eo-pass-field"><span>判断依据</span><div>${textBlock(item.basis || '现有资料符合这一项要求。')}</div></div>
                 ${sourceFiles(item)}
               </div>
             </article>`;
@@ -624,18 +625,18 @@
         }).join('');
         const categorySummary = [...categories.entries()].map(([label, categoryItems]) => `<span data-pass-breakdown-category="${escapeHtml(label)}">${escapeHtml(label)} <b data-pass-breakdown-visible>${categoryItems.length}</b></span>`).join('');
         return `<section class="eo-pass-group" data-pass-scenario="${escapeHtml(group.scenario || `group-${groupIndex}`)}" data-pass-type="${escapeHtml(auditType)}">
-          <header class="eo-pass-group-head"><div class="eo-pass-group-code">${String(groupIndex + 1).padStart(2, '0')}<small>TYPE</small></div><div><small>核销类型 · ${escapeHtml(auditType)}</small><h2>${escapeHtml(group.title || group.audit_type || '正确检查项')}</h2><div class="eo-pass-breakdown">${categorySummary || '<span>暂无通过项</span>'}</div></div><div class="eo-pass-group-count"><span>当前显示</span><strong data-pass-group-visible>${items.length}</strong><em>项</em></div></header>
-          ${categoryHtml || '<div class="eo-pass-empty"><strong>本类型暂无可独立确认的通过项</strong><span>这不代表未执行核验；没有充分证据的检查不会被写成通过。</span></div>'}
+          <header class="eo-pass-group-head"><div class="eo-pass-group-code">${String(groupIndex + 1).padStart(2, '0')}<small>类型</small></div><div><small>核销类型 · ${escapeHtml(auditType)}</small><h2>${escapeHtml(group.title || group.audit_type || '正确检查项')}</h2><div class="eo-pass-breakdown">${categorySummary || '<span>暂无通过项</span>'}</div></div><div class="eo-pass-group-count"><span>当前显示</span><strong data-pass-group-visible>${items.length}</strong><em>项</em></div></header>
+          ${categoryHtml || '<div class="eo-pass-empty"><strong>本类型暂无通过项</strong><span>现有资料还不足以确认这些检查通过。</span></div>'}
         </section>`;
         }).join('');
       };
 
       document.body.className = 'error-only-page';
       document.body.innerHTML = `<header class="eo-topbar"><div class="eo-topbar-inner">
-        <div class="eo-brand"><div class="eo-brand-mark">参半<small>CANBAN</small></div><div class="eo-brand-copy"><strong>离线活动核销</strong><span>核销判断工作台 / AUDIT DESK</span></div></div>
+        <div class="eo-brand"><div class="eo-brand-mark">参半<small>CANBAN</small></div><div class="eo-brand-copy"><strong>线下活动核销</strong><span>核销结果</span></div></div>
       </div></header><main class="eo-shell"><div class="eo-app-grid"><aside class="eo-rail" aria-label="核销结果导航">
-        <div class="eo-rail-head"><div><div class="eo-rail-code">CB / OFFLINE AUDIT</div><h2>核销主工作台</h2></div><p>错误与正确检查日志</p></div>
-        <nav class="eo-rail-nav" role="tablist" aria-label="核销结果视图" aria-orientation="vertical"><button class="eo-tab" id="eo-tab-home" role="tab" type="button" data-eo-view="home" aria-selected="true" aria-current="page" aria-controls="home" tabindex="0"><span class="eo-nav-glyph">OV</span><span class="eo-nav-copy"><strong>错误总览</strong><small>本批次全部错误</small></span><em>${total}</em></button><button class="eo-tab eo-tab-pass" id="eo-tab-passed" role="tab" type="button" data-eo-view="passed" aria-selected="false" aria-controls="passed" tabindex="-1"><span class="eo-nav-glyph">OK</span><span class="eo-nav-copy"><strong>正确检查项</strong><small>按核销类型记录</small></span><em>${passTotal}</em></button></nav>
+        <div class="eo-rail-head"><div><div class="eo-rail-code">参半 · 活动核销</div><h2>核销结果</h2></div><p>查看问题和已通过的检查</p></div>
+        <nav class="eo-rail-nav" role="tablist" aria-label="核销结果视图" aria-orientation="vertical"><button class="eo-tab" id="eo-tab-home" role="tab" type="button" data-eo-view="home" aria-selected="true" aria-current="page" aria-controls="home" tabindex="0"><span class="eo-nav-glyph">查</span><span class="eo-nav-copy"><strong>错误总览</strong><small>本次发现的全部问题</small></span><em>${total}</em></button><button class="eo-tab eo-tab-pass" id="eo-tab-passed" role="tab" type="button" data-eo-view="passed" aria-selected="false" aria-controls="passed" tabindex="-1"><span class="eo-nav-glyph">对</span><span class="eo-nav-copy"><strong>正确检查项</strong><small>按核销类型记录</small></span><em>${passTotal}</em></button></nav>
         <div class="eo-rail-foot"><span>本次核销记录</span><strong>${Math.max(typeCount, passGroups.length)} 种核销类型</strong><em>${total} 组错误 · ${passTotal} 项通过</em></div>
       </aside><div class="eo-workspace"><section class="eo-view" id="home" role="tabpanel" aria-labelledby="eo-tab-home" tabindex="0"><div class="eo-home-cockpit">
         <section class="eo-pass-filter-panel eo-error-filter-panel" aria-label="筛选错误检查项">

@@ -373,8 +373,9 @@ class ErrorReasonTests(unittest.TestCase):
                    "diagnostic_issues": [{"code": "missing_material", "observed": "已盘点本包全部材料，未发现已签合同。", "source_files": []}],
                    "rows": [{"status": "issue"}]} for name in ("甲维护费用.zip", "乙维护费用.zip")]
         summary = render_analysis_summary_markdown({"sheets": sheets}, {})
-        self.assertIn("甲维护费用.zip：未发现已签合同", summary)
-        self.assertIn("乙维护费用.zip：未发现已签合同", summary)
+        self.assertIn("### 甲维护费用.zip\n\n- 未发现已签合同", summary)
+        self.assertIn("### 乙维护费用.zip\n\n- 未发现已签合同", summary)
+        self.assertNotIn(".zip：", summary)
         self.assertEqual(summary.count("未发现已签合同"), 2)
         row = {"status": "issue"}
         issue = {"code": "singleton_role_ambiguous", "observed": "识别到 2 份结算单；尚不能确定主件与补充件关系，不能据此认定实际重复。", "source_files": ["目录/服务费结算单.jpg", "目录/结算单.jpg"]}

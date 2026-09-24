@@ -22,7 +22,7 @@
    用真实保留材料验证；不能把工具安装成功或页面能打开当成十类核销全部可用。
 5. 迁移 product_catalog.products 的实际数据，保持产品编码固定和只读查看权限。
    MySQL 是唯一商品身份来源，同时迁移 image_manifest_key；参考图继续使用私有 OSS，不新增本地回退或定时同步。
-6. 保留 worktrees、隐藏任务收据、人工核验记录、input-oss、input；OSS 商品图保留远端，目标机重新配置只读访问。
+6. 保留 worktrees、隐藏任务收据、人工核验记录、统一 input；OSS 商品图保留远端，目标机重新配置只读访问。
    先在隔离端口和独立数据目录验证，不影响源端正常服务。
 7. 完成数据核对、Linux 测试、浏览器验证、隔离的 AI 与 OSS 回调闭环、重启及恢复演练。
    最后按实际授权安排单实例切换；没有切换授权就交付可核验的待切换状态。
@@ -81,7 +81,7 @@ Node.js 只在选择 npm 安装 CLI 时需要，不是当前前端的构建要�
 - `skills/orchestrate-offline-audit/scripts/audit_core/`、`skills/`、`shared/`、根 HTML、`tests/`、项目配置和文档：交付当前工作副本，包括必要的未提交文件，不能被远端旧提交覆盖。
 - 商品图片不随运行副本迁移：保留 OSS 原对象及数据库图片关联；GitHub 图库是完全独立的远端灾备，不检出、不作为依赖。
 - `worktrees/`：包括 `.intake/`、`.reviews/` 等隐藏目录，不仅是可见运行文件夹。
-- `input-oss/`、`input/`：保留已落盘原始材料及子目录，不展平、不覆盖、不重新下载。
+- `input/`：保留已落盘原始材料及子目录，不展平、不覆盖、不重新下载。
 - 独立 MySQL：执行 `shared/product-database/dbctl.py backup`，复制新 SQL 和 `.sql.sha256`，携带当前 `schema.sql` 和初始化脚本。正式数据在 Docker 命名卷中，复制项目目录不自动复制该卷；只有 `schema.sql` 不等于数据备份。
 
 先检查 `.gitignore`、`.gitattributes` 和 `git status --short`。普通 clone 不包含被忽略的历史和数据库；使用 Git/LFS 配合独立数据归档。遇到链接或外部路径，先核对归属，不跟随链接打包其他项目或用户目录。
@@ -201,9 +201,9 @@ LibreOffice 等工具返回成功不等于保留了特殊图片关系。若该�
 | `OFFLINE_AUDIT_MODEL_PROXY` | 可选，只填目标实际可达代理 |
 | `CANBAN_API_ACCESS_KEY`、`CANBAN_API_SECRET_KEY` | 仅显式商品维护需要，不要求新增自动同步 |
 
-MySQL 连接由独立部署配置管理；当前核销程序不消费数据库连接变量，不能添加几个 `DB_*` 就宣称知识库已接入数据库。模型账号使用目标认证机制，不把聊天登录令牌当作 API key。
+MySQL连接由 `shared/product-database` 的Docker及只读账号配置管理；当前PDF现场SKU对照已复用该入口，并按本次唯一商品编码读取私有OSS细节图。不能添加任意 `DB_*` 变量替代现有入口。模型账号使用目标认证机制，不把聊天登录令牌当作 API key。
 
-当前 OSS 下载使用上游临时签名 URL，无需部署方提供 OSS AccessKey；不要与未来的知识库图片上传功能混为一谈。
+业务ZIP下载使用上游临时签名URL；商品参考图则由Windows宿主使用现有DPAPI私有凭据按需读取，这是两套独立配置。模型不接触凭据。Linux部署目前只覆盖数据库，商品图片认证仍须适配，不能宣称仅部署数据库即可完成现场SKU对照。
 
 ## 7. 独立 MySQL 迁移
 
@@ -231,16 +231,17 @@ python -m audit_core.workbench_server --host 0.0.0.0 --port 8080
 
 python -B skills/orchestrate-offline-audit/scripts/run.py \
   --run-id <独立验收ID> --producer-model codex \
+  --biz-type "<用户已确认的核销方式>" \
   --model gpt-6-astra --reasoning-effort medium \
   --input-dir <隔离测试材料目录> --worktrees <隔离测试输出目录>
 ```
 
-工作台是否接收 OSS 由上节配置控制。隔离测试不要继承源端生产接收/回调配置。`input-oss` 和 `worktrees` 要挂载到源码实际使用的位置；只声明任意 `/data` 并不意味着程序会使用它，必须检查实际落盘位置。
+本地ZIP在运行前须先询问用户本次核销方式，确认后传入--biz-type，不再自动分类；类型不同的包分别运行。交互终端未传方式时等待选择，非交互未传方式时停止，不创建记录。工作台是否接收 OSS 由上节配置控制。隔离测试不要继承源端生产接收/回调配置。`input` 和 `worktrees` 要挂载到源码实际使用的位置；只声明任意 `/data` 并不意味着程序会使用它，必须检查实际落盘位置。
 
 保留以下行为：
 
-- 入站 `POST /api/intake/oss` 仅接收 `verifyCode`、正整数 `analyzeId`、临时 `downloadUrl`，保持既有内网无鉴权契约。
-- ZIP 安全下载到 `input-oss/<job_id>/`；一个下载 worker、一个核销 worker，核销串行。
+- 入站 `POST /api/intake/oss` 接收必填的 `verifyCode`、正整数 `analyzeId`、临时 `downloadUrl` 及必填非空字符串 `bizType`（业务类型），保持既有内网无鉴权契约。
+- ZIP 安全下载到 `input/<job_id>/`；一个下载 worker、一个核销 worker，核销串行。
 - ZIP 名唯一确定类型。“物料”“费用”的优先级及冲突退回按当前代码执行；类型无法确认算失败并回传原因。
 - 同一业务二元组终态重交创建新 attempt、job 和运行，不覆盖旧记录。
 - 回调 `/api/v1/ai/analyze/callback` 仅发送 `verifyCode`、`analyzeId`、`result`，result 为本次运行的业务 Markdown 小结。

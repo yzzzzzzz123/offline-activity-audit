@@ -96,7 +96,7 @@ class MaterialDiagnosticOutputTests(unittest.TestCase):
         self.assertEqual(result["summary"], {"conclusion": "rejected"})
         unknown, ambiguous = result["archives"]
         self.assertIn("未注明核销方式", unknown["reason"])
-        self.assertIn("同时包含维护费用、进场费", ambiguous["reason"])
+        self.assertIn("同时包含维护费用、条码费", ambiguous["reason"])
         for archive in result["archives"]:
             self.assertIn(archive["source_archive"], archive["reason"])
             self.assertNotIn("重新提交", archive["reason"])
@@ -112,7 +112,8 @@ class MaterialDiagnosticOutputTests(unittest.TestCase):
             self.assertEqual(sheet["projection_kind"], "classification_rejection")
             self.assertEqual(sheet["rows"][0]["card_evidence"]["source_files"], [archive["source_archive"]])
         summary = render_analysis_summary_markdown(view, {})
-        self.assertEqual(summary, "核销方式无法确认")
+        self.assertIn("ai-pack-8.zip", summary)
+        self.assertIn("## 核销资料问题", summary)
         for fabricated in ("AI", "已签促销合同", "POS", "建议", "重新提交", "打回申请"):
             self.assertNotIn(fabricated, summary)
 

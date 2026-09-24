@@ -1,0 +1,99 @@
+{
+  "scenario": "promotional_display",
+  "approved_on": "2026-09-22",
+  "authorization": "用户明确指定input根目录八个ZIP中的相应样张作为模板参考，并分别写入对应Skill。",
+  "source_zip": "input/SQ202603300076-HX202606040013-核销资料-诚成26年4月【堆头20家】.zip",
+  "source_zip_sha256": "21216fbbf454cc0d2c59f1a55222d9e5d5b4887cccc3282a920251165d3af97a",
+  "documents": [
+    {
+      "id": "template-reference-promotional_display-promotion-contract",
+      "title": "促销合同（原PDF第1页）",
+      "role": "promotion_contract",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/promotion-contract.pdf",
+      "sha256": "1eb9ea5a98023968e2f33189f26702de958d8a6ae85e8d3e24bc2fcc81601bda",
+      "source_member": "核销资料-诚成26年4月【堆头20家】/诚成4月堆头陈列-经销商签订促销合同.pdf",
+      "source_sha256": "15ac05c881cda510b1d24743a2ae7ef7e19e5e78946b4407e6e57200cbb6a75a",
+      "source_pages": [
+        1
+      ],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-promotional_display-settlement",
+      "title": "市场费用结算单（原PDF第2页）",
+      "role": "settlement",
+      "usage": "template_check",
+      "rule_ids": [
+        "settlement_template_seal"
+      ],
+      "file": "assets/templates/settlement.pdf",
+      "sha256": "b70b0786936aeb445cd9fe6077c2b366dd59e1b5e18b185062f317f19d769849",
+      "source_member": "核销资料-诚成26年4月【堆头20家】/诚成4月堆头陈列-经销商签订促销合同.pdf",
+      "source_sha256": "15ac05c881cda510b1d24743a2ae7ef7e19e5e78946b4407e6e57200cbb6a75a",
+      "source_pages": [
+        2
+      ],
+      "preview_images": [
+        {
+          "file": "assets/templates/template-reference-promotional_display-settlement-01.png",
+          "sha256": "eee14a8df6bfc31a7fe42322a0d99ce953a22938e5128ec08a06386a5a823214",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "id": "template-reference-promotional_display-sales-list",
+      "title": "销售清单（原PDF第3至4页，附带样张）",
+      "role": "sales_record",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-list.pdf",
+      "sha256": "dbc0226c4a2c1557064922db2eebd3badf9527b1ab2be78d8137659c89c17a06",
+      "source_member": "核销资料-诚成26年4月【堆头20家】/诚成4月堆头陈列-经销商签订促销合同.pdf",
+      "source_sha256": "15ac05c881cda510b1d24743a2ae7ef7e19e5e78946b4407e6e57200cbb6a75a",
+      "source_pages": [
+        3,
+        4
+      ],
+      "preview_images": []
+    },
+    {
+      "id": "template-reference-promotional_display-sales-workbook",
+      "title": "销售原始工作簿（附带样张）",
+      "role": "pos_excel",
+      "usage": "format_example",
+      "rule_ids": [],
+      "file": "assets/templates/sales-workbook.xlsx",
+      "sha256": "0504612568924d6686a2b752f56a5ff102fe727f901fbc631d808bd7cbfc3b48",
+      "source_member": "核销资料-诚成26年4月【堆头20家】/2026年4月销售明细20260509164207765.xlsx",
+      "source_sha256": "0504612568924d6686a2b752f56a5ff102fe727f901fbc631d808bd7cbfc3b48",
+      "source_pages": [],
+      "preview_images": []
+    }
+  ],
+  "unselected_members": [
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/1.厚街汉邦66广场家家欣.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/10-1挺拇指生活超市(横沥店).jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/10-2挺拇指生活超市(横沥店).jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/11.人人购物荟和超市.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/12.三乐购物广场(森扬商业广场店).jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/13.沙井九龙.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/14.润家连锁超市(美联购物中心店).jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/15。石岩百佳华.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/16.田心金正和.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/17·荟和超市(莹展荟店).jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/18.三乐购物广场(坦洲店).jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/19.福源大康惠.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/2.松岗百佳华.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/20.好多宝精选超市(龙眼市场店).jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/3.公明百佳华.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/4.新桥百佳华.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/5.华都超市(东坑大道北店).jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/6.东浦金正和.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/7.宝安优城店.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/8.虎门赤岗家家欣.jpg",
+    "核销资料-诚成26年4月【堆头20家】/堆头照片/9.花都宜多.jpg"
+  ]
+}

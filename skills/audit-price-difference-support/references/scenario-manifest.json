@@ -4,13 +4,18 @@
   "skill_name": "audit-price-difference-support",
   "display_name": "补差",
   "scope": "价格补差、满减返还",
-  "policy_version": "2026-09-18.pdf.3",
-  "classification_policy": "material_content",
+  "policy_version": "2026-09-23.pdf.33",
+  "classification_policy": "biz_type",
   "label": "补差",
   "materials": [
     {
       "id": "pos",
-      "text": "经销商盖章 POS 数据",
+      "text": "经销商盖章 POS 数据（客户公章或财务章的盖章版，与Excel版完整内容一致）",
+      "when": "always"
+    },
+    {
+      "id": "pos_excel",
+      "text": "POS 明细 Excel 版（与盖章版成套提供，完整内容一致）",
       "when": "always"
     },
     {
@@ -36,116 +41,76 @@
   ],
   "audit_points": [
     {
-      "id": "submission_deadline",
-      "text": "核销自活动结束日起3个月内提交，超期不再核销。月份按日历月；必须有真实活动结束与提交日期，不能拿文件名或分析日期代替。进场费按原文“无时间要求”不作活动时限拒付，仍检查水印日期是否存在。",
-      "effect": "reject",
-      "when": "activity_deadline",
-      "numeric": false
-    },
-    {
-      "id": "review_deadline",
-      "text": "财务一审已超2个月且资料有误或缺失，不再补，直接0核销；只有同时具备时间和错误/缺失证据才触发。起算事件不清不能猜测。",
-      "effect": "zero",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "scene_authenticity",
-      "text": "确保费用场景真实；张冠李戴不予核销，额度不返还。仅有模糊或读不清不能认定张冠李戴。",
-      "effect": "reject",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "fraud",
-      "text": "有充分证据确认核销造假时0核销并记录罚款要求（先费用池后经销商额度）；不推测造假，不执行罚款、扣款或通知。",
-      "effect": "zero",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "bi_quota",
-      "text": "BI额度不足不允许先做活动后补申请；以业务发生时的额度与申请、活动时间证据判断，不能用当前余额代替。",
-      "effect": "reject",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "settlement_template_seal",
-      "text": "结算单须为公司统一模板并由客户盖章。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
-    },
-    {
-      "id": "contract_signed",
-      "text": "促销合同已签章。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
-    },
-    {
       "id": "pos_fields",
-      "text": "POS必含5+2：活动时间、SKU/69码、商品名称、销售数量、销售单价、销售金额、销售金额及数量合计；缺项即不完整。",
+      "text": "以POS Excel版为准，只检查5+2项：活动时间、商品SKU/编码（69码）、商品名称、销售数量、销售单价、销售金额及销售金额和数量合计，缺项即不完整。额外产品编码及其他列不审核。",
       "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": false
-    },
-    {
-      "id": "pos_seal",
-      "text": "要求提交的POS数据有经销商盖章。",
-      "effect": "missing_material",
-      "when": "required_pos",
-      "numeric": false
+      "numeric": false,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
     },
     {
       "id": "pos_arithmetic",
-      "text": "销售金额=数量×销售单价，并核对销售金额、数量合计。",
+      "text": "用户2026-09-22确认：POS列示销售金额须大于等于数量×销售单价，列示金额合计须大于等于对应明细金额之和；数量合计仍须相等。逐字引用原始数值，由程序按十进制原精度复算，不用舍入或容差掩盖不足。",
       "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": true
+      "numeric": true,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
     },
     {
-      "id": "application_quantity_price",
-      "text": "数量、单价与申请不符或填错，直接0核销。必须区分销售单价与奖励/补差单价，不把实际销量低于计划自行解释为填错；比较口径不清记无法核验。",
-      "effect": "zero",
+      "id": "pos_product_identity",
+      "text": "以POS Excel中的商品名称加69码查询商品库，名称允许模糊匹配且须唯一对应，69码须准确一致。额外产品编码即使与我方库不一致也不审核、不报错、不参与定位。缺失字段不从库内或盖章版补写；库内没有对应商品时说明‘库内无参考商品’并保留商品名称或69码。",
+      "effect": "missing_material",
       "when": "uses_pos",
-      "numeric": true
+      "numeric": false,
+      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
     },
     {
       "id": "reward_unit_price",
-      "text": "活动申请对应69码的奖励/补差单价与结算单奖励单价一致；不是将POS零售价与奖励单价比较。",
+      "text": "用户2026-09-22最终确认：结算单申报的奖励/补差单价须等于品牌方本次合同对应69码的约定单价；少于或高于均不符，不将POS零售价当作奖励单价，最终金额抹零不能放宽单价一致要求。 用户2026-09-22确认：批准的数量、单价或金额参照值从品牌方本次促销合同读取，不能取结算单自行填写的申请值或POS销售单价代替约定；合同未写、看不清或对应不明时记无法核验，不以合同总额自动代替本次申请金额。",
       "effect": "zero",
       "when": "not_training",
-      "numeric": true
+      "numeric": true,
+      "source": "PDF第1页·补差·审核要点1①"
     },
     {
       "id": "settlement_pos_quantity",
-      "text": "结算单每个SKU销售数量与POS对应销售数量一致。",
+      "text": "结算单每个SKU销售数量与POS Excel版对应销售数量一致；不能用盖章版数值覆盖Excel。",
       "effect": "zero",
       "when": "not_training",
-      "numeric": true
+      "numeric": true,
+      "source": "PDF第1页·补差·审核要点1②"
     },
     {
       "id": "claim_ceiling",
-      "text": "结算单本次核销金额小于等于申请金额。",
+      "text": "结算单本次核销金额小于等于申请金额。 用户2026-09-22确认：批准的数量、单价或金额参照值从品牌方本次促销合同读取，不能取结算单自行填写的申请值或POS销售单价代替约定；合同未写、看不清或对应不明时记无法核验，不以合同总额自动代替本次申请金额。",
       "effect": "missing_material",
       "when": "always",
-      "numeric": true
-    },
-    {
-      "id": "price_evidence",
-      "text": "所有活动门店现场照片有水印且活动价格清晰，或提供线上小象超市截图；线上证据不套线下照片水印格式。",
-      "effect": "missing_material",
-      "when": "always",
-      "numeric": false
+      "numeric": true,
+      "source": "PDF第1页·补差·审核要点1③"
     },
     {
       "id": "full_reduction_evidence",
-      "text": "核验满减返还的现场水印照片、小票等活动存在证明，须对应本次费用；无对应证明为缺资料。此项必须核验，不能以是否满减无法确定为由跳过或中止审核。",
+      "text": "满减返还须有现场水印照片、小票等活动存在证明；无对应证明按缺资料处理。用户2026-09-21确认：搭赠、补差、外采赠品已有照片审核中的水印，均须包含拍摄时间和门店地址，缺一即不完整。具体指出哪份照片缺哪项；看不清时说明无法确认，不把已交照片说成未交。补差的满减证明采用现场照片时同样适用；采用小票等其他证明时不套用照片水印要求，线上小象超市截图的既有例外保留。本次只明确水印的组成，不新增日期范围、地址一致性、定位距离或固定水印样式的检查，也不另立外采赠品门店现场照片的独立审核项，不扩展KT或条码费的水印要求；人员临促照片按用户2026-09-22单独确认执行。",
       "effect": "missing_material",
       "when": "always",
-      "numeric": false
+      "numeric": false,
+      "source": "PDF第1页·补差·审核要点2"
+    },
+    {
+      "id": "price_evidence",
+      "text": "门店照片缺水印或活动价格不清晰，按缺资料处理；线上小象超市截图不套用线下水印格式。不从资料栏另加门店全量覆盖审核。用户2026-09-21确认：搭赠、补差、外采赠品已有照片审核中的水印，均须包含拍摄时间和门店地址，缺一即不完整。具体指出哪份照片缺哪项；看不清时说明无法确认，不把已交照片说成未交。补差的满减证明采用现场照片时同样适用；采用小票等其他证明时不套用照片水印要求，线上小象超市截图的既有例外保留。本次只明确水印的组成，不新增日期范围、地址一致性、定位距离或固定水印样式的检查，也不另立外采赠品门店现场照片的独立审核项，不扩展KT或条码费的水印要求；人员临促照片按用户2026-09-22单独确认执行。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "PDF第1页·补差·审核要点3"
+    },
+    {
+      "id": "application_quantity_price",
+      "text": "数量、单价明确填错时记录具体错误点，交由人工复核；按本类审核栏已明确的数量、单价及对应资料核对。用户2026-09-22最终确认：申报单价必须等于对应合同约定，少于也不符；数量仍按原有一致要求核对。仅最终结算金额允许在品牌方占优方向抹零或四舍五入。不得把实际销量低于计划自动认定填错，不增加其他数量或价格比较。 用户2026-09-22确认：批准的数量、单价或金额参照值从品牌方本次促销合同读取，不能取结算单自行填写的申请值或POS销售单价代替约定；合同未写、看不清或对应不明时记无法核验，不以合同总额自动代替本次申请金额。",
+      "effect": "zero",
+      "when": "uses_pos",
+      "numeric": true,
+      "source": "PDF第1页·补差·审核要点4"
     }
   ]
 }
