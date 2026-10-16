@@ -67,9 +67,10 @@ from .codex_environment import (
 
 DEFAULT_MAX_ATTEMPTS = 3
 MAX_PRODUCT_REFERENCE_VIEWS = 4
-DEFAULT_MODEL = "gpt-6-astra"
+DEFAULT_MODEL = "gpt-6.1-sol"
 DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 3600
-DEFAULT_REASONING_EFFORT = "medium"
+MAX_CODEX_STDIN_BYTES = 1024 * 1024
+DEFAULT_REASONING_EFFORT = "high"
 PRODUCT_QUERY_REASONING_EFFORT = "medium"
 ALLOWED_REASONING_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max", "ultra"})
 
@@ -88,6 +89,8 @@ class CodexContextCapacityError(CodexExtractionError):
 
 def _codex_error_code(detail: str) -> str:
     normalized = detail.casefold()
+    if "stdin" in normalized and ("exceed" in normalized or "maximum" in normalized):
+        return "context_limit"
     if normalized in {"context_limit", "output_limit", "timeout", "rate_limit", "auth",
                       "configuration", "invalid_output", "model_error"}:
         return normalized
@@ -1702,6 +1705,10 @@ def _run_codex_json(
     last_error = "AI 提取未启动"
     retry_hint = ""
     for attempt in range(1, max_attempts + 1):
+        if len((prompt_text + retry_hint).encode("utf-8")) >= MAX_CODEX_STDIN_BYTES:
+            raise CodexContextCapacityError(
+                "当前文字块超过 Codex CLI 的 1 MiB 标准输入限制，必须切分后重新提取（context_limit）"
+            )
         attempt_started = time.monotonic()
         chat_model.attempt = attempt
         chat_model.last_metrics = {}

@@ -9,6 +9,7 @@ from .common import AuditError, BizTypeRecognitionError, now_utc, validate_json
 from .customer_language import customer_reason, numeric_problem, plain_text
 from .error_reason import attach_error_reasons
 from .material_intake import prepare_material_diagnosis
+from .material_issue_files import attach_material_issue_files
 from .pdf_evidence import BIZ_TYPE_SCHEMA, audit_decision, classification_decision, validate, validate_documents
 from .pdf_materials import prepare_units
 from .pdf_policy import POLICY_VERSION
@@ -118,6 +119,7 @@ def build_view(packets: list[dict], rejection: dict | None) -> dict:
                            "confirmed_scenario": bool(scenario), "projection_kind": "classification_rejection",
                            "decision_source": rejection["decision_source"], "business_decision": "issues_found",
                            "audit_type_label": label, "source_archive": archive["source_archive"],
+                           "archive_id": archive["archive_id"],
                            "note": ("已按业务类型完成资料检查，以下列出需要补充或调整的资料。" if scenario else
                                     "已完成资料检查；以下按各类清单说明资料问题，尚未确定本次核销类型。"),
                            "headers": ["业务文件", "错误原因", "处理方式"],
@@ -131,7 +133,7 @@ def build_view(packets: list[dict], rejection: dict | None) -> dict:
     view = {"schema_version": "1.1", "title": "费用核销结果", "policy_version": POLICY_VERSION, "sheets": sheets}
     if rejection:
         view["classification_rejection"] = rejection
-    return attach_error_reasons(view)
+    return attach_material_issue_files(attach_error_reasons(view), packets)
 
 
 @dataclass

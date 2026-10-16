@@ -66,6 +66,9 @@ class CodexEnvironmentTests(unittest.TestCase):
             literal = "'" + str(canary).replace("'", "''") + "'"
             self.assertIn("-LiteralPath " + literal, command[-1])
             self.assertEqual(command[command.index("-C") + 1], str(root))
+            self.assertIn('windows.sandbox="unelevated"', command)
+            self.assertIn("allow_login_shell=false", command)
+            self.assertEqual(command[command.index("--permission-profile") + 1], ":read-only")
             calls.append(command)
             return subprocess.CompletedProcess(command, 0 if command[-1].startswith("Get-Content") else 1,
                                                canary.read_text(encoding="utf-8"), "")

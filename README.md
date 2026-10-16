@@ -1,10 +1,13 @@
 # 线下活动费用核销
 
-本地ZIP核销先询问用户本次核销方式，确认后通过`--biz-type`传入，再处理资料。未确认时不读取资料、不创建核销记录；不再按内容自动选型。多个包方式不同时须逐包确认、分别运行。本次请求已明确方式时直接沿用。API `1.54` 声明`local_input_type_policy=ask_user_before_run`。
+2026-10-15资料问题文件展示：具体文件需补充或调整时，只列该问题直接相关的文件；缺盖章版销售明细只列对应销售Excel，省略无关照片、结算单、红包图和其他销售表。缺少整份促销合同等整体问题隐藏“涉及的业务文件”区域。依据已保存资料项及来源ID关联，不按文件名关键词或扩展名猜测，完整证据保留。历史记录只读展示，不重跑AI或重发回调。Audit System `2.16.3`、API `1.55`；`material_issue_file_policy=related_files_only_hide_archive_gaps`。
+
+
+本地ZIP核销先询问用户本次核销方式，确认后通过`--biz-type`传入，再处理资料。未确认时不读取资料、不创建核销记录；不再按内容自动选型。多个包方式不同时须逐包确认、分别运行。本次请求已明确方式时直接沿用。API `1.55` 声明`local_input_type_policy=ask_user_before_run`。
 
 2026-09-23：AI分析接口支持布尔字段 `largeVenueFee`。陈列堆头传 `true` 时须提供商场入场协议，传 `false` 时不要求；AI直接采用字段确定条件，仍按本次资料检查是否提交协议。仅接受JSON布尔值，字符串和数字不自动转换，显式null返回400。兼容旧调用省略字段，未传时沿用原资料判定，不默认false。字段随任务传入正式runner并保存在manifest，详情见 [OSS接口契约](skills/orchestrate-offline-audit/references/oss-intake.md)。
 
-用户2026-09-22要求所有面向人的内容简单、易懂。页面、摘要和回调直接写具体问题，例如“缺少盖章版销售明细。”，不逐条重复压缩包名、类型名或“缺少资料：”。保留定位问题必需的文件、门店、日期、商品和数值；相同缺项只提示一次。当前显示版本为 `2.16.2`，API `1.54`；`customer_reason_format=short_facts_without_archive_or_type_prefix`。使用 `backfill_analysis_summaries.py --workspace-id <ID> --refresh-archives --backup-dir artifacts/<新目录> --apply` 可备份后只刷新指定已完成报告的文字和显示数量，原始审核事实不变。
+用户2026-09-22要求所有面向人的内容简单、易懂。页面、摘要和回调直接写具体问题，例如“缺少盖章版销售明细。”，不逐条重复压缩包名、类型名或“缺少资料：”。保留定位问题必需的文件、门店、日期、商品和数值；相同缺项只提示一次。当前显示版本为 `2.16.3`，API `1.55`；`customer_reason_format=short_facts_without_archive_or_type_prefix`。使用 `backfill_analysis_summaries.py --workspace-id <ID> --refresh-archives --backup-dir artifacts/<新目录> --apply` 可备份后只刷新指定已完成报告的文字和显示数量，原始审核事实不变。
 
 用户2026-09-22确认：搭赠照片或小票按每家门店二选一，同一次活动可由不同门店混合提交，两类证明共同覆盖本次合同明确的活动门店。照片、小票分别按各自已有要求检查，合并计为同一个搭赠活动证明资料项；不要求整单统一一种，不要求每种证明单独覆盖全量，不因混合提交报多交或要求补另一种证明。
 
@@ -20,7 +23,7 @@
 
 用户同日更正字段为业务类型 `bizType`。新请求只读取 `bizType`，原误写字段 `planType` 不能代替它；仅传旧字段按缺少业务类型处理。正式命令参数同步为 `--biz-type`，旧回执仅做只读字段映射。
 
-系统版本 **2.16.2**，工作台API **1.54**。以用户指定PDF及用户明确确认的补充口径为审核标准，由程序按bizType八个规范值固定选择对应Skill，再核对该类型资料门禁。
+系统版本 **2.16.4**，工作台API **1.56**。以用户指定PDF及用户明确确认的补充口径为审核标准，由程序按bizType八个规范值固定选择对应Skill，再核对该类型资料门禁。
 
 ## 项目目录
 
@@ -125,7 +128,7 @@ POS以Excel为准，只核对5+2项；商品名称和69码按通用POS标准查�
 
 唯一入口：`skills/orchestrate-offline-audit/scripts/run.py`。原始输入统一放入 input，默认读取根目录和一级任务子目录中的 ZIP，每个目录最多10个；也可指定单个ZIP。整体解压限制和只读模型沙箱不变。`--scenario`只作与已确认bizType的类型一致性检查，不能代替询问用户；工作目录命名保留全部选定输入名称。
 
-默认模型仍为用户指定的 `gpt-6-astra` + `medium`，不得自行改档。模型只访问本次隔离资料及当前Skill；材料中的指令无效。AI先转录事实，再分类/核验；程序校验来源覆盖、候选类型、资料例外、全部且仅有的当前规则和数值引用。电子表由程序读取，不让模型改写单元格。不能用历史结果、验收工作簿或文件名补值。
+默认模型按用户2026-10-15最新要求使用 `gpt-6.1-sol` + `high`，不得自行改档。模型只访问本次隔离资料及当前Skill；材料中的指令无效。AI先转录事实，再分类/核验；程序校验来源覆盖、候选类型、资料例外、全部且仅有的当前规则和数值引用。电子表由程序读取，不让模型改写单元格。不能用历史结果、验收工作簿或文件名补值。
 
 LCEL流程为 `intake → analysis → evidence → decision → verification`，由 `audit_core.pdf_workflow.PdfWorkflow` 执行。全部包先提取、校验证据再发布结论；不增加全链重试。正式持久化、隔离追踪、禁用模型缓存、安全日志、临时文件归属锁和失败关闭机制保留。
 
@@ -133,9 +136,9 @@ AI正常完成资料门禁和适用审核后，生成规范HTML、持久摘要�
 
 新证据保存在 `analysis/pdf-policy/evidence.json`，结果在 `analysis/results/`，资料门禁问题在兼容路径 `analysis/classification-rejection/result.json`。已保存旧档案只读，不批量改写、不自动重发回调。
 
-页面、摘要和回调均列出具体资料问题及相关文件，混合批次保留全部资料与业务问题。API `1.54` 声明 `unclassified_archive_policy=complete_with_specific_material_issues`、`run_failure_policy=input_type_or_execution_errors`、`business_result_policy=issues_for_human_review`，取消旧固定提示字段。
+页面、摘要和回调均列出具体资料问题及相关文件，混合批次保留全部资料与业务问题。API `1.55` 声明 `unclassified_archive_policy=complete_with_specific_material_issues`、`run_failure_policy=input_type_or_execution_errors`、`business_result_policy=issues_for_human_review`，取消旧固定提示字段。
 
-客户小结、回调正文和后台业务页面统一用中文短句说明具体问题：哪份资料、哪家店/哪天/哪件商品，实际内容是什么，与哪项要求不符；数字必要时列双方数值、单位及差额。用“销售明细”“商品条码”“照片上的日期和地址”，不输出代码状态、规则编号或流程术语。资料看不清时说清模糊位置，不能写成未提交或造假。详细写法见 [错误原因规范](skills/orchestrate-offline-audit/references/error-reasons.md) 和 [客户结果写法](skills/orchestrate-offline-audit/references/customer-language.md)。系统版本为 `2.16.2`、API为 `1.54`；`customer_language_policy=plain_chinese_source_specific` 声明该要求，业务规则版本为 `2026-09-23.pdf.33`。[待业务确认的问题](skills/orchestrate-offline-audit/references/business-questions-20260921.md) 只记录歧义，未经答复不增加审核规定。
+客户小结、回调正文和后台业务页面统一用中文短句说明具体问题：哪份资料、哪家店/哪天/哪件商品，实际内容是什么，与哪项要求不符；数字必要时列双方数值、单位及差额。用“销售明细”“商品条码”“照片上的日期和地址”，不输出代码状态、规则编号或流程术语。资料看不清时说清模糊位置，不能写成未提交或造假。详细写法见 [错误原因规范](skills/orchestrate-offline-audit/references/error-reasons.md) 和 [客户结果写法](skills/orchestrate-offline-audit/references/customer-language.md)。系统版本为 `2.16.3`、API为 `1.55`；`customer_language_policy=plain_chinese_source_specific` 声明该要求，业务规则版本为 `2026-09-23.pdf.33`。[待业务确认的问题](skills/orchestrate-offline-audit/references/business-questions-20260921.md) 只记录歧义，未经答复不增加审核规定。
 
 ## 安装与使用
 
@@ -148,7 +151,7 @@ py -3 -B skills/orchestrate-offline-audit/scripts/run.py --run-id 20260923-audit
 py -3 -B skills/orchestrate-offline-audit/scripts/serve.py --host 0.0.0.0 --port 8080
 ```
 
-模型默认 `gpt-6-astra`、`medium`。`OFFLINE_AUDIT_CODEX` 可指定兼容CLI；模型代理仅由 `OFFLINE_AUDIT_MODEL_PROXY` 显式配置，不改全局代理或OSS连接。单次模型总时限默认3600秒，连续已证实连接故障默认120秒；分别通过 `OFFLINE_AUDIT_MODEL_TIMEOUT_SECONDS`、`OFFLINE_AUDIT_MODEL_TRANSPORT_TIMEOUT_SECONDS` 配置。
+模型默认 `gpt-6.1-sol`、`high`。`OFFLINE_AUDIT_CODEX` 可指定兼容CLI；模型代理仅由 `OFFLINE_AUDIT_MODEL_PROXY` 显式配置，不改全局代理或OSS连接。单次模型总时限默认3600秒，连续已证实连接故障默认120秒；分别通过 `OFFLINE_AUDIT_MODEL_TIMEOUT_SECONDS`、`OFFLINE_AUDIT_MODEL_TRANSPORT_TIMEOUT_SECONDS` 配置。
 
 `--scenario`只接受上表八个标识，须与用户已确认的`--biz-type`对应，不能代替类型确认。改ZIP名称不能改变结果。CLI输出持久收据；正常完成检查退出0，包括资料不匹配及业务错误；执行意外返回非零。
 
@@ -236,7 +239,7 @@ Idempotency-Key: HX202603250014:123:<result-sha256-16>
 ```
 
 - `verifyCode:analyzeId` 是稳定业务身份。同一对象路径在最新尝试运行中重复投递只返回原任务；最新尝试终态后重复投递会生成 `attempt=2/3/...` 的新任务并重新分析。响应中的 `rerun=true` 表示本次已创建覆盖业务结果的新尝试，`supersedes_job_id` 指向上一尝试；同一组合改投另一个对象路径仍返回 `409`。
-- API `1.54`：`bizType` 为必填非空字符串。缺失、`null`、空字符串或纯空白时直接记录 `failed`，不下载、不调用AI，按原三字段回调且 `result` 精确为“无法识别核销类型”。仅当原值精确命中八个规范值时才调用对应Skill，AI只核对资料门禁与业务规则；其他非空值不下载、不调用AI，正常完成并回调“该业务类型无需AI核销”。资料问题正常完成，不改选类型、不判核销失败。活动请求更改bizType返回409；终态后补齐或更正字段可创建新attempt。
+- API `1.55`：`bizType` 为必填非空字符串。缺失、`null`、空字符串或纯空白时直接记录 `failed`，不下载、不调用AI，按原三字段回调且 `result` 精确为“无法识别核销类型”。仅当原值精确命中八个规范值时才调用对应Skill，AI只核对资料门禁与业务规则；其他非空值不下载、不调用AI，正常完成并回调“该业务类型无需AI核销”。资料问题正常完成，不改选类型、不判核销失败。活动请求更改bizType返回409；终态后补齐或更正字段可创建新attempt。
 - `downloadUrl` 必须是白名单域名的 HTTPS 443 地址。临时签名查询串只保存在内存，不进入任务收据、日志、worktree 或结果回调。
 - 下载响应或 URL 路径应保留 Windows 安全的原始 `.zip` 文件名；文件名不参与类型选择。服务记录响应 ETag、实际字节数和自行计算的 SHA-256，并验证文件确实为 ZIP；残缺或无效下载会删除。
 - `verifyCode` 中首个有效 `YYYYMMDD` 用作运行业务日期；没有有效日期时按上海时区收件当天生成。`analyzeId` 必须是 64 位正整数。
@@ -298,3 +301,14 @@ py -3 -B -m compileall -q skills tests shared/product-database
 用户2026-09-22确认：条码费按每家门店核对本次产品推广协议约定的全部商品，每个对应SKU须在该店实际照片中清晰可见，允许同店多张照片合起来补齐。未拍到或看不清的商品逐店逐项说明，不能以另店照片补齐，也不能只检查已经拍到的部分商品后通过。不规定固定照片张数，不强制拍清条码数字；商品外观按共用的数据库OSS按需取图流程对照。
 
 用户2026-09-22最新确认：基础通用审核项适用于所有核销方式，所有涉及POS数据的类型均执行同一标准，包括人员激励、物料制作、补差、搭赠等，不因本类审核栏未重复列出而免除。POS必含5+2项：①活动时间；②商品SKU/编码（69码）；③商品名称；④销售数量；⑤销售单价；⑥销售金额；⑦销售金额及数量合计。缺项即不完整；已提供但缺字段须指出具体缺项，不能说整份POS未交。用户同日最终明确：只必含上述5+2项，额外的产品编码及其他字段不审核；无论该编码称我方编码还是商超编号，缺失、归属不明或与库内对不上均不报错。此确认覆盖此前‘填写产品编码就必须与库内一致’的口径，不再要求辨认额外编码归属，也不以额外编码筛选或排除商品。商品名称与69码仍实际查询商品库，须唯一对应同一商品；名称允许简称和模糊匹配，明确规格、款式等不能冲突，69码须与库内原值一致，不能截断、改写或模糊匹配。销售金额仍按已确认的不小于口径复算：列示金额≥数量×销售单价，列示金额合计≥明细金额之和；数量合计须相等，按十进制原精度处理。用户明确先有Excel版，再在相同内容上加盖章；所有POS数据以Excel版为准。字段完整性、商品查库、复算、与结算单销量比较和赠品公式的实际销量均读取Excel。盖章版保留既有资料门禁，不覆盖Excel、不以它补齐Excel缺项，不另立两版差异问题；Excel不可读时说明Excel具体缺口，不能回退盖章版猜数。不以合同、结算单或库内记录补写Excel缺少的字段。仅查商品身份时读取轻量数据库字段，不访问OSS图片清单或下载商品图片；现场照片外观核对另按本次商品范围按需取图。库内未找到对应商品时直接说明‘库内无参考商品’，保留原商品名称或编码；多个候选、标识冲突和系统故障须区分，不能都说库内无商品。不涉及POS时不要求新交POS；原本无需POS的类型实际提供POS时纳入通用检查，资料按已有两版成套口径盘点。本次未恢复POS印章、两版一致性或EAN校验位的独立审核，也不新增其他基础通用项目。
+# 工作台模型切换
+
+核销管理中心左侧“更换模型”独立栏目（与系统总览、技术档案并列）支持选择 PPIO（派欧云）或阿里云百炼，再填写对应平台的 API Key、从下拉框选择模型和接口地址。两个平台分别显示完整官方模型 ID，并保留手动填写。按 2026-10-16 官方实时目录及型号详情核对，PPIO 列出 9 个视觉型号；百炼列出 28 个图片与 JSON 型号，覆盖 Qwen3.8、3.7、3.6、3.5、VL 与支持 JSON 的 Omni 型号，包含已核对的日期快照。仅文本型号和当前官方型号目录已不再列出的旧型号不混入预置列表。两平台均将各自的 Qwen3.8 Max 标为“推荐模型”，依据其视觉、长文档与 JSON 能力；型号需单独测试后再启用，推荐标注不更改已保存配置，不代表业务准确率排名。可用性依用户所选地域、Key 权限和实际测试结果判断。型号来源：[PPIO 目录](https://api-server.ppinfra.com/v1/product/model/list)、[百炼官方型号目录](https://docs.bailian.console.aliyun.com/llms.txt)、[百炼视觉能力](https://help.aliyun.com/zh/model-studio/vision-model/)、[JSON 支持](https://help.aliyun.com/zh/model-studio/qwen-structured-output)。未启用时沿用 GPT（`gpt-6.1-sol` / `high`）。PPIO 默认 `qwen/qwen3.5-397b-a17b`，地址 `https://api.ppio.com/openai/v1`，使用 PPIO 的 `sk_` 密钥；百炼默认 `qwen3-vl-plus`、`https://dashscope.aliyuncs.com/compatible-mode/v1`，也可使用对应地域或业务空间的百炼兼容地址。平台切换自动填入匹配的配置并清空未提交密钥，两平台的已保存密钥隔离，不能互用。
+
+“测试返回”使用生成的示例图片检查图片识别和 JSON 返回，并显示实际返回及耗时，不改变当前模型。“切换”先测试，成功后保存并切换；“恢复 GPT”恢复默认。切换仅影响后续新启动的核销，已在执行的任务保持原模型。两个平台均要求最终 JSON，并经过相同的证据 Schema、来源覆盖与业务校验；百炼采用非思考 JSON 模式：通用视觉型号使用 `enable_thinking=false`；Qwen3.8 Omni Flash 使用 `reasoning_effort=none` 与 `modalities=["text"]`；无思考模式的 Qwen3.5 Omni Plus 仅指定文本输出，不发送思考参数。PPIO 保留平台默认推理并记录 `default`，只消费最终内容。错误不静默回退 GPT。
+
+配置存于 `worktrees/.settings/model.json`，Windows 的密钥以当前用户 DPAPI 加密，接口和页面不回显密钥。迁移 Windows 用户时需重新填写密钥。`GET /api/model-settings` 返回脱敏配置；同源 `POST /api/model-settings` 支持 `test`、`activate`、`gpt`，携带当前配置的 `revision` 及 `X-Offline-Audit-Model-Token`。正式 OSS 子进程接收一次性的模型快照，不在命令行或运行档案中保存密钥。
+
+API `1.56` 的 `/api/model-settings` 使用 `provider=qwen|ppio` 选择平台，公开配置只返回各平台的模型、地址与是否已有密钥；原单百炼配置兼容读取，启用后才原子保存。PPIO 使用当前在售的千问视觉模型，不发送百炼专用思考参数；默认型号已核对官网实时模型目录，Key 权限仍以实际图片测试为准。
+
+接入依据：[PPIO 鉴权](https://ppio.com/docs/models/reference-authentication)、[PPIO Qwen3.5 397B A17B](https://ppio.com/model/qwen/qwen3.5-397b-a17b)、[PPIO 聊天接口](https://ppio.com/docs/models/reference-llm-create-chat-completion)、[百炼视觉接口](https://help.aliyun.com/zh/model-studio/qwen-vl-compatible-with-openai)、[百炼结构化输出](https://help.aliyun.com/zh/model-studio/qwen-structured-output)、[百炼接口地址](https://help.aliyun.com/zh/model-studio/base-url)。

@@ -143,3 +143,6 @@ API `1.32` 的 `oss_intake.callback_transport=direct` 表示普通 OSS 自动回
 这会创建下一个 attempt 及任务目录。此前验证通过的 ZIP 可以保留在原任务目录供诊断。
 
 bizType已确定类型后，资料缺少、多余或适用条件不明时，正常输出本类型具体资料问题，manifest、snapshot、正式收据和OSS job记completed、failure为空、CLI退出0。只有指定类型资料门禁满足才进入对应业务审核，审核仅执行本类审核栏。业务问题和原文“0核销”只报具体错误，最终交人工复核。bizType输入失败或意外中断处理记运行失败；回调传输故障单独保留callback_failed和已完成结果。历史档案只读，不重写或重发。
+
+
+API `1.55` 的 `/api/config.material_issue_file_policy=related_files_only_hide_archive_gaps` 声明资料问题只显示需补充或调整的相关文件；整份合同等整体缺失隐藏文件区域。该字段仅约定客户展示，不改变资料门禁、业务判断、三字段回调或原始证据。

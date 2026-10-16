@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="canban-template-version" content="3.2.0">
-  <meta name="offline-audit-system-version" content="2.16.2">
+  <meta name="offline-audit-system-version" content="2.16.4">
   <link rel="icon" href="data:,">
   <script>
     if (window.location.protocol === 'file:') {
@@ -2265,14 +2265,15 @@
       const businessFileName = (value) => String(value || '').replaceAll('\\', '/').split('/').filter(Boolean).pop() || '';
       const isBusinessFile = (value) => /\.(?:pdf|xlsx?|xlsm|jpe?g|png|webp|gif|bmp|tiff?|heic|zip|rar)$/i.test(String(value || '').trim())
         && !/(?:^|[\\/])(?:crops?|ocr|rendered|model-input|visual-staging|derived)(?:[\\/]|$)/i.test(String(value || ''));
-      const evidenceHtml = (evidence, fallbackFiles = []) => {
+      const evidenceHtml = (evidence, fallbackFiles = [], businessFiles = null) => {
         const detail = evidence && typeof evidence === 'object' ? evidence : null;
         const sources = Array.isArray(detail?.sources) ? detail.sources : [];
         const nonBusinessKinds = new Set(['reference', 'generated', 'model_generated', 'model_input', 'model_output', 'synthetic', 'rendered', 'crop', 'ocr']);
         const excluded = new Set(sources.filter((source) => nonBusinessKinds.has(source?.kind))
           .flatMap((source) => [source.file, source.original_file]).filter(Boolean));
         const sourceByFile = new Map(sources.filter((source) => source?.file).map((source) => [source.file, source]));
-        const declared = Array.isArray(detail?.source_files) ? detail.source_files
+        const declared = Array.isArray(businessFiles) ? businessFiles
+          : Array.isArray(detail?.source_files) ? detail.source_files
           : Array.isArray(detail?.sources) ? sources.map((source) => source.file)
             : fallbackFiles.filter(isBusinessFile);
         const originalFile = (value) => {
@@ -2298,7 +2299,7 @@
         return lines(action).map((line) => line.replace(/^\d+\.\s*/, '').replace(/[；;\s]+$/, ''))
           .filter(Boolean).join('；');
       };
-      const errorCard = ({ title, auditType, source = '', baseline = '', problem, action, extra = '', search = '', confidence = 'high', confidenceScore = null, reasonCategories = [], evidence = null }) => {
+      const errorCard = ({ title, auditType, source = '', baseline = '', problem, action, extra = '', search = '', confidence = 'high', confidenceScore = null, reasonCategories = [], evidence = null, businessFiles = null }) => {
         const categories = normalizedErrorReasonCategories(reasonCategories, title);
         const confidenceView = confidencePresentation(
           confidence,
@@ -2322,7 +2323,7 @@
               <header class="eo-error-head"><h3>${escapeHtml(title)}</h3><div class="eo-error-badges"><span class="eo-scope">核销类型 · ${escapeHtml(auditType)}</span></div></header>
               <div class="eo-field"><span>错误原因</span><div>${categorizedProblem}</div></div>
               ${action ? `<div class="eo-field action"><span>处理方式</span><div>${escapeHtml(action)}</div></div>` : ''}
-              ${evidenceHtml(evidence, [source, baseline].filter(Boolean).flatMap((value) => value.split('、')).filter((value) => /\.(pdf|xlsx?|jpe?g|png|webp)$/i.test(value)))}
+              ${evidenceHtml(evidence, [source, baseline].filter(Boolean).flatMap((value) => value.split('、')).filter((value) => /\.(pdf|xlsx?|jpe?g|png|webp)$/i.test(value)), businessFiles)}
               ${extra}
             </div>
           </article>`;
@@ -2623,7 +2624,7 @@
           const reasonCategory = sheet.projection_kind === 'classification_rejection'
             ? (sheet.confirmed_scenario ? '核销资料' : '费用类型')
             : issue?.code === 'scenario_unconfirmed' ? '费用类型' : row.check_category || errorReasonCategory([title, ...(row.values || [])].join(' '));
-          return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [reasonCategory], evidence: row.card_evidence });
+          return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [reasonCategory], evidence: row.card_evidence, businessFiles: row.business_source_files });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };
@@ -3233,6 +3234,20 @@
     .as-panel-head h2 { margin: 5px 0 0; font-size: 21px; line-height: 1.2; }
     .as-panel-head p { margin: 0; color: var(--eo-soft); font-size: 9px; text-align: right; }
     .as-panel-body { padding: 10px; }
+    .as-model-panel .as-panel-head { border-bottom: 0; }
+    .as-model-status { max-width: 55%; color: #146a58; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+    .as-model-body { padding: 0 18px 18px; }
+    .as-model-note { margin: 0 0 14px; color: var(--eo-soft); font-size: 12px; line-height: 1.6; }
+    .as-model-grid { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(250px, 1.2fr) minmax(230px, 1fr); gap: 14px; }
+    .as-model-field { display: grid; align-content: start; min-width: 0; gap: 7px; font-size: 12px; font-weight: 700; }
+    .as-model-field-wide { grid-column: 1 / -1; }
+    .as-model-field input, .as-model-field select { width: 100%; min-width: 0; height: 40px; padding: 9px 10px; border: 1px solid var(--eo-line-dark); background: #f9fbfb; color: var(--eo-ink); font: 12px/1.4 var(--eo-mono); }
+    .as-model-field input:focus, .as-model-field select:focus { outline: 2px solid #159edb; outline-offset: 2px; }
+    .as-model-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 14px; }
+    .as-model-message { margin: 12px 0 0; font-size: 12px; line-height: 1.6; }
+    .as-model-message[data-error="true"] { color: #b13731; }
+    .as-model-result { margin: 10px 0 0; padding: 12px; max-height: 180px; overflow: auto; background: #f1f6f5; border-left: 3px solid #18845e; white-space: pre-wrap; font: 12px/1.6 var(--eo-mono); }
+    @media (max-width: 1279px) { .as-model-grid { grid-template-columns: 1fr; } }
     .as-intake-panel[hidden] { display: none; }
     .as-intake-panel { border-top: 4px solid #d79a20; }
     .as-intake-panel .as-panel-head small { color: #a76f09; }
@@ -3615,6 +3630,9 @@
         deleteBusy: false,
         deleteTrigger: null,
         clientDiagnostics: [],
+        modelSettings: null,
+        modelToken: '',
+        modelBusy: false,
       };
       const PRIMARY_RUNNING_PROBE_MS = 2500;
       const PRIMARY_IDLE_PROBE_MS = 15000;
@@ -3958,7 +3976,7 @@
           const saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
           sessionStorage.removeItem(storageKey);
           const restoredView = saved.view === 'ledger' ? 'overview' : saved.view;
-          if (['overview', 'archive'].includes(restoredView)) state.primaryView = restoredView;
+          if (['overview', 'archive', 'model'].includes(restoredView)) state.primaryView = restoredView;
           state.filters = normalizeRecordFilters(saved.filters);
           return Number(saved.scrollY || 0);
         } catch (error) { return 0; }
@@ -4008,6 +4026,7 @@
             <nav class="as-nav" role="tablist" aria-label="核销管理中心视图" aria-orientation="vertical">
               <button class="as-nav-button" id="as-tab-overview" data-as-view="overview" role="tab" aria-controls="as-view-overview" aria-selected="true" aria-current="page" tabindex="0" type="button"><span class="as-nav-code">览</span><span class="as-nav-copy"><strong>系统总览</strong><small>核销进度与全部记录</small></span><em id="as-nav-overview">0</em></button>
               <button class="as-nav-button" id="as-tab-archive" data-as-view="archive" role="tab" aria-controls="as-view-archive" aria-selected="false" tabindex="-1" type="button"><span class="as-nav-code">档</span><span class="as-nav-copy"><strong>技术档案</strong><small>供管理员查看问题详情</small></span><em id="as-nav-archive">0</em></button>
+              <button class="as-nav-button" id="as-tab-model" data-as-view="model" role="tab" aria-controls="as-view-model" aria-selected="false" tabindex="-1" type="button"><span class="as-nav-code">模</span><span class="as-nav-copy"><strong>更换模型</strong><small>配置模型平台与核销模型</small></span></button>
             </nav>
             <div class="as-rail-foot"><span>核销记录</span><strong id="as-rail-total">读取中</strong><em id="as-rail-note">每次核销单独保存</em></div>
           </aside>
@@ -4029,6 +4048,29 @@
               ${recordFiltersMarkup('archive')}
               <div class="as-panel-body"><div class="as-archive-grid" id="as-archive-list" role="list" aria-label="技术档案记录"></div><div class="as-list-window" id="as-archive-window"></div></div>
             </section></section>
+            <section class="as-view" id="as-view-model" role="tabpanel" aria-labelledby="as-tab-model" tabindex="0" hidden>
+              <section class="as-panel as-model-panel" aria-labelledby="as-model-title">
+                <header class="as-panel-head"><div><small>模型选择</small><h2 id="as-model-title">更换模型</h2></div><span class="as-model-status" id="as-model-current" role="status">正在读取模型配置…</span></header>
+                <div class="as-model-body">
+                  <p class="as-model-note">先选择创建 API Key 的服务平台，再填写对应密钥。点击“切换”并通过测试后，对新启动的任务生效；未启用时继续使用 GPT。</p>
+                  <form id="as-model-form" autocomplete="off">
+                    <div class="as-model-grid">
+                      <label class="as-model-field" for="as-model-provider">服务平台<select id="as-model-provider" name="provider" disabled><option value="ppio">PPIO（派欧云）</option><option value="qwen">阿里云百炼</option></select></label>
+                      <label class="as-model-field" for="as-model-choice">千问模型<select id="as-model-choice" disabled><option>正在读取型号…</option></select><input id="as-model-name" name="model" type="text" aria-label="手动填写千问模型名称" placeholder="填写模型 ID" maxlength="125" spellcheck="false" hidden></label>
+                      <label class="as-model-field" for="as-model-key"><span id="as-model-key-label">平台 API Key</span><input id="as-model-key" name="api_key" type="password" placeholder="先选择服务平台" maxlength="2048" autocomplete="new-password" spellcheck="false"></label>
+                      <label class="as-model-field as-model-field-wide" for="as-model-url">接口地址<input id="as-model-url" name="base_url" type="url" placeholder="https://api.ppio.com/openai/v1" maxlength="300" spellcheck="false"></label>
+                    </div>
+                    <div class="as-model-actions">
+                      <button class="as-button" id="as-model-activate" type="submit" disabled>切换</button>
+                      <button class="as-button secondary" data-as-model-action="test" type="button" disabled>测试返回</button>
+                      <button class="as-button secondary" data-as-model-action="gpt" type="button" disabled>恢复 GPT</button>
+                    </div>
+                  </form>
+                  <p class="as-model-message" id="as-model-message" role="status" aria-live="polite">测试使用一张示例图片，检查图片识别和 JSON 返回。API Key 保存后不回显。</p>
+                  <pre class="as-model-result" id="as-model-result" tabindex="0" aria-label="千问测试返回" hidden></pre>
+                </div>
+              </section>
+            </section>
           </div>
         </div></main>`;
         ensureTechnicalDrawer();
@@ -4175,7 +4217,32 @@
         window.scrollTo({ top: 0, behavior: 'auto' });
       };
       const bindPrimaryEvents = () => {
+        document.getElementById('as-model-choice')?.addEventListener('change', (event) => {
+          const name = document.getElementById('as-model-name');
+          const custom = event.target.value === '__custom__';
+          name.hidden = !custom;
+          if (custom) name.focus();
+          else name.value = event.target.value;
+          document.getElementById('as-model-result').hidden = true;
+          const message = document.getElementById('as-model-message');
+          message.dataset.error = 'false';
+          message.textContent = custom ? '填写支持图片识别和 JSON 输出的千问模型 ID，再点击“测试返回”。' : '已选择型号。可先点击“测试返回”，点击“切换”后才会切换核销模型。';
+        });
+        document.getElementById('as-model-provider')?.addEventListener('change', () => {
+          fillModelProvider();
+          document.getElementById('as-model-key').value = '';
+          document.getElementById('as-model-result').hidden = true;
+          const message = document.getElementById('as-model-message');
+          message.dataset.error = 'false';
+          message.textContent = '已切换配置平台，请填写该平台的密钥。当前核销模型尚未改变。';
+        });
+        document.getElementById('as-model-form')?.addEventListener('submit', (event) => {
+          event.preventDefault();
+          updateModelSettings('activate');
+        });
         document.body.addEventListener('click', (event) => {
+          const modelAction = event.target.closest('[data-as-model-action]');
+          if (modelAction) { updateModelSettings(modelAction.dataset.asModelAction); return; }
           const view = event.target.closest('[data-as-view]');
           if (view) { setPrimaryView(view.dataset.asView); return; }
           const loadMore = event.target.closest('[data-as-load-more]');
@@ -4372,6 +4439,136 @@
           control.checked = !reviewed;
           control.disabled = false;
           toast(customerOperationError(error, '保存人工核验标记'));
+        }
+      };
+      const modelProviderLabel = (provider) => ({ gpt: 'GPT', qwen: '百炼千问', ppio: 'PPIO 千问' }[provider] || provider);
+      // Official PPIO catalog and Bailian model cards checked on 2026-10-16.
+      // Only image + JSON models; keep full provider IDs and dated snapshots.
+      const recommendedModels = { ppio: 'qwen/qwen3.8-max', qwen: 'qwen3.8-max' };
+      const modelChoices = {
+        ppio: [
+          'qwen/qwen3.8-max',
+          'qwen/qwen3.8-flash',
+          'qwen/qwen3.8-27b',
+          'qwen/qwen3.6-27b',
+          'qwen/qwen3.6-35b-a3b',
+          'qwen/qwen3.5-397b-a17b',
+          'qwen/qwen3.5-122b-a10b',
+          'qwen/qwen3.5-35b-a3b',
+          'qwen/qwen3.5-27b',
+        ],
+        qwen: [
+          'qwen3.8-max',
+          'qwen3.8-max-0902',
+          'qwen3.8-flash',
+          'qwen3.8-27b',
+          'qwen3.8-omni-flash',
+          'qwen3.7-max-2026-06-08',
+          'qwen3.7-plus',
+          'qwen3.7-plus-2026-05-26',
+          'qwen3.7-flash',
+          'qwen3.7-flash-2026-07-15',
+          'qwen3.6-plus',
+          'qwen3.6-plus-2026-04-02',
+          'qwen3.6-flash',
+          'qwen3.6-flash-2026-04-16',
+          'qwen3.6-27b',
+          'qwen3.6-35b-a3b',
+          'qwen3.5-plus',
+          'qwen3.5-plus-2026-04-20',
+          'qwen3.5-plus-2026-02-15',
+          'qwen3.5-flash',
+          'qwen3.5-flash-2026-02-23',
+          'qwen3.5-397b-a17b',
+          'qwen3.5-122b-a10b',
+          'qwen3.5-35b-a3b',
+          'qwen3.5-27b',
+          'qwen3.5-omni-plus',
+          'qwen3.5-omni-plus-2026-03-15',
+          'qwen3-vl-plus',
+        ],
+      };
+      const fillModelProvider = () => {
+        const provider = document.getElementById('as-model-provider').value;
+        const profile = state.modelSettings?.profiles?.[provider];
+        if (!profile) return;
+        document.getElementById('as-model-name').value = profile.model;
+        document.getElementById('as-model-name').placeholder = profile.model;
+        document.getElementById('as-model-name').hidden = true;
+        const choices = [...(modelChoices[provider] || [])];
+        if (!choices.includes(profile.model)) choices.push(profile.model);
+        const choice = document.getElementById('as-model-choice');
+        choice.replaceChildren(...choices.map((id) => new Option(`${id}${id === recommendedModels[provider] ? '（推荐模型）' : ''}`, id)), new Option('手动填写其他型号…', '__custom__'));
+        choice.value = profile.model;
+        document.getElementById('as-model-url').value = profile.base_url;
+        document.getElementById('as-model-url').placeholder = profile.base_url;
+        showModelSettings(state.modelSettings);
+      };
+      const showModelSettings = (settings, fillFields = false) => {
+        state.modelSettings = settings;
+        document.getElementById('as-model-current').textContent = `当前：${modelProviderLabel(settings.provider)} · ${settings.active_model}`;
+        if (fillFields) {
+          document.getElementById('as-model-provider').value = settings.configured_provider || 'ppio';
+          fillModelProvider();
+        }
+        const provider = document.getElementById('as-model-provider').value;
+        const profile = settings.profiles?.[provider];
+        document.getElementById('as-model-key-label').textContent = `${provider === 'ppio' ? 'PPIO' : '百炼'} API Key`;
+        document.getElementById('as-model-key').placeholder = profile?.has_api_key ? '该平台已保存密钥，留空沿用' : `填写${provider === 'ppio' ? ' PPIO 的 sk_ 开头' : '百炼'} API Key`;
+        document.getElementById('as-model-provider').disabled = state.modelBusy;
+        document.getElementById('as-model-choice').disabled = state.modelBusy;
+        document.querySelectorAll('#as-model-form button').forEach((button) => { button.disabled = state.modelBusy; });
+        document.querySelector('[data-as-model-action="gpt"]').disabled = state.modelBusy || settings.provider === 'gpt';
+      };
+      const loadModelSettings = async () => {
+        try {
+          const settings = await apiJson('/api/model-settings');
+          state.modelToken = settings.confirmation_token;
+          showModelSettings(settings, true);
+        } catch (error) {
+          document.getElementById('as-model-current').textContent = '模型配置暂时无法读取';
+          document.getElementById('as-model-message').textContent = '请刷新工作台后重试。';
+        }
+      };
+      const updateModelSettings = async (action) => {
+        if (state.modelBusy || !state.modelSettings) return;
+        state.modelBusy = true;
+        const message = document.getElementById('as-model-message');
+        const resultView = document.getElementById('as-model-result');
+        const provider = document.getElementById('as-model-provider').value;
+        const service = modelProviderLabel(provider);
+        message.dataset.error = 'false';
+        message.textContent = action === 'gpt' ? '正在恢复 GPT…' : action === 'activate' ? `正在验证${service}连接，通过后启用…` : `正在读取测试图片并等待${service}返回…`;
+        resultView.hidden = true;
+        showModelSettings(state.modelSettings);
+        document.querySelectorAll('#as-model-form input').forEach((input) => { input.disabled = true; });
+        const payload = { action, revision: state.modelSettings.revision };
+        if (action !== 'gpt') Object.assign(payload, {
+          provider,
+          model: document.getElementById('as-model-name').value.trim(),
+          base_url: document.getElementById('as-model-url').value.trim(),
+          api_key: document.getElementById('as-model-key').value.trim(),
+        });
+        try {
+          const result = await apiJson('/api/model-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Offline-Audit-Model-Token': state.modelToken },
+            body: JSON.stringify(payload),
+          });
+          showModelSettings(result.settings);
+          message.textContent = result.message;
+          if (action === 'activate' || action === 'gpt') document.getElementById('as-model-key').value = '';
+          if (result.test) {
+            resultView.textContent = `平台：${modelProviderLabel(result.test.provider || provider)}\n模型：${result.test.model}\n耗时：${result.test.elapsed_seconds} 秒\n返回：\n${JSON.stringify(result.test.response, null, 2)}`;
+            resultView.hidden = false;
+          }
+        } catch (error) {
+          message.dataset.error = 'true';
+          message.textContent = error.message || '模型配置未生效，请稍后重试。';
+        } finally {
+          state.modelBusy = false;
+          document.querySelectorAll('#as-model-form input').forEach((input) => { input.disabled = false; });
+          showModelSettings(state.modelSettings);
         }
       };
       const legacyRecordLabels = new Map();
@@ -4805,6 +5002,7 @@
 
       if (context.mode === 'system') {
         renderPrimaryShell();
+        loadModelSettings();
         loadPrimaryRuns().finally(schedulePrimaryProbe);
       } else if (context.view_available && context.run?.status === 'completed') {
         enhanceCompletedRecord();

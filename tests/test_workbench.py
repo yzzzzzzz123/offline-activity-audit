@@ -575,7 +575,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             snapshot = json.loads((workspace / "snapshot.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["schema_version"], "1.2")
             self.assertEqual(manifest["audit_model"], "codex")
-            self.assertEqual(manifest["reasoning_effort"], "medium")
+            self.assertEqual(manifest["reasoning_effort"], "high")
             self.assertEqual(manifest["status"], "completed")
             self.assertEqual(manifest["error_count"], 1)
             self.assertEqual(
@@ -698,8 +698,8 @@ class WorkbenchStoreTests(unittest.TestCase):
                 workspace.name,
                 r"^HX202606040013-核销资料-诚成26年4月【堆头20家】-\d{8}_\d{4}_\d{2}$",
             )
-            self.assertEqual(result["audit_model"], "gpt-6-astra")
-            self.assertEqual(result["reasoning_effort"], "medium")
+            self.assertEqual(result["audit_model"], "gpt-6.1-sol")
+            self.assertEqual(result["reasoning_effort"], "high")
             self.assertEqual(list(root.glob("*.html")), [])
             self.assertEqual(
                 list(root.glob("*/offline-activity-audit.html")),
@@ -885,7 +885,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(listing["count"], 1)
         self.assertEqual(listing["runs"][0]["workspace_id"], self.workspace_id)
         self.assertEqual(listing["runs"][0]["audit_model"], "codex")
-        self.assertEqual(listing["runs"][0]["reasoning_effort"], "medium")
+        self.assertEqual(listing["runs"][0]["reasoning_effort"], "high")
         self.assertFalse(listing["runs"][0]["manual_reviewed"])
         self.assertIsNone(listing["runs"][0]["manual_reviewed_at"])
         self.assertEqual(listing["runs"][0]["main_flow_tasks"], main_flow_task_list())
@@ -1862,11 +1862,11 @@ class WorkbenchServerTests(unittest.TestCase):
         primary_context = self._script_payload(primary, "audit-workbench-context")
         self.assertEqual(primary_context["mode"], "system")
         self.assertIsNone(primary_context["selected_run"])
-        self.assertEqual(primary_context["system_version"], "2.16.2")
+        self.assertEqual(primary_context["system_version"], "2.16.4")
         self.assertEqual(primary_context["delivery_mode"], "server")
         self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
         self.assertIn("audit-system-extension-script", primary)
-        self.assertIn('content="2.16.2"', primary)
+        self.assertIn('content="2.16.4"', primary)
         self.assertFalse(primary_context["oss_intake_enabled"])
         self.assertEqual(self._script_payload(primary, "audit-data")["sheets"], [])
         self.assertLess(
@@ -1890,8 +1890,10 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn(
             'role="tablist" aria-label="核销管理中心视图"', primary
         )
-        self.assertEqual(primary.count('role="tab" aria-controls="as-view-'), 2)
-        self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tab-'), 2)
+        self.assertEqual(primary.count('role="tab" aria-controls="as-view-'), 3)
+        self.assertIn('id="as-tab-model" data-as-view="model"', primary)
+        self.assertIn('id="as-view-model" role="tabpanel"', primary)
+        self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tab-'), 3)
         self.assertIn('role="tablist" aria-label="技术档案分类"', primary)
         self.assertIn("const contextTechnicalSnapshot = () => ({", primary)
         self.assertIn(
@@ -1981,7 +1983,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.54")
+        self.assertEqual(config["api_version"], "1.56")
         self.assertEqual(config["audit_policy_source"], "费用核销类型-资料与标准清单-20260918.pdf")
         self.assertEqual(config["scenario_classification_policy"], "biz_type")
         self.assertEqual(config["local_input_type_policy"], "ask_user_before_run")
@@ -1991,6 +1993,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn("classification_failure_message", config)
         self.assertEqual(config["error_text_policy"], "reason_and_action_separate")
         self.assertEqual(config["business_file_display"], "filenames_only")
+        self.assertEqual(config["material_issue_file_policy"], "related_files_only_hide_archive_gaps")
         self.assertEqual(config["customer_language_policy"], "plain_chinese_source_specific")
         self.assertEqual(config["customer_reason_format"], "short_facts_without_archive_or_type_prefix")
         self.assertEqual(config["confidence_badge_display"], "hidden")
@@ -1998,7 +2001,7 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(config["result_list_heading_display"], "hidden")
         self.assertEqual(config["filter_header_display"], "hidden")
         self.assertEqual(config["result_filters"], ["audit_type", "category"])
-        self.assertEqual(config["system_version"], "2.16.2")
+        self.assertEqual(config["system_version"], "2.16.4")
         self.assertEqual(config["material_problem_policy"], "require_exact_material_items_before_audit")
         self.assertEqual(config["refresh_policy"]["overview"]["record_count_statuses"], "all")
         self.assertEqual(config["refresh_policy"]["record_lists"], {

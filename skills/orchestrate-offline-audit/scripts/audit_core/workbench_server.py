@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .html_report import DATA_CLOSE, DATA_OPEN
 from .scenario_registry import SCENARIO_SPECS
 from .error_reason import attach_error_reasons
+from .material_issue_files import attach_material_issue_files
 from .pass_check_log import attach_pass_check_log, load_workspace_results
 from .oss_intake import (
     CALLBACK_PATH,
@@ -44,6 +45,7 @@ from .oss_intake import (
 )
 from .workbench_runtime import ROOT_HTML
 from .common import AuditError
+from .model_settings import ModelSelection, ModelSettingsStore, ModelSettingsError, ModelSettingsConflict
 from .pdf_policy import SOURCE_TITLE
 from .workbench_delete import RunDeletionConflict, prepare_run_deletion
 from .workbench_labels import record_labels
@@ -100,7 +102,8 @@ def _read_root_html_template(
 def _completed_projection_signature(
     workspace: Path,
 ) -> tuple[tuple[str, int, int, int], ...]:
-    paths = [workspace / "snapshot.json", workspace / "logs" / "events.jsonl", workspace / "analysis" / "input-cases.json"]
+    paths = [workspace / "snapshot.json", workspace / "logs" / "events.jsonl", workspace / "analysis" / "input-cases.json",
+             workspace / "analysis" / "pdf-policy" / "evidence.json"]
     for directory in ("results", "evidence"):
         result_root = workspace / "analysis" / directory
         if result_root.is_dir():
@@ -134,11 +137,22 @@ def _read_completed_snapshot_projection(
         snapshot.get("view"),
         load_workspace_results(workspace),
     )
-    snapshot["view"] = attach_error_reasons(snapshot["view"])
+    snapshot["view"] = _project_material_issue_files(attach_error_reasons(snapshot["view"]), workspace)
     snapshot["recent_events"] = read_event_records(
         workspace / "logs" / "events.jsonl"
     )[-120:]
     return snapshot
+
+
+def _project_material_issue_files(view: dict | None, workspace: Path) -> dict | None:
+    if not isinstance(view, dict) or not any(sheet.get("projection_kind") == "classification_rejection"
+                                           for sheet in view.get("sheets") or []):
+        return view
+    evidence_path = workspace / "analysis" / "pdf-policy" / "evidence.json"
+    if not evidence_path.is_file():
+        return view
+    evidence = read_json_file(evidence_path)
+    return attach_material_issue_files(view, evidence.get("packets") or [])
 
 
 @functools.lru_cache(maxsize=32)
@@ -482,6 +496,7 @@ class WorkbenchCatalog:
                 ("snapshot.json", workspace / "snapshot.json"),
                 ("logs/events.jsonl", workspace / "logs" / "events.jsonl"),
                 ("analysis/input-cases.json", workspace / "analysis" / "input-cases.json"),
+                ("analysis/pdf-policy/evidence.json", workspace / "analysis" / "pdf-policy" / "evidence.json"),
             ]
             for directory in ("results", "evidence"):
                 result_root = workspace / "analysis" / directory
@@ -967,7 +982,7 @@ class WorkbenchCatalog:
                     snapshot.get("view"),
                     load_workspace_results(workspace),
                 )
-                snapshot["view"] = attach_error_reasons(snapshot["view"])
+                snapshot["view"] = _project_material_issue_files(attach_error_reasons(snapshot["view"]), workspace)
                 snapshot["recent_events"] = self.events(workspace_id)[-120:]
             if manifest.get("status") == "completed" and isinstance(snapshot.get("view"), dict):
                 manifest["error_count"] = _error_count(snapshot["view"])
@@ -1221,6 +1236,9 @@ class WorkbenchHTTPServer(ThreadingHTTPServer):
         self.catalog = catalog
         self.intake = intake
         self.deletion_token = secrets.token_urlsafe(32)
+        self.model_settings = ModelSettingsStore(catalog.root)
+        self.model_settings_token = secrets.token_urlsafe(32)
+        self.model_probe_lock = threading.Lock()
         self.deletion_hosts = {"localhost", "127.0.0.1", socket.gethostname().lower(), *_local_ipv4_addresses()}
         self._html_cache_lock = threading.RLock()
         self._html_cache: OrderedDict[
@@ -1553,6 +1571,7 @@ class Handler(BaseHTTPRequestHandler):
             "customer_language_policy": "plain_chinese_source_specific",
             "customer_reason_format": "short_facts_without_archive_or_type_prefix",
             "business_file_display": "filenames_only",
+            "material_issue_file_policy": "related_files_only_hide_archive_gaps",
             "main_flow_tasks": main_flow_task_list(),
             "refresh_policy": {
                 "record_lists": {
@@ -1613,6 +1632,9 @@ class Handler(BaseHTTPRequestHandler):
             "read_only": False,
             "workbench_read_only": False,
             "business_results_read_only": True,
+            "model_settings": {"endpoint": "/api/model-settings", "effective_scope": "new_runs_only",
+                               "default_provider": "gpt", "qwen_provider": "aliyun_bailian",
+                               "api_providers": ["qwen", "ppio"], "credentials_scope": "per_provider"},
             "manual_review": {
                 "writable": True,
                 "endpoint": "/api/runs/{workspace_id}/manual-review",
@@ -1753,6 +1775,10 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/config":
                 self._json(self._config())
                 return
+            if route == "/api/model-settings":
+                self._json({**self.server.model_settings.public(),
+                            "confirmation_token": self.server.model_settings_token})
+                return
             if route == "/api/runs":
                 encoded, etag = self.server.catalog.catalog_document()
                 self._json_document(encoded, etag)
@@ -1849,6 +1875,8 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.NOT_FOUND, "运行资源不存在")
         except FileNotFoundError:
             self._error(HTTPStatus.NOT_FOUND, "运行或资源不存在")
+        except ModelSettingsError as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
         except (ValueError, json.JSONDecodeError) as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
         except OSError as exc:
@@ -1907,8 +1935,62 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             self._error(HTTPStatus.CONFLICT, "删除未完成：文件可能被占用或权限不足，请解除占用后重试")
 
+    def _update_model_settings(self) -> None:
+        self.close_connection = True
+        origin = urlparse(str(self.headers.get("Origin") or ""))
+        host = str(self.headers.get("Host") or "")
+        if (origin.scheme != "http" or origin.netloc.lower() != host.lower()
+                or origin.hostname not in self.server.deletion_hosts
+                or origin.path or origin.params or origin.query or origin.fragment
+                or self.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin"
+                or not secrets.compare_digest(str(self.headers.get("X-Offline-Audit-Model-Token") or "").encode(),
+                                              self.server.model_settings_token.encode())):
+            self._error(HTTPStatus.FORBIDDEN, "请从当前工作台配置模型。")
+            return
+        from .qwen_model import QwenRequestError, probe_qwen
+        try:
+            if self.headers.get("Transfer-Encoding") or urlparse(self.path).query:
+                raise ModelSettingsError("模型配置请求格式不正确。")
+            payload = self._read_request_json()
+            allowed = {"action", "revision", "provider", "model", "base_url", "api_key"}
+            if set(payload) - allowed or payload.get("action") not in {"test", "activate", "gpt"}:
+                raise ModelSettingsError("未知的模型配置操作。")
+            if type(payload.get("revision")) is not int:
+                raise ModelSettingsError("请刷新工作台后重试。")
+            for key in ("provider", "model", "base_url", "api_key"):
+                if key in payload and not isinstance(payload[key], str):
+                    raise ModelSettingsError("模型配置必须填写文字。")
+            action = payload["action"]
+            if action == "gpt":
+                result = self.server.model_settings.save(ModelSelection(), expected_revision=payload["revision"])
+                self._json({"settings": result, "message": "已恢复 GPT，后续新启动的任务使用 GPT。"})
+                return
+            candidate = self.server.model_settings.candidate(payload)
+            if not self.server.model_probe_lock.acquire(blocking=False):
+                raise ModelSettingsConflict("模型测试正在进行，请稍后再试。")
+            try:
+                probe = probe_qwen(candidate)
+                result = (self.server.model_settings.save(candidate, expected_revision=payload["revision"])
+                          if action == "activate" else self.server.model_settings.public())
+            finally:
+                self.server.model_probe_lock.release()
+            service = "PPIO 千问" if candidate.provider == "ppio" else "百炼千问"
+            self._json({"settings": result, "test": probe,
+                        "message": f"已切换为{service}，后续新启动的任务使用该模型。" if action == "activate" else f"{service}图片识别与 JSON 返回测试通过，当前模型未改变。"})
+        except ModelSettingsConflict as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
+        except (ModelSettingsError, OSSIntakeRequestError, ValueError) as exc:
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
+        except QwenRequestError as exc:
+            self._error(HTTPStatus.BAD_GATEWAY, str(exc))
+        except OSError:
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "模型配置保存失败，请检查本机文件权限。")
+
     def do_POST(self) -> None:  # noqa: N802
         route = urlparse(self.path).path.rstrip("/") or "/"
+        if route == "/api/model-settings":
+            self._update_model_settings()
+            return
         review_match = re.fullmatch(r"/api/runs/([^/]+)/manual-review", route)
         if review_match:
             try:

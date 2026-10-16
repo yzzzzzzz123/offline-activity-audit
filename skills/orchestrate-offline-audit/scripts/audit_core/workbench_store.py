@@ -81,6 +81,8 @@ def atomic_write_json(path: Path, value: Any) -> None:
 
 def _workspace_model_label(value: str) -> str:
     raw = str(value or "").strip().lower()
+    if re.fullmatch(r"qwen/qwen[a-z0-9._-]+", raw):
+        raw = raw.replace("/", "-")
     compact = re.sub(r"[-_\s]+", "", raw)
     if not compact or re.fullmatch(r"[a-z0-9][a-z0-9.]{0,39}", compact) is None:
         raise AuditError("核销模型名称无法安全写入 worktree 目录名")

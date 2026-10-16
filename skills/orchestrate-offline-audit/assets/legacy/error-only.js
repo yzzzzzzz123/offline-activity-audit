@@ -158,14 +158,15 @@
       const businessFileName = (value) => String(value || '').replaceAll('\\', '/').split('/').filter(Boolean).pop() || '';
       const isBusinessFile = (value) => /\.(?:pdf|xlsx?|xlsm|jpe?g|png|webp|gif|bmp|tiff?|heic|zip|rar)$/i.test(String(value || '').trim())
         && !/(?:^|[\\/])(?:crops?|ocr|rendered|model-input|visual-staging|derived)(?:[\\/]|$)/i.test(String(value || ''));
-      const evidenceHtml = (evidence, fallbackFiles = []) => {
+      const evidenceHtml = (evidence, fallbackFiles = [], businessFiles = null) => {
         const detail = evidence && typeof evidence === 'object' ? evidence : null;
         const sources = Array.isArray(detail?.sources) ? detail.sources : [];
         const nonBusinessKinds = new Set(['reference', 'generated', 'model_generated', 'model_input', 'model_output', 'synthetic', 'rendered', 'crop', 'ocr']);
         const excluded = new Set(sources.filter((source) => nonBusinessKinds.has(source?.kind))
           .flatMap((source) => [source.file, source.original_file]).filter(Boolean));
         const sourceByFile = new Map(sources.filter((source) => source?.file).map((source) => [source.file, source]));
-        const declared = Array.isArray(detail?.source_files) ? detail.source_files
+        const declared = Array.isArray(businessFiles) ? businessFiles
+          : Array.isArray(detail?.source_files) ? detail.source_files
           : Array.isArray(detail?.sources) ? sources.map((source) => source.file)
             : fallbackFiles.filter(isBusinessFile);
         const originalFile = (value) => {
@@ -191,7 +192,7 @@
         return lines(action).map((line) => line.replace(/^\d+\.\s*/, '').replace(/[；;\s]+$/, ''))
           .filter(Boolean).join('；');
       };
-      const errorCard = ({ title, auditType, source = '', baseline = '', problem, action, extra = '', search = '', confidence = 'high', confidenceScore = null, reasonCategories = [], evidence = null }) => {
+      const errorCard = ({ title, auditType, source = '', baseline = '', problem, action, extra = '', search = '', confidence = 'high', confidenceScore = null, reasonCategories = [], evidence = null, businessFiles = null }) => {
         const categories = normalizedErrorReasonCategories(reasonCategories, title);
         const confidenceView = confidencePresentation(
           confidence,
@@ -215,7 +216,7 @@
               <header class="eo-error-head"><h3>${escapeHtml(title)}</h3><div class="eo-error-badges"><span class="eo-scope">核销类型 · ${escapeHtml(auditType)}</span></div></header>
               <div class="eo-field"><span>错误原因</span><div>${categorizedProblem}</div></div>
               ${action ? `<div class="eo-field action"><span>处理方式</span><div>${escapeHtml(action)}</div></div>` : ''}
-              ${evidenceHtml(evidence, [source, baseline].filter(Boolean).flatMap((value) => value.split('、')).filter((value) => /\.(pdf|xlsx?|jpe?g|png|webp)$/i.test(value)))}
+              ${evidenceHtml(evidence, [source, baseline].filter(Boolean).flatMap((value) => value.split('、')).filter((value) => /\.(pdf|xlsx?|jpe?g|png|webp)$/i.test(value)), businessFiles)}
               ${extra}
             </div>
           </article>`;
@@ -516,7 +517,7 @@
           const reasonCategory = sheet.projection_kind === 'classification_rejection'
             ? (sheet.confirmed_scenario ? '核销资料' : '费用类型')
             : issue?.code === 'scenario_unconfirmed' ? '费用类型' : row.check_category || errorReasonCategory([title, ...(row.values || [])].join(' '));
-          return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [reasonCategory], evidence: row.card_evidence });
+          return errorCard({ title, auditType, source, problem, action, search: (row.values || []).join(' '), confidence: row.confidence, confidenceScore: row.confidence_score, reasonCategories: [reasonCategory], evidence: row.card_evidence, businessFiles: row.business_source_files });
         }).join('');
         return { count: rows.length, upstream: rows.length, local: 0, html: cards };
       };

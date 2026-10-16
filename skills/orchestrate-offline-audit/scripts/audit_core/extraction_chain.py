@@ -6,9 +6,9 @@ from pathlib import Path
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableSequence
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from .evidence_parser import EvidenceOutputParser
-from .langchain_model import CodexChatModel
 
 
 def as_prompt(value: str | BasePromptTemplate) -> BasePromptTemplate:
@@ -24,7 +24,7 @@ def render_prompt(value: str | BasePromptTemplate) -> str:
 
 
 def build_extraction_chain(
-    prompt: str | BasePromptTemplate, model: CodexChatModel,
+    prompt: str | BasePromptTemplate, model: BaseChatModel,
     parser: EvidenceOutputParser, *, images: list[Path], retry_hint: str = "",
 ) -> RunnableSequence:
     blocks = [{"type": "text", "text": "{instructions}{retry_hint}"}]

@@ -208,12 +208,13 @@ def _exact_material_match(match: dict) -> bool:
             and all(item["state"] in {"present", "not_applicable"} for item in match["materials"]))
 
 
-def _classification_reasons(value: dict, selected_scenario: str | None = None) -> list[str]:
+def classification_issues(value: dict, selected_scenario: str | None = None) -> list[dict]:
     from .scenario_registry import SCENARIO_LABELS
     candidates = value["candidate_scenarios"]
     if candidates and selected_scenario is None:
         labels = "、".join(SCENARIO_LABELS[scenario] for scenario in candidates)
-        return [f"资料项比对仍同时匹配{labels}，无法唯一确定核销类型。", value["reason"]]
+        return [{"reason": reason, "source_ids": []} for reason in
+                (f"资料项比对仍同时匹配{labels}，无法唯一确定核销类型。", value["reason"])]
     reasons = []
     # Describe conditional gaps for every list supported by some actual material;
     # never pick a type by the fewest missing items. The full eight-list evidence
@@ -228,19 +229,37 @@ def _classification_reasons(value: dict, selected_scenario: str | None = None) -
             if material["state"] in {"missing", "unclear"}:
                 state = "缺少资料" if material["state"] == "missing" else "尚不能确认的资料或适用情况"
                 detail = f"（{material['reason']}）" if material["state"] == "unclear" else ""
-                gaps.append(f"{state}：{labels[material['id']]}{detail}")
+                ids = material["source_ids"] if material["state"] == "unclear" else []
+                # A missing counterpart is corrected from the submitted POS version.
+                # An entirely absent contract or other item has no submitted file.
+                counterpart = {"pos": "pos_excel", "pos_excel": "pos"}.get(material["id"])
+                if material["state"] == "missing" and counterpart:
+                    ids = [uid for item in match["materials"]
+                           if item["id"] == counterpart and item["state"] == "present"
+                           for uid in item["source_ids"]]
+                gaps.append({"reason": f"{state}：{labels[material['id']]}{detail}",
+                             "source_ids": list(dict.fromkeys(ids))})
         for extra in match["extra_materials"]:
-            gaps.append(f"多出的资料：{extra['description']}（{'、'.join(extra['source_ids'])}；{extra['reason']}）")
+            gaps.append({"reason": f"多出的资料：{extra['description']}（{'、'.join(extra['source_ids'])}；{extra['reason']}）",
+                         "source_ids": list(extra["source_ids"])})
         pair = [m["state"] for m in match["materials"] if m["id"] in {"pos", "pos_excel"}]
         if "present" in pair and pair != ["present", "present"]:
-            gaps.append("POS明细须成套提供Excel版和盖章版，已提供一版时不能免交另一版")
+            gaps.append({"reason": "POS明细须成套提供Excel版和盖章版，已提供一版时不能免交另一版",
+                         "source_ids": list(dict.fromkeys(uid for item in match["materials"]
+                             if item["id"] in {"pos", "pos_excel"} and item["state"] == "present"
+                             for uid in item["source_ids"]))})
         prefix = (f"{SCENARIO_LABELS[match['scenario']]}：" if selected_scenario
                   else f"如果申报的是{SCENARIO_LABELS[match['scenario']]}，")
         if selected_scenario:
-            reasons.extend(prefix + gap for gap in gaps)
+            reasons.extend({**gap, "reason": prefix + gap["reason"]} for gap in gaps)
         else:
-            reasons.append(prefix + "；".join(gaps))
+            reasons.append({"reason": prefix + "；".join(gap["reason"] for gap in gaps),
+                            "source_ids": list(dict.fromkeys(uid for gap in gaps for uid in gap["source_ids"]))})
     return reasons
+
+
+def _classification_reasons(value: dict, selected_scenario: str | None = None) -> list[str]:
+    return [issue["reason"] for issue in classification_issues(value, selected_scenario)]
 
 
 def classification_decision(value: dict, documents: list[dict], selected_scenario: str | None = None,

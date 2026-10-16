@@ -618,8 +618,8 @@ class OSSIntakeValidationTests(unittest.TestCase):
             self.assertEqual(result["workspace_id"], "20260831-codex")
             self.assertIn(str(FORMAL_RUNNER), captured)
             self.assertIn("--input-dir", captured)
-            self.assertEqual(captured[captured.index("--model") + 1], "gpt-6-astra")
-            self.assertEqual(captured[captured.index("--reasoning-effort") + 1], "medium")
+            self.assertEqual(captured[captured.index("--model") + 1], "gpt-6.1-sol")
+            self.assertEqual(captured[captured.index("--reasoning-effort") + 1], "high")
             self.assertEqual(captured[captured.index("--input-source") + 1], "oss")
             self.assertIn("--worktrees", captured)
             self.assertIn("--scenario", captured)
@@ -1873,7 +1873,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
 
         with self.opener.open(self.base + "/api/config", timeout=5) as response:
             config = json.load(response)
-        self.assertEqual(config["api_version"], "1.54")
+        self.assertEqual(config["api_version"], "1.56")
         self.assertEqual(config["material_problem_policy"], "require_exact_material_items_before_audit")
         self.assertTrue(config["oss_intake"]["enabled"])
         self.assertEqual(config["oss_intake"]["list_endpoint"], "/api/intake/jobs")

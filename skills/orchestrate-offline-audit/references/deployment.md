@@ -16,7 +16,7 @@
    配置模板、备份恢复脚本和检查脚本；所有新增交付文件放在本项目内。
    独立商品数据库已有 Compose 和 dbctl.py，先复用并验证，不重复创建空库代替数据迁移。
    不依赖源电脑的 Python、Codex 桌面目录、其他项目、私人全局技能或绝对路径。
-3. 保留核销业务规则、模型 gpt-6-astra、推理档位 medium、原始材料和历史结果。
+3. 保留核销业务规则、模型 gpt-6.1-sol、推理档位 high、原始材料和历史结果。
    只做迁移所需的平台适配，不重设计页面，不改变请求、回调及业务判断。
 4. 处理 Linux 的 RAR 解压、旧 .xls 嵌入图片读取、Codex 命令兼容和只读沙箱。
    用真实保留材料验证；不能把工具安装成功或页面能打开当成十类核销全部可用。
@@ -47,7 +47,7 @@
 | 核销服务 | Windows 上的 Python 原生服务，局域网 `8080` | Linux 独立运行并可自启动 |
 | 前端 | `skills/orchestrate-offline-audit/assets/offline-activity-audit.html` | 保留唯一前端和历史静态档案 |
 | 源码版本 | Audit System `2.11.22`、API `1.35` | 以 `skills/orchestrate-offline-audit/scripts/audit_core/workbench_html.py` 为准；旧进程可能仍加载旧版本 |
-| AI 默认值 | `gpt-6-astra` / `medium` | 以 `skills/orchestrate-offline-audit/scripts/audit_core/codex_runner.py` 为准，不沿用旧文档的 `high` |
+| AI 默认值 | `gpt-6.1-sol` / `high` | 以 `skills/orchestrate-offline-audit/scripts/audit_core/codex_runner.py` 为准，按用户2026-10-15确认使用 `high` |
 | 商品主数据及参考图 | MySQL 商品身份 + 私有 OSS 多视图 | 迁移数据库及配置；只读核验 OSS，不迁入本地图库或 GitHub 灾备 |
 | 独立数据库 | Docker MySQL `8.0.45`，容器 `offline-product-catalog-mysql-1`，局域网端口 `3307` | 使用项目内 `dbctl.py` 导出、恢复；旧原生服务已停止并禁用，原数据保留作回滚 |
 | 商品表 | `product_catalog.products`，130 行 | 三身份字段 `barcode_69`、`product_name`、`product_code` 和图片关联 `image_manifest_key`；编码主键固定，条码允许重复 |
@@ -163,7 +163,7 @@ LibreOffice 等工具返回成功不等于保留了特殊图片关系。若该�
 
 将目标架构的 CLI 安装到镜像或项目受控工具目录，通过 `OFFLINE_AUDIT_CODEX` 指向实际文件。不能把 `codex.exe` 搬到 Linux。固定经过验证的版本，并检查：
 
-- `codex debug models --bundled` 返回可解析目录，包含 `gpt-6-astra`。
+- `codex debug models --bundled` 返回可解析目录，包含 `gpt-6.1-sol`。
 - `codex exec` 支持当前 runner 要求的图片、JSON Schema、只读沙箱、临时会话及配置参数。
 - 认证在实际服务用户下有效，不仅是部署终端的另一用户已登录。
 - 模型临时材料可读、写入被拒绝，各阶段只获得允许的材料。
@@ -187,8 +187,8 @@ LibreOffice 等工具返回成功不等于保留了特殊图片关系。若该�
 | `OFFLINE_AUDIT_OSS_ENABLED` | 正式服务 `1`；隔离验收按测试步骤控制 |
 | `OFFLINE_AUDIT_OSS_ALLOWED_HOSTS` | `xiaokuo-dingding-xianxiahexiao.oss-cn-shenzhen.aliyuncs.com,oss-cn-shenzhen.aliyuncs.com` |
 | `OFFLINE_AUDIT_OSS_PRODUCER_MODEL` | `codex` |
-| `OFFLINE_AUDIT_MODEL` | `gpt-6-astra` |
-| `OFFLINE_AUDIT_REASONING_EFFORT` | `medium` |
+| `OFFLINE_AUDIT_MODEL` | `gpt-6.1-sol` |
+| `OFFLINE_AUDIT_REASONING_EFFORT` | `high` |
 | `OFFLINE_AUDIT_CODEX` | 目标 CLI 实际路径 |
 | `OFFLINE_AUDIT_OSS_CALLBACK_URL` | 源端为 `http://192.0.0.225:8699/api/v1/ai/analyze/callback`，须验证目标可达性 |
 | `OFFLINE_AUDIT_OSS_ALLOW_HTTP_CALLBACK` | 仅可信内网 HTTP 回调设 `1`；改用 HTTPS 时调整 |
@@ -232,7 +232,7 @@ python -m audit_core.workbench_server --host 0.0.0.0 --port 8080
 python -B skills/orchestrate-offline-audit/scripts/run.py \
   --run-id <独立验收ID> --producer-model codex \
   --biz-type "<用户已确认的核销方式>" \
-  --model gpt-6-astra --reasoning-effort medium \
+  --model gpt-6.1-sol --reasoning-effort high \
   --input-dir <隔离测试材料目录> --worktrees <隔离测试输出目录>
 ```
 

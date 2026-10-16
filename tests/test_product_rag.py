@@ -858,9 +858,9 @@ class ProductRagTests(unittest.TestCase):
             ["product-1", "product-2", "product-3", "product-4"],
         )
 
-    def test_reasoning_policy_uses_fixed_medium_default(self) -> None:
+    def test_reasoning_policy_preserves_light_query_effort_and_high_audit_default(self) -> None:
         self.assertEqual(PRODUCT_QUERY_REASONING_EFFORT, "medium")
-        self.assertEqual(DEFAULT_REASONING_EFFORT, "medium")
+        self.assertEqual(DEFAULT_REASONING_EFFORT, "high")
         self.assertIn("max", ALLOWED_REASONING_EFFORTS)
 
     def test_invalid_codex_request_configuration_is_not_retried(self) -> None:

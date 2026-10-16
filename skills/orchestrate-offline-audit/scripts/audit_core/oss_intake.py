@@ -767,6 +767,8 @@ def run_formal_audit_subprocess(
     biz_type: str | None = None,
     large_venue_fee: bool | None = None,
 ) -> dict[str, Any]:
+    from .model_settings import ModelSettingsStore, SNAPSHOT_ENV
+    selection = ModelSettingsStore(worktrees_root).snapshot()
     with tempfile.TemporaryDirectory(
         prefix="offline-audit-oss-result-"
     ) as temporary:
@@ -778,11 +780,11 @@ def run_formal_audit_subprocess(
             "--run-id",
             run_id,
             "--producer-model",
-            producer_model,
+            selection.provider if selection.provider in {"qwen", "ppio"} else producer_model,
             "--model",
-            DEFAULT_MODEL,
+            selection.model,
             "--reasoning-effort",
-            DEFAULT_REASONING_EFFORT,
+            selection.reasoning_effort,
             "--input-dir",
             str(input_dir),
             "--input-source",
@@ -803,6 +805,9 @@ def run_formal_audit_subprocess(
         environment = os.environ.copy()
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
         environment["PYTHONIOENCODING"] = "utf-8"
+        # One immutable snapshot per formal process: switching the workbench
+        # cannot change models half way through an existing audit.
+        environment[SNAPSHOT_ENV] = selection.subprocess_value()
         kwargs: dict[str, Any] = {}
         if os.name == "nt":
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)

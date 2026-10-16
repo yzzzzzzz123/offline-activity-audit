@@ -40,6 +40,10 @@ def concise_reason(value: str, *, archive: str = "", label: str = "", files: Seq
             value = value.replace(name, token)
     value = re.sub(r"(^|[；，。])缺少资料\s*[：:]\s*", r"\1缺少", value)
     value = re.sub(r"(^|[；，。])多出的资料\s*[：:]\s*", r"\1多交了", value)
+    # Older snapshots kept this wrapper after simplifying nested POS parentheses.
+    value = re.sub(r"^POS）（", "", value)
+    value = value.replace("盖章版销售明细（POS）", "盖章版销售明细")
+    value = value.replace("销售明细（POS）", "销售明细")
     unclear = re.match(r"^尚不能确认的资料或适用情况[：:]\s*(.*?)（(.*)）[。\s]*$", value, re.S)
     if unclear:
         value = unclear.group(2).strip()
@@ -47,8 +51,6 @@ def concise_reason(value: str, *, archive: str = "", label: str = "", files: Seq
             value = "无法确认" + unclear.group(1).strip()
     else:
         value = re.sub(r"^尚不能确认的资料或适用情况[：:]\s*", "无法确认", value)
-    value = value.replace("盖章版销售明细（POS）", "盖章版销售明细")
-    value = value.replace("销售明细（POS）", "销售明细")
     if re.fullmatch(r"(?:POS明细|销售明细)须成套提供Excel版和盖章版，已提供一版时不能免交另一版[。\s]*", value):
         value = POS_PAIR_REASON
     # This saved gate explanation states a condition is unknown, not that photos

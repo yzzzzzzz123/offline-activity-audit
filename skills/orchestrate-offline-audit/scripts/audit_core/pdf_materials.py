@@ -6,6 +6,7 @@ from .paths import PROJECT_ROOT
 from dataclasses import asdict
 from datetime import date, datetime
 import json
+import re
 from pathlib import Path
 import shutil
 from zipfile import ZipFile
@@ -14,6 +15,7 @@ from xml.etree.ElementTree import ParseError
 
 from PIL import Image
 import openpyxl
+from openpyxl.worksheet._reader import WorkSheetParser
 import pymupdf
 import xlrd
 
@@ -43,11 +45,68 @@ from .pdf_policy import POS_COMMON_CLARIFICATION
 ROOT = PROJECT_ROOT
 ORCHESTRATOR_SKILL = ROOT / "skills/orchestrate-offline-audit"
 MAX_CELLS = 1_000_000
+MAX_VISUAL_BATCH_BYTES = 8 * 1024 * 1024
+
+
+def _reading_batches(units):
+    """Keep source order and every unit while bounding image upload batches."""
+    batch = []
+    image_bytes = 0
+    for unit in units:
+        size = Path(unit["image"]).stat().st_size if unit.get("image") else 0
+        if batch and (len(batch) >= 6 or image_bytes + size > MAX_VISUAL_BATCH_BYTES):
+            yield batch
+            batch = []
+            image_bytes = 0
+        batch.append(unit)
+        image_bytes += size
+    if batch:
+        yield batch
 
 
 def _business_background() -> str:
     path = ORCHESTRATOR_SKILL / "references/business-background.md"
     return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def _prompt_documents(documents: list[dict]) -> str:
+    """Losslessly dictionary-encode large native tables for the CLI prompt.
+
+    Full source facts remain unchanged in the evidence and validators. Repeated
+    literal fragments are sent once; every row, value and source ID is retained.
+    This avoids the CLI's 1 MiB stdin limit without sampling business data.
+    """
+    plain = json.dumps(documents, ensure_ascii=False)
+    if len(plain.encode("utf-8")) < 600_000:
+        return plain
+    fragments = []
+    ids = {}
+
+    def intern(text):
+        if text not in ids:
+            ids[text] = len(fragments)
+            fragments.append(text)
+        return ids[text]
+
+    encoded = []
+    for document in documents:
+        facts = []
+        for fact in document["facts"]:
+            match = re.fullmatch(r"(.+!R)([1-9][0-9]*): (.*)", fact, flags=re.DOTALL)
+            if match:
+                facts.append([intern(match[1]), int(match[2]),
+                              [intern(part) for part in match[3].split(" | ")]])
+            else:
+                facts.append(fact)
+        encoded.append({**document, "facts": facts})
+    packed = json.dumps({
+        "encoding": ("无损原文片段编码：documents中的facts若为字符串则原样读取；"
+                     "若为[前缀ID,原始行号,[片段ID列表]]，完整原文等于fragments[前缀ID]+"
+                     "原始行号+': '+用' | '连接各fragments[片段ID]。ID从0开始。"
+                     "全部来源、行和单元格均已保留，不是抽样或摘要；引用数值须还原为原文。"),
+        "fragments": fragments, "documents": encoded,
+    }, ensure_ascii=False, separators=(",", ":"))
+    return packed if len(packed.encode("utf-8")) < len(plain.encode("utf-8")) else plain
 
 
 def _large_venue_fee_context(value: bool | None) -> str:
@@ -71,6 +130,23 @@ def _cell(value) -> str:
     if isinstance(value, float) and value.is_integer() and abs(value) < 2 ** 53:
         return str(int(value))
     return str(value) if value is not None else ""
+
+
+def _stored_spreadsheet_rows(sheet):
+    """Read stored cells without expanding Excel's formatting-only dimensions.
+
+    Use openpyxl's streaming decoder so shared strings, dates, formulas and
+    cached results retain the same interpretation as its read-only cells.
+    The public row iterator fills every gap in the declared rectangle, which
+    can span the full sheet even when only a small table contains values.
+    """
+    with sheet._get_source() as source:
+        parser = WorkSheetParser(
+            source, sheet._shared_strings, data_only=sheet.parent.data_only,
+            epoch=sheet.parent.epoch, date_formats=sheet.parent._date_formats,
+            timedelta_formats=sheet.parent._timedelta_formats,
+        )
+        yield from parser.parse()
 
 
 def _spreadsheet_units(item: dict, root: Path) -> list[dict]:
@@ -116,18 +192,21 @@ def _spreadsheet_units(item: dict, root: Path) -> list[dict]:
             cached = openpyxl.load_workbook(path, read_only=True, data_only=True, keep_links=False)
             try:
                 for sheet in book.worksheets:
-                    for index, (values, cached_values) in enumerate(zip(
-                            sheet.iter_rows(), cached[sheet.title].iter_rows(values_only=True)), 1):
-                        cells = []
-                        for col, (cell, cached_value) in enumerate(zip(values, cached_values)):
-                            if cell.data_type == "f":
-                                displayed = _cell(cached_value) if cached_value is not None else "无缓存结果，无法确认数值"
-                                cells.append(f"C{col + 1}=公式{cell.value}；缓存值={displayed}")
-                            elif cell.value is not None:
-                                cells.append(f"C{col + 1}={_cell(cell.value)}")
+                    for (index, values), (_, cached_values) in zip(
+                            _stored_spreadsheet_rows(sheet),
+                            _stored_spreadsheet_rows(cached[sheet.title])):
                         count += len(values)
                         if count > MAX_CELLS:
                             raise AuditError("电子表格单元格总量超出安全读取范围")
+                        cells = []
+                        for cell, cached_cell in zip(values, cached_values):
+                            col = cell["column"]
+                            cached_value = cached_cell["value"]
+                            if cell["data_type"] == "f":
+                                displayed = _cell(cached_value) if cached_value is not None else "无缓存结果，无法确认数值"
+                                cells.append(f"C{col}=公式{cell['value']}；缓存值={displayed}")
+                            elif cell["value"] is not None:
+                                cells.append(f"C{col}={_cell(cell['value'])}")
                         if cells:
                             rows.append(f"{sheet.title}!R{index}: " + " | ".join(cells))
                         if len(rows) >= 150:
@@ -183,10 +262,14 @@ def prepare_units(archive: dict, root: Path) -> list[dict]:
             with pymupdf.open(item["path"]) as document:
                 for index, page in enumerate(document, 1):
                     uid = f"{item['file_id']}-page-{index:04d}"
-                    image = root / f"{uid}.png"
+                    image = root / f"{uid}.jpg"
                     if page.rect.width * page.rect.height * 4 > Image.MAX_IMAGE_PIXELS:
                         raise AuditError("PDF页面尺寸超出安全渲染范围")
-                    page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False).save(image)
+                    # Full-page scans can produce tens of MB per PNG. Keep the
+                    # exact raster dimensions and whole page, using high-quality
+                    # JPEG encoding so one upload does not contain ~80 MB of
+                    # base64 images. The original PDF remains the source.
+                    page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False).save(image, jpg_quality=95)
                     units.append({**base, "unit_id": uid, "locator": f"第{index}页", "image": image,
                                   "native_facts": [page.get_text(sort=True)] if page.get_text().strip() else []})
         else:
@@ -197,23 +280,29 @@ def prepare_units(archive: dict, root: Path) -> list[dict]:
 
 
 class PdfEvidenceProvider:
-    def __init__(self, model: str | None, reasoning_effort: str | None):
+    def __init__(self, model: str | None, reasoning_effort: str | None, *, connection=None):
         self.model = model or runner.DEFAULT_MODEL
         self.effort = reasoning_effort or runner.DEFAULT_REASONING_EFFORT
+        self.connection = connection
 
     def _call(self, root: Path, skill: Path, schema: dict, prompt, *, images: list[Path], label: str, validator):
-        codex = runner._find_codex()
         root.mkdir(parents=True, exist_ok=False)
-        runner.verify_windows_sandbox(codex, root)
         schema_path = root / "schema.json"
         schema_path.write_text(json.dumps(schema, ensure_ascii=False), encoding="utf-8")
-        model_catalog = root / "model-catalog.json"
-        runner._write_bundled_model_catalog(codex, model_catalog, self.model)
         copies = []
         for path in images:
             target = root / path.name
             shutil.copy2(path, target)
             copies.append(target)
+        if self.connection is not None and self.connection.provider in {"qwen", "ppio"}:
+            from .qwen_model import extract_qwen_json
+            return extract_qwen_json(connection=self.connection, root=root, skill=skill,
+                                     schema_path=schema_path, prompt=prompt, images=copies,
+                                     label=label, validator=validator)
+        codex = runner._find_codex()
+        runner.verify_windows_sandbox(codex, root)
+        model_catalog = root / "model-catalog.json"
+        runner._write_bundled_model_catalog(codex, model_catalog, self.model)
         return runner._run_codex_json(
             codex=codex, model_root=root, skill_dir=skill, schema=schema_path,
             raw_output=root / "response.json", prompt=prompt, images=copies,
@@ -265,7 +354,7 @@ training仅人员培训费，temporary_staff依申请说明临促字段，atrium
                             business_background=_business_background(),
                             customer_language=(ORCHESTRATOR_SKILL / "references/customer-language.md").read_text(encoding="utf-8"),
                             template_guide=template_guide(skill),
-                            documents=json.dumps(documents, ensure_ascii=False))
+                            documents=_prompt_documents(documents))
 
     def classify(self, case: dict, temporary_root: Path) -> dict:
         selected_scenario = case.get("selected_scenario")
@@ -276,8 +365,7 @@ training仅人员培训费，temporary_staff依申请说明临促字段，atrium
         root.mkdir()
         documents = []
         units = case["units"]
-        for start in range(0, len(units), 6):
-            batch = units[start:start + 6]
+        for batch_index, batch in enumerate(_reading_batches(units), 1):
             # Spreadsheet values are read by Python and retained verbatim. They
             # are not sent to a visual model for transcription or arithmetic.
             visual = [u for u in batch if u["image"]]
@@ -304,9 +392,9 @@ POS盖章版与Excel版是同一份明细的两个载体，逐页独立读取盖
 适用规则（只用于决定需要提取哪些事实，不在此选型）：{policy}
 本批资料：{manifest}
 """, policy=json.dumps(reading_policy, ensure_ascii=False), manifest=json.dumps(manifest, ensure_ascii=False))
-                value = self._call(root / f"read-{start:04d}", ORCHESTRATOR_SKILL,
+                value = self._call(root / f"read-{batch_index:04d}", ORCHESTRATOR_SKILL,
                                    DOCUMENT_SCHEMA, prompt, images=[u["image"] for u in visual],
-                                   label=f"核销资料内容读取 {case['archive_id']} 第{start // 6 + 1}批",
+                                   label=f"核销资料内容读取 {case['archive_id']} 第{batch_index}批",
                                    validator=lambda value, batch=visual: validate_documents(value, batch))
                 observations = {d["unit_id"]: d for d in value["documents"]}
             for unit in batch:
@@ -519,7 +607,7 @@ reason不得出现uses_pos、flags、null、rule_id等工程字段；条件不�
                                                    else BRAND_CONTRACT_CLARIFICATION),
                                business_guide=(skill / "references/business-guide.md").read_text(encoding="utf-8"),
                                customer_language=(ORCHESTRATOR_SKILL / "references/customer-language.md").read_text(encoding="utf-8"),
-                               documents=json.dumps(case["documents"], ensure_ascii=False),
+                               documents=_prompt_documents(case["documents"]),
                                materials=json.dumps(case["materials"], ensure_ascii=False),
                                flags=json.dumps(case["flags"], ensure_ascii=False),
                                rules=json.dumps([asdict(r) for r in rules(scenario)], ensure_ascii=False))

@@ -9,12 +9,14 @@ from zipfile import ZipFile
 import openpyxl
 import pymupdf
 import jsonschema
+from PIL import Image
 
 from audit_core.common import AuditError
 from audit_core.material_intake import prepare_material_diagnosis
 from audit_core.pdf_evidence import (audit_decision, audit_schema, classification_decision, calculate, document_map,
                                      validate_documents, AUDIT_SCHEMA, CLASSIFICATION_SCHEMA)
-from audit_core.pdf_materials import PdfEvidenceProvider, prepare_units
+from audit_core.pdf_materials import PdfEvidenceProvider, prepare_units, _reading_batches, _prompt_documents
+import json
 from audit_core.pdf_policy import MATERIALS, MATERIAL_LABELS, requirements, rules
 from audit_core.extraction_chain import render_prompt
 from tests.pdf_test_support import bundle, classification, flags_for, image_bytes, unknown_checks
@@ -565,6 +567,43 @@ class PdfReadingTests(unittest.TestCase):
         self.assertTrue(all(u["image"].is_file() for u in units))
         self.assertIn("second page", pages[1]["native_facts"][0])
         self.assertTrue(any(u["source_file"] == "返图.zip/门店照片.png" for u in units))
+        for unit in pages:
+            with Image.open(unit["image"]) as picture:
+                self.assertEqual(picture.size, (1190, 1684))
+                self.assertEqual(picture.format, "JPEG")
+
+    def test_visual_batches_bound_upload_size_without_skipping_or_reordering_sources(self):
+        units = []
+        for index, size in enumerate((6, 6, 2, 20, 1)):
+            image = self.root / f"{index}.png"
+            image.write_bytes(b"x" * size)
+            units.append({"unit_id": str(index), "image": image})
+        units.insert(1, {"unit_id": "table", "image": None})
+        with patch("audit_core.pdf_materials.MAX_VISUAL_BATCH_BYTES", 10):
+            batches = list(_reading_batches(units))
+        self.assertEqual([unit for batch in batches for unit in batch], units)
+        self.assertEqual([[u["unit_id"] for u in batch] for batch in batches],
+                         [["0", "table"], ["1", "2"], ["3"], ["4"]])
+        self.assertEqual([len(batch) for batch in _reading_batches([{"image": None}] * 14)], [6, 6, 2])
+
+    def test_large_native_tables_are_lossless_and_fit_cli_input_without_sampling(self):
+        documents = [{"unit_id": f"table-{chunk}", "roles": ["spreadsheet"], "limitations": [],
+                      "facts": [f"销售数据!R{chunk * 150 + row}: C1=069001 | C2=原文 | C3=2.0001 | C4=备注含 | 分隔符"
+                                for row in range(1, 151)]} for chunk in range(68)]
+        documents.append({"unit_id": "photo", "roles": ["photo"], "limitations": [], "facts": ["照片上的日期看不清。"]})
+        original = deepcopy(documents)
+        encoded = _prompt_documents(documents)
+        packed = json.loads(encoded)
+        fragments = packed["fragments"]
+        restored = []
+        for document in packed["documents"]:
+            facts = [fact if isinstance(fact, str) else
+                     fragments[fact[0]] + str(fact[1]) + ": " + " | ".join(fragments[i] for i in fact[2])
+                     for fact in document["facts"]]
+            restored.append({**document, "facts": facts})
+        self.assertEqual(restored, original)
+        self.assertEqual(documents, original)
+        self.assertLess(len(encoded.encode("utf-8")), 800_000)
 
     def test_spreadsheet_keeps_hidden_sheets_raw_formulas_dates_and_embedded_images(self):
         book = openpyxl.Workbook()
@@ -597,6 +636,44 @@ class PdfReadingTests(unittest.TestCase):
         with patch("audit_core.pdf_materials.openpyxl.load_workbook", side_effect=PermissionError("denied")):
             with self.assertRaises(PermissionError):
                 self.prepare({"表格.xlsx": out.getvalue()})
+
+    def test_spreadsheet_ignores_inflated_dimensions_and_keeps_sparse_coordinates(self):
+        book = openpyxl.Workbook()
+        sheet = book.active
+        sheet.title = "销售数据"
+        sheet["B3"] = "069001"
+        sheet["D3"] = "=2*3"
+        sheet["XFD1048576"] = 7
+        hidden = book.create_sheet("隐藏数据")
+        hidden.sheet_state = "hidden"
+        hidden["K9863"] = 19
+        out = io.BytesIO()
+        book.save(out)
+        book.close()
+        # A stale, undersized dimension must not hide actual data either.
+        payload = io.BytesIO()
+        with ZipFile(out) as source, ZipFile(payload, "w") as target:
+            for name in source.namelist():
+                data = source.read(name)
+                if name == "xl/worksheets/sheet2.xml":
+                    data = data.replace(b'ref="K9863:K9863"', b'ref="A1"')
+                target.writestr(name, data)
+        units = self.prepare({"销售数据.xlsx": payload.getvalue()})
+        facts = "\n".join(f for unit in units for f in unit["native_facts"])
+        for value in ("销售数据!R3: C2=069001 | C4=公式=2*3", "缓存值=无缓存结果",
+                      "销售数据!R1048576: C16384=7", "隐藏数据!R9863: C11=19"):
+            self.assertIn(value, facts)
+
+    def test_spreadsheet_stored_cells_still_obey_total_read_limit(self):
+        book = openpyxl.Workbook()
+        book.active.append([1, 2])
+        book.create_sheet("隐藏数据").append([3, 4])
+        out = io.BytesIO()
+        book.save(out)
+        book.close()
+        with patch("audit_core.pdf_materials.MAX_CELLS", 3):
+            with self.assertRaisesRegex(AuditError, "单元格总量超出安全读取范围"):
+                self.prepare({"销售数据.xlsx": out.getvalue()})
 
 
 if __name__ == "__main__":

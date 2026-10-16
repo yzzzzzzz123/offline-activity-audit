@@ -210,6 +210,20 @@ class CodexAttemptTests(unittest.TestCase):
         self.assertEqual(self.metrics()[0]["error_code"], "context_limit")
         self.assert_no_private_diagnostics(caught.exception)
 
+    def test_utf8_stdin_limit_stops_before_model_launch(self) -> None:
+        self.prompt = "原" * (codex_runner.MAX_CODEX_STDIN_BYTES // 3 + 1)
+        with self.assertRaisesRegex(codex_runner.CodexContextCapacityError, "1 MiB"):
+            self.invoke([], max_attempts=3)
+        self.assertEqual(self.calls, [])
+
+    def test_cli_stdin_size_error_is_capacity_and_is_not_retried(self) -> None:
+        failed = {"returncode": 1, "stderr": "Error reading prompt from stdin: input exceeds maximum size of 1048576 bytes " + _PRIVATE_STDERR}
+        with self.assertRaises(codex_runner.CodexContextCapacityError) as caught:
+            self.invoke([failed], max_attempts=3)
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.metrics()[0]["error_code"], "context_limit")
+        self.assert_no_private_diagnostics(caught.exception)
+
     def test_output_capacity_stops_unchanged_retry(self) -> None:
         failed = {"returncode": 1, "stderr": "max_output_tokens exceeded " + _PRIVATE_STDERR}
         with self.assertRaises(codex_runner.CodexContextCapacityError) as caught:

@@ -146,13 +146,23 @@ def run_persistent_audit(
     normalized_model = normalize_producer_model(producer_model)
     if isinstance(biz_type, str) and biz_type.strip() and scenario_for_biz_type(biz_type) is None:
         return biz_type_skip_result(normalized_run_id, biz_type)
+    from .model_settings import ModelSettingsStore, selection_from_environment
+    connection = selection_from_environment()
+    if connection is None and model is None and evidence_provider is None:
+        connection = ModelSettingsStore(Path(worktrees_root)).snapshot()
+    if connection is not None and connection.provider in {"qwen", "ppio"} and evidence_provider is None:
+        from .pdf_materials import PdfEvidenceProvider
+        model, reasoning_effort, normalized_model = connection.model, connection.reasoning_effort, connection.provider
+        evidence_provider = PdfEvidenceProvider(model, reasoning_effort, connection=connection)
     selected_audit_model = str(
         model or (DEFAULT_MODEL if normalized_model == "codex" else normalized_model)
     ).strip()
     selected_reasoning_effort = str(
         reasoning_effort or DEFAULT_REASONING_EFFORT
     ).strip().lower()
-    if selected_reasoning_effort not in ALLOWED_REASONING_EFFORTS:
+    if (selected_reasoning_effort not in ALLOWED_REASONING_EFFORTS
+            and not (connection is not None and connection.provider in {"qwen", "ppio"}
+                     and selected_reasoning_effort == connection.reasoning_effort)):
         raise AuditError(f"不支持的模型推理强度：{selected_reasoning_effort}")
     url = _normalized_workbench_url(
         workbench_url or os.environ.get("OFFLINE_AUDIT_WORKBENCH_URL")
@@ -278,7 +288,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--reasoning-effort",
-        choices=("low", "medium", "high", "xhigh", "max", "ultra"),
+        choices=("default", "none", "low", "medium", "high", "xhigh", "max", "ultra"),
         help=f"本次主要识别与判断的推理强度；默认 {DEFAULT_REASONING_EFFORT}",
     )
     parser.add_argument(

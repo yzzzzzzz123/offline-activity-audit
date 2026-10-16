@@ -71,6 +71,7 @@ def verify_windows_sandbox(codex: str, temporary_root: Path) -> None:
         canary.write_text(nonce, encoding="utf-8")
         prepare_model_directory(root)
         command = [codex, "sandbox", "--permission-profile", ":read-only", "-C", str(root),
+                   *sandbox_arguments(),
                    "--", "powershell.exe", "-NoProfile", "-NonInteractive", "-Command"]
         literal = "'" + str(canary).replace("'", "''") + "'"
         try:
