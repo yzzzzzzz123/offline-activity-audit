@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .card_evidence import EvidenceContext, attach_sheet_evidence, enrich_pass_item
+from .customer_evidence import strip_material_source_facts
+from .pdf_policy import MATERIALS, MATERIAL_LABELS, requirements
+from .pass_check_details import enrich_pdf_item, load_packet_observations, passed_photo_subchecks
 
 
 SCENARIO_PRESENTATION: dict[str, tuple[str, str]] = {
@@ -704,13 +707,22 @@ def _scenario_items(
     return items or _fallback_view_items(sheet)
 
 
-def _pdf_items(sheets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _pdf_items(sheets: list[dict[str, Any]], packets: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Use the saved PDF checks verbatim, including every packet of one type."""
     items = []
+    packets = packets or []
+    photo_items = passed_photo_subchecks(sheets, packets)
+    detailed_photos = {item["subject"] for item in photo_items}
     for sheet in sheets:
+        matches = [p for p in packets if p.get("archive_id") == sheet.get("archive_id") and (p.get("result") or {}).get("scenario") == sheet.get("scenario")]
+        packet = matches[0] if len(matches) == 1 else None
         for row in sheet.get("rows") or []:
             if row.get("status") != "pass":
                 continue
+            if row.get("photo_unit_id") and photo_items and packet:
+                from .pass_check_details import _source
+                if _source(packet, row["photo_unit_id"]) in detailed_photos:
+                    continue
             evidence = deepcopy(row.get("card_evidence") or {})
             values = row.get("values") or []
             category = row.get("check_category") or "PDF审核要点"
@@ -721,12 +733,99 @@ def _pdf_items(sheets: list[dict[str, Any]]) -> list[dict[str, Any]]:
                          source_file_count=evidence.get("source_file_count"),
                          scope="amount" if row.get("numeric") else "material")
             item.update(evidence=evidence, control_id=row.get("rule_id"), archive_id=sheet.get("archive_id"))
+            enrich_pdf_item(item, row, packet)
+            items.append(item)
+    return items + photo_items
+
+
+def _material_items(sheets: list[dict[str, Any]], packets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Show saved material presence without declaring its business content valid."""
+    items: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for sheet in sheets:
+        scenario, archive_id = sheet.get("scenario"), sheet.get("archive_id")
+        if (sheet.get("projection_kind") != "classification_rejection"
+                or sheet.get("confirmed_scenario") is not True
+                or scenario not in MATERIALS or not isinstance(archive_id, str) or not archive_id):
+            continue
+        matches = [p for p in packets if isinstance(p, dict) and p.get("archive_id") == archive_id]
+        if len(matches) != 1:
+            continue
+        packet = matches[0]
+        route, classification = packet.get("route"), packet.get("classification")
+        if (not isinstance(route, dict) or route.get("scenario") != scenario or route.get("matched") is not False
+                or not isinstance(classification, dict)):
+            continue
+        material_matches = classification.get("material_matches")
+        if not isinstance(material_matches, list):
+            continue
+        selected = [m for m in material_matches if isinstance(m, dict) and m.get("scenario") == scenario]
+        materials = classification.get("materials")
+        if (len(selected) != 1 or not isinstance(materials, list)
+                or materials != selected[0].get("materials")):
+            continue
+        units, documents = packet.get("units"), packet.get("documents")
+        if not isinstance(units, list) or not isinstance(documents, list):
+            continue
+        allowed_ids = {r.id for r in requirements(scenario)}
+        for material in materials:
+            if not isinstance(material, dict) or material.get("state") != "present":
+                continue
+            material_id = material.get("id")
+            if (not isinstance(material_id, str) or material_id not in allowed_ids or material_id not in MATERIAL_LABELS
+                    or sum(isinstance(m, dict) and m.get("id") == material_id for m in materials) != 1):
+                continue
+            ids = material.get("source_ids")
+            if (not isinstance(ids, list) or not ids or any(not isinstance(uid, str) or not uid for uid in ids)
+                    or len(set(ids)) != len(ids)):
+                continue
+            sources = []
+            for uid in ids:
+                matched_units = [u for u in units if isinstance(u, dict) and u.get("unit_id") == uid]
+                matched_documents = [d for d in documents if isinstance(d, dict) and d.get("unit_id") == uid]
+                if len(matched_units) != 1 or len(matched_documents) != 1:
+                    break
+                unit, document = matched_units[0], matched_documents[0]
+                source, locator, facts = unit.get("source_file"), unit.get("locator"), document.get("facts")
+                if (not isinstance(source, str) or not source.strip() or not isinstance(locator, str)
+                        or not isinstance(facts, list) or any(not isinstance(fact, str) for fact in facts)):
+                    break
+                # Presence does not require duplicating extracted workbook text;
+                # full facts remain in the immutable technical evidence.
+                sources.append({"file": source, "original_file": source, "kind": "submitted",
+                                "role": "已提供资料", "locator": locator, "facts": []})
+            if len(sources) != len(ids):
+                continue
+            key = (scenario, archive_id, material_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            files = list(dict.fromkeys(source["original_file"] for source in sources))
+            label = MATERIAL_LABELS[material_id]
+            limitation = "仅确认资料已提供，业务内容尚未审核。"
+            evidence = {"schema_version": "1.0", "source_files": files, "source_file_count": len(files),
+                        "sources": sources, "derived_file_count": 0, "references": [], "comparisons": [],
+                        "limitations": [limitation], "file_count_complete": True}
+            item = _item(category="资料完整性", title=label + "已提供",
+                         subject=_basename(sheet.get("source_archive")) or SCENARIO_PRESENTATION[scenario][0],
+                         basis=f"已保存的资料清单确认已提供{label}。{limitation}",
+                         source_files=files, source_file_count=len(files), scope="material")
+            item.update(evidence=evidence, control_id=material_id, archive_id=archive_id,
+                        check_stage="material_gate", status_label="已提供")
             items.append(item)
     return items
 
 
+def _presence_notice(material_total: int, business_total: int) -> str:
+    if not material_total:
+        return ""
+    return ("本次仅完成资料检查，业务内容尚未审核。" if not business_total else
+            "资料完整性项仅确认资料已提供，不代表对应资料包的业务内容审核通过。")
+
+
 def build_pass_check_log(
-    view: dict[str, Any], results_by_scenario: dict[str, dict[str, Any]]
+    view: dict[str, Any], results_by_scenario: dict[str, dict[str, Any]],
+    *, material_packets: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     groups: list[dict[str, Any]] = []
     sequence = 0
@@ -743,10 +842,16 @@ def build_pass_check_log(
         if not scenario or scenario in seen_scenarios:
             continue
         seen_scenarios.add(scenario)
-        if sheet.get("projection_kind") == "pdf_policy":
-            audit_type, title = sheet["audit_type_label"], sheet["title"]
-            items = _pdf_items([s for s in view["sheets"]
-                                if s.get("scenario") == scenario and s.get("projection_kind") == "pdf_policy"])
+        scenario_sheets = [s for s in view.get("sheets") or []
+                           if isinstance(s, dict) and s.get("scenario") == scenario]
+        pdf_sheets = [s for s in scenario_sheets if s.get("projection_kind") == "pdf_policy"]
+        if pdf_sheets:
+            audit_type, title = pdf_sheets[0]["audit_type_label"], pdf_sheets[0]["title"]
+            items = _pdf_items(pdf_sheets, material_packets)
+        elif sheet.get("projection_kind") == "classification_rejection":
+            audit_type = sheet.get("audit_type_label") or SCENARIO_PRESENTATION.get(scenario, ("核销资料", ""))[0]
+            title = audit_type + "资料检查"
+            items = []
         else:
             audit_type, title = SCENARIO_PRESENTATION.get(
                 scenario,
@@ -758,8 +863,13 @@ def build_pass_check_log(
             evidence_context = EvidenceContext(scenario, result)
             for item in items:
                 enrich_pass_item(evidence_context, item)
+        items.extend(_material_items(scenario_sheets, material_packets or []))
+        material_total = sum(item.get("check_stage") == "material_gate" for item in items)
+        business_total = len(items) - material_total
         category_counts: dict[str, int] = {}
         for item in items:
+            item.setdefault("check_stage", "business")
+            item.setdefault("status_label", "通过")
             sequence += 1
             item["check_id"] = f"pass-{sequence:04d}"
             category = _text(item.get("category")) or "核销检查"
@@ -773,13 +883,21 @@ def build_pass_check_log(
                 "audit_type": audit_type,
                 "title": title,
                 "item_count": len(items),
+                "material_total": material_total,
+                "business_total": business_total,
+                "notice": _presence_notice(material_total, business_total),
                 "category_counts": category_counts,
                 "items": items,
             }
         )
+    material_total = sum(group["material_total"] for group in groups)
+    business_total = sequence - material_total
     return {
         "schema_version": "1.1",
         "total": sequence,
+        "material_total": material_total,
+        "business_total": business_total,
+        "notice": _presence_notice(material_total, business_total),
         "audit_type_count": len(groups),
         "types_with_pass": sum(1 for group in groups if group["item_count"] > 0),
         "scope_counts": scope_counts,
@@ -790,17 +908,29 @@ def build_pass_check_log(
 def attach_pass_check_log(
     view: dict[str, Any] | None,
     results_by_scenario: dict[str, dict[str, Any]],
+    *, material_packets: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     if not isinstance(view, dict):
         return view
     enriched = deepcopy(view)
-    enriched["pass_check_log"] = build_pass_check_log(enriched, results_by_scenario)
+    strip_material_source_facts(enriched)
+    enriched["pass_check_log"] = build_pass_check_log(enriched, results_by_scenario, material_packets=material_packets)
     for sheet in enriched.get("sheets") or []:
         if sheet.get("projection_kind") in {"material_diagnostic", "pdf_policy"} or sheet.get("decision_source") in {"material_content", "biz_type", "plan_type"}:
             continue
         scenario = _text(sheet.get("scenario"))
         attach_sheet_evidence(sheet, EvidenceContext(scenario, results_by_scenario.get(scenario) or {}))
     return enriched
+
+
+def load_workspace_material_packets(workspace: Path) -> list[dict[str, Any]]:
+    """Read saved PDF material evidence; never rerun an audit or mutate archives."""
+    try:
+        value = json.loads((workspace / "analysis" / "pdf-policy" / "evidence.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    packets = value.get("packets") if isinstance(value, dict) else None
+    return load_packet_observations(workspace, [p for p in packets if isinstance(p, dict)]) if isinstance(packets, list) else []
 
 
 def load_workspace_results(workspace: Path) -> dict[str, dict[str, Any]]:

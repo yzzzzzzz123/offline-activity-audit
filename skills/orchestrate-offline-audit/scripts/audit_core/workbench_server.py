@@ -15,22 +15,25 @@ import stat
 import sys
 import threading
 import time
+import zipfile
 from collections import OrderedDict
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse, quote
 
 from .html_report import DATA_CLOSE, DATA_OPEN
-from .scenario_registry import SCENARIO_SPECS
+from .http_rejection import discard_rejected_body
+from .scenario_registry import BIZ_TYPE_ALIASES, SCENARIO_SPECS
 from .error_reason import attach_error_reasons
 from .material_issue_files import attach_material_issue_files
-from .pass_check_log import attach_pass_check_log, load_workspace_results
+from .pass_check_log import attach_pass_check_log, load_workspace_results, load_workspace_material_packets
 from .oss_intake import (
     CALLBACK_PATH,
     DEFAULT_CALLBACK_ATTEMPTS,
+    DEFAULT_AUDIT_WORKERS,
     DEFAULT_CALLBACK_TIMEOUT_SECONDS,
     DEFAULT_DOWNLOAD_TIMEOUT_SECONDS,
     DEFAULT_MAX_DOWNLOAD_BYTES,
@@ -45,8 +48,10 @@ from .oss_intake import (
 )
 from .workbench_runtime import ROOT_HTML
 from .common import AuditError
-from .model_settings import ModelSelection, ModelSettingsStore, ModelSettingsError, ModelSettingsConflict
-from .pdf_policy import SOURCE_TITLE
+from .model_settings import API_PROVIDERS, ModelSelection, ModelSettingsStore, ModelSettingsError, ModelSettingsConflict
+from .model_metrics import summarize_model_usage
+from .execution_trace import execution_route, execution_route_signature, read_execution_route
+from .pdf_policy import SOURCE_TITLE, SOURCE_SHA256, POLICY_VERSION
 from .workbench_delete import RunDeletionConflict, prepare_run_deletion
 from .workbench_labels import record_labels
 from .workbench_html import (
@@ -54,6 +59,7 @@ from .workbench_html import (
     SYSTEM_VERSION,
     WORKBENCH_CONTEXT_ID,
     customer_projection_error_count,
+    load_analysis_summary,
     inject_workbench_context as _inject_workbench_context,
     replace_audit_payload as _replace_audit_payload,
 )
@@ -104,7 +110,7 @@ def _completed_projection_signature(
 ) -> tuple[tuple[str, int, int, int], ...]:
     paths = [workspace / "snapshot.json", workspace / "logs" / "events.jsonl", workspace / "analysis" / "input-cases.json",
              workspace / "analysis" / "pdf-policy" / "evidence.json"]
-    for directory in ("results", "evidence"):
+    for directory in ("results", "evidence", "model-observations", "execution-trace"):
         result_root = workspace / "analysis" / directory
         if result_root.is_dir():
             paths.extend(sorted(result_root.glob("*.json")))
@@ -136,11 +142,14 @@ def _read_completed_snapshot_projection(
     snapshot["view"] = attach_pass_check_log(
         snapshot.get("view"),
         load_workspace_results(workspace),
+        material_packets=load_workspace_material_packets(workspace),
     )
     snapshot["view"] = _project_material_issue_files(attach_error_reasons(snapshot["view"]), workspace)
     snapshot["recent_events"] = read_event_records(
         workspace / "logs" / "events.jsonl"
     )[-120:]
+    from .execution_trace import enrich_technical_snapshot
+    enrich_technical_snapshot(snapshot, workspace)
     return snapshot
 
 
@@ -323,6 +332,28 @@ class WorkbenchCatalog:
             tuple[tuple[int, int, int] | None, bytes, str],
         ] = OrderedDict()
         self._resource_document_cache_bytes = 0
+        self._orphan_reap_lock = threading.Lock()
+        self._orphan_reap_at = 0.0
+
+    def seal_orphans(self, *, min_interval: float = 60.0) -> list[dict[str, Any]]:
+        """把没有核销进程接管的运行封存为失败，避免界面长期显示进行中。"""
+        moment = time.monotonic()
+        with self._orphan_reap_lock:
+            if moment - self._orphan_reap_at < min_interval:
+                return []
+            self._orphan_reap_at = moment
+        try:
+            from .run_liveness import seal_orphaned_runs
+            sealed = seal_orphaned_runs(self.root)
+        except Exception:
+            return []
+        if sealed:
+            with self._cache_lock:
+                self._catalog_document_cache = None
+            for item in sealed:
+                with contextlib.suppress(Exception):
+                    self._manifest_cache.pop(str(item.get("workspace_id")), None)
+        return sealed
 
     @staticmethod
     def _stat_signature(value: os.stat_result) -> tuple[int, int, int]:
@@ -380,6 +411,8 @@ class WorkbenchCatalog:
             "producer_model": "legacy",
             "audit_model": "legacy",
             "reasoning_effort": None,
+            "token_usage": summarize_model_usage(None),
+            "execution_route": [],
             "status": "completed",
             "created_at": modified,
             "updated_at": modified,
@@ -493,9 +526,11 @@ class WorkbenchCatalog:
         if workspace.is_dir():
             paths = [
                 ("manifest.json", workspace / "manifest.json"),
+                ("ai-analysis-summary.md", workspace / "ai-analysis-summary.md"),
                 ("snapshot.json", workspace / "snapshot.json"),
                 ("logs/events.jsonl", workspace / "logs" / "events.jsonl"),
                 ("analysis/input-cases.json", workspace / "analysis" / "input-cases.json"),
+                ("analysis/model-metrics.jsonl", workspace / "analysis" / "model-metrics.jsonl"),
                 ("analysis/pdf-policy/evidence.json", workspace / "analysis" / "pdf-policy" / "evidence.json"),
             ]
             for directory in ("results", "evidence"):
@@ -508,6 +543,7 @@ class WorkbenchCatalog:
             return (
                 "worktree",
                 *(token(label, path) for label, path in paths),
+                ("execution_route", *execution_route_signature(workspace)),
                 token(".review", review_path),
             )
 
@@ -591,6 +627,7 @@ class WorkbenchCatalog:
     ) -> tuple[tuple[dict[str, Any], ...], bytes, str]:
         """Cover each read with a validation generation that starts after arrival."""
 
+        self.seal_orphans()
         condition = self._catalog_batch_condition
         leader = False
         outcome: tuple[bool, object]
@@ -688,12 +725,18 @@ class WorkbenchCatalog:
                                 continue
                             live_workspaces.add(entry.name)
                             manifest_signature = self._stat_signature(metadata)
+                            try:
+                                usage_metadata = os.stat(path / "analysis" / "model-metrics.jsonl", follow_symlinks=False)
+                                usage_signature = self._stat_signature(usage_metadata)
+                            except OSError:
+                                usage_signature = None
+                            route_signature = execution_route_signature(path)
                             cache_key = ("worktree", entry.name)
                             with self._cache_lock:
                                 cached = self._run_summary_cache.get(cache_key)
                             manifest_unchanged = (
                                 cached is not None
-                                and len(cached[0]) == 5
+                                and len(cached[0]) == 7
                                 and cached[0][0] == "worktree"
                                 and cached[0][1] == entry.name
                                 and cached[0][2] == manifest_signature
@@ -717,12 +760,18 @@ class WorkbenchCatalog:
                                 manifest_signature,
                                 workspace_id,
                                 review_signature,
+                                usage_signature,
+                                route_signature,
                             )
                             if cached is not None and cached[0] == item_signature:
                                 run = cached[1]
                             elif manifest_unchanged:
                                 run = dict(cached[1])
                                 run.update(review)
+                                if cached[0][5] != usage_signature:
+                                    run["token_usage"] = summarize_model_usage(path / "analysis")
+                                if cached[0][6] != route_signature:
+                                    run["execution_route"] = read_execution_route(path, route_signature)
                                 with self._cache_lock:
                                     self._run_summary_cache[cache_key] = (
                                         item_signature,
@@ -733,6 +782,7 @@ class WorkbenchCatalog:
                                     manifest,
                                     storage_type="worktree",
                                     workspace=path,
+                                    route_signature=route_signature,
                                 )
                                 run.update(review)
                                 with self._cache_lock:
@@ -912,6 +962,10 @@ class WorkbenchCatalog:
         for run in runs:
             item = dict(run)
             item["scenarios"] = list(item.get("scenarios") or [])
+            item["token_usage"] = dict(item.get("token_usage") or summarize_model_usage(None))
+            item["token_usage"]["by_model"] = [dict(row) for row in item["token_usage"].get("by_model", [])]
+            item["execution_route"] = list(item.get("execution_route") or [])
+            item['audit_timing'] = dict(item['audit_timing']) if isinstance(item.get('audit_timing'), dict) else None
             item["main_flow_tasks"] = [
                 dict(task) for task in item.get("main_flow_tasks") or []
             ]
@@ -919,8 +973,9 @@ class WorkbenchCatalog:
         return copies
 
     @staticmethod
-    def _summary(manifest: dict[str, Any], *, storage_type: str, workspace: Path | None = None) -> dict[str, Any]:
+    def _summary(manifest: dict[str, Any], *, storage_type: str, workspace: Path | None = None, route_signature=None) -> dict[str, Any]:
         manifest = project_run_status(manifest)
+        from .run_timing import completed_timing
         return {
             "workspace_id": manifest.get("workspace_id"),
             "run_id": manifest.get("run_id"),
@@ -928,6 +983,9 @@ class WorkbenchCatalog:
             "producer_model": manifest.get("producer_model"),
             "audit_model": manifest.get("audit_model") or manifest.get("producer_model"),
             "reasoning_effort": manifest.get("reasoning_effort"),
+            "token_usage": summarize_model_usage(workspace / "analysis" if workspace is not None else None),
+            "execution_route": read_execution_route(workspace, route_signature) if workspace is not None else [],
+            "audit_timing": completed_timing(manifest) if workspace is not None else None,
             "status": manifest.get("status"),
             "created_at": manifest.get("created_at"),
             "analysis_started_at": manifest.get("analysis_started_at"),
@@ -954,6 +1012,7 @@ class WorkbenchCatalog:
             manifest["main_flow_tasks"] = main_flow_task_list()
             manifest.update(record_labels(manifest, workspace))
             manifest.update(self.review_state(workspace_id))
+            manifest["token_usage"] = summarize_model_usage(workspace / "analysis")
             used_completed_cache = False
             if snapshot_path.is_file():
                 if manifest.get("status") == "completed":
@@ -981,11 +1040,20 @@ class WorkbenchCatalog:
                 snapshot["view"] = attach_pass_check_log(
                     snapshot.get("view"),
                     load_workspace_results(workspace),
+                    material_packets=load_workspace_material_packets(workspace),
                 )
                 snapshot["view"] = _project_material_issue_files(attach_error_reasons(snapshot["view"]), workspace)
                 snapshot["recent_events"] = self.events(workspace_id)[-120:]
             if manifest.get("status") == "completed" and isinstance(snapshot.get("view"), dict):
                 manifest["error_count"] = _error_count(snapshot["view"])
+            from .execution_trace import enrich_technical_snapshot
+            if not used_completed_cache:
+                enrich_technical_snapshot(snapshot, workspace)
+            else:
+                manifest["execution_route"] = execution_route(snapshot.get("execution_trace", {}).get("steps") or []) or read_execution_route(workspace)
+                if manifest.get('status') == 'completed':
+                    from .run_timing import completed_timing
+                    manifest['audit_timing'] = completed_timing(manifest)
             return snapshot
 
         legacy = self.root / f"{workspace_id}.html"
@@ -1011,6 +1079,8 @@ class WorkbenchCatalog:
                 "producer_model": "legacy",
                 "audit_model": "legacy",
                 "reasoning_effort": None,
+                "token_usage": summarize_model_usage(None),
+                "execution_route": [],
                 "status": "completed",
                 "created_at": modified,
                 "updated_at": modified,
@@ -1153,6 +1223,10 @@ class WorkbenchCatalog:
             snapshot_stat.st_size,
         )
         if relative_path not in allowed:
+            from .execution_trace import technical_inventory
+            discovered, _ = technical_inventory(workspace)
+            allowed = allowed | frozenset(item["path"] for item in discovered)
+        if relative_path not in allowed:
             raise FileNotFoundError(relative_path)
         target = (workspace / relative_path).resolve()
         if workspace not in target.parents or not target.is_file():
@@ -1169,7 +1243,7 @@ class WorkbenchCatalog:
         return target, value, etag
 
     def checkpoint(self, workspace_id: str, checkpoint_id: str) -> Path:
-        if re.fullmatch(r"\d{3}-[a-z0-9_-]+", checkpoint_id) is None:
+        if re.fullmatch(r"\d{3,8}-[a-z0-9_-]+", checkpoint_id) is None:
             raise ValueError("断点 ID 不安全")
         workspace = self._workspace(workspace_id)
         target = (workspace / "dom" / "checkpoints" / f"{checkpoint_id}.json").resolve()
@@ -1185,6 +1259,34 @@ class WorkbenchCatalog:
         target = self.checkpoint(workspace_id, checkpoint_id)
         value, etag = self.resource_document(target)
         return target, value, etag
+
+
+class _PresenceRegistry:
+    """Distinct workbench clients seen inside one rolling window.
+
+    Browsers refresh this with a lightweight heartbeat; the count is the
+    number of tabs still alive in the window, not a login or permission
+    concept.
+    """
+
+    WINDOW_SECONDS = 75
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._seen: dict[str, float] = {}
+
+    def document(self, client_id: str | None = None) -> dict[str, Any]:
+        now = time.monotonic()
+        with self._lock:
+            for key, stamp in list(self._seen.items()):
+                if now - stamp > self.WINDOW_SECONDS:
+                    self._seen.pop(key, None)
+            if client_id:
+                self._seen[client_id] = now
+            return {"online": len(self._seen), "window_seconds": self.WINDOW_SECONDS}
+
+
+PRESENCE = _PresenceRegistry()
 
 
 class WorkbenchHTTPServer(ThreadingHTTPServer):
@@ -1235,11 +1337,31 @@ class WorkbenchHTTPServer(ThreadingHTTPServer):
         # by our override must exist before the base constructor starts.
         self.catalog = catalog
         self.intake = intake
+        from .completion_estimates import CompletionEstimator
+        self.completion_estimator = CompletionEstimator(catalog.root)
         self.deletion_token = secrets.token_urlsafe(32)
+        self.upload_token = secrets.token_urlsafe(32)
         self.model_settings = ModelSettingsStore(catalog.root)
         self.model_settings_token = secrets.token_urlsafe(32)
+        from .audit_schedule import AuditScheduleStore
+        self.schedule_settings = intake.schedule_settings if intake else AuditScheduleStore(catalog.root)
+        self.schedule_settings_token = secrets.token_urlsafe(32)
         self.model_probe_lock = threading.Lock()
         self.deletion_hosts = {"localhost", "127.0.0.1", socket.gethostname().lower(), *_local_ipv4_addresses()}
+        # A container's private NIC differs from the operator-approved host IP.
+        # Trust only the explicitly configured workbench origin, not arbitrary Host headers.
+        configured_origin = urlparse(os.environ.get('OFFLINE_AUDIT_WORKBENCH_URL',''))
+        if configured_origin.scheme == 'http' and configured_origin.hostname:
+            self.deletion_hosts.add(configured_origin.hostname.lower())
+        proxy_origin = os.environ.get('OFFLINE_AUDIT_PROXY_ORIGIN', '').strip().rstrip('/')
+        parsed_proxy = urlparse(proxy_origin)
+        if proxy_origin and (parsed_proxy.scheme != 'https' or not parsed_proxy.hostname
+                             or parsed_proxy.username or parsed_proxy.password
+                             or parsed_proxy.path or parsed_proxy.params
+                             or parsed_proxy.query or parsed_proxy.fragment):
+            raise ValueError('OFFLINE_AUDIT_PROXY_ORIGIN must be an HTTPS origin without a path.')
+        self.proxy_origin = proxy_origin.lower()
+        self.proxy_client_ips = {'127.0.0.1', '::1', str(address[0])}
         self._html_cache_lock = threading.RLock()
         self._html_cache: OrderedDict[
             tuple[object, ...],
@@ -1287,6 +1409,13 @@ class WorkbenchHTTPServer(ThreadingHTTPServer):
             raise FileNotFoundError(job_id)
         with self._html_cache_lock:
             try:
+                if hasattr(self.catalog, 'artifact_repository'):
+                    with self.intake.store._lock:
+                        job = self.intake.store.get(job_id)
+                        workspace_id = str((job.get('result') or {}).get('workspace_id') or '')
+                        if workspace_id and not (self.catalog.root / workspace_id).exists():
+                            result = self.catalog.delete_run(workspace_id, input_root=self.intake.input_root)
+                            return {'job_id': job_id, 'workspace_id': result['workspace_id'], 'deleted': True}
                 return self.intake.delete(job_id)
             finally:
                 self._html_cache.clear()
@@ -1449,6 +1578,41 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return self.server.intake
 
+    def _serve_submitted_material(self, workspace_id: str, query: dict) -> None:
+        from .material_preview import original_material, render_material, MaterialPreviewUnavailable
+        if set(query)-{'file_id','download','page','sheet'} or any(len(values)!=1 for values in query.values()):
+            raise ValueError('预览参数不正确')
+        file_id=str((query.get('file_id') or [''])[0])
+        download=str((query.get('download') or ['0'])[0])
+        if download not in {'0','1'}:raise ValueError('下载参数不正确')
+        page=int((query.get('page') or ['1'])[0]);sheet=int((query.get('sheet') or ['0'])[0])
+        if not 1<=page<=100000 or not 0<=sheet<=1000:raise ValueError('预览页码不正确')
+        workspace=self.server.catalog._workspace(workspace_id)
+        input_root=self.server.intake.input_root if self.server.intake is not None else self.server.catalog.root.parent/'input'
+        try:
+            if hasattr(self.server.catalog, 'material_input_root'):
+                input_root=self.server.catalog.material_input_root(workspace_id, input_root)
+            name,value=original_material(workspace, input_root, file_id)
+            if download=='1':content_type='application/octet-stream'
+            else:content_type,value=render_material(name,value,page=page,sheet=sheet,route=f'/api/runs/{quote(workspace_id,safe="")}/materials/preview',file_id=file_id)
+        except MaterialPreviewUnavailable as exc:
+            self._error(HTTPStatus.CONFLICT,str(exc));return
+        except FileNotFoundError:
+            self._error(HTTPStatus.NOT_FOUND,'本环境未保留对应原件，可查看本单已有材料记录');return
+        except (ValueError,KeyError,zipfile.BadZipFile) as exc:
+            self._error(HTTPStatus.CONFLICT,'该原件暂时无法在线读取，可下载原件查看');return
+        self.send_response(HTTPStatus.OK)
+        self.send_header('Content-Type',content_type)
+        self.send_header('Content-Length',str(len(value)))
+        self.send_header('Cache-Control','private, no-store')
+        self.send_header('X-Content-Type-Options','nosniff')
+        self.send_header('X-Frame-Options','SAMEORIGIN')
+        self.send_header('Referrer-Policy','no-referrer')
+        self.send_header('Content-Security-Policy',"sandbox allow-same-origin; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'")
+        if download=='1':self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+quote(Path(name).name,safe=''))
+        self.end_headers()
+        if self.command!='HEAD':self.wfile.write(value)
+
     def _read_request_json(self) -> dict[str, Any]:
         media_type = str(self.headers.get("Content-Type") or "").split(";", 1)[0]
         if media_type.strip().lower() != "application/json":
@@ -1532,6 +1696,10 @@ class Handler(BaseHTTPRequestHandler):
                         "dom_checkpoints": snapshot.get("dom_checkpoints") or [],
                         "recent_events": snapshot.get("recent_events") or [],
                         "verification": snapshot.get("verification"),
+                        "execution_trace": snapshot.get("execution_trace") or {},
+                        "analysis_summary": load_analysis_summary(
+                            self.server.catalog._workspace(workspace_id), view, snapshot["run"]
+                        ),
                     }
                 )
             else:
@@ -1560,10 +1728,20 @@ class Handler(BaseHTTPRequestHandler):
             "local_input_type_policy": "ask_user_before_run",
             "unclassified_archive_policy": "complete_with_specific_material_issues",
             "run_failure_policy": "input_type_or_execution_errors",
+            "execution_repair": {"enabled":True,"source_code_write":False,
+                "mode":"run_local_original_evidence_and_readonly_tools",
+                "stages":["all_blocking_execution_errors"],
+                "diagnostic_fallback":"durable_facts_when_model_unavailable",
+                "diagnostics_endpoint":"/api/execution-diagnostics",
+                "business_unknown_as_technical_fallback":False},
             "business_result_policy": "issues_for_human_review",
             "audit_policy_source": SOURCE_TITLE,
+            "audit_policy_version": POLICY_VERSION,
+            "audit_policy_source_sheet": "Sheet1",
+            "audit_policy_source_sha256": SOURCE_SHA256,
+            "audit_policy_reference_policy": "linked_application_and_independent_verification_approval",
             "confidence_badge_display": "hidden",
-            "result_summary_display": "hidden",
+            "result_summary_display": "ai_summary_tab",
             "result_list_heading_display": "hidden",
             "filter_header_display": "hidden",
             "result_filters": ["audit_type", "category"],
@@ -1633,8 +1811,8 @@ class Handler(BaseHTTPRequestHandler):
             "workbench_read_only": False,
             "business_results_read_only": True,
             "model_settings": {"endpoint": "/api/model-settings", "effective_scope": "new_runs_only",
-                               "default_provider": "gpt", "qwen_provider": "aliyun_bailian",
-                               "api_providers": ["qwen", "ppio"], "credentials_scope": "per_provider"},
+                               "default_provider": "ppio", "qwen_provider": "aliyun_bailian",
+                               "api_providers": list(API_PROVIDERS), "credentials_scope": "per_provider"},
             "manual_review": {
                 "writable": True,
                 "endpoint": "/api/runs/{workspace_id}/manual-review",
@@ -1648,6 +1826,16 @@ class Handler(BaseHTTPRequestHandler):
                 "confirmation_token": self.server.deletion_token,
                 "terminal_only": True,
                 "permanent": True,
+            },
+            "local_upload": {
+                "enabled": self.server.intake is not None and not self.server.intake.config.receive_only,
+                "endpoint": "/api/intake/upload",
+                "method": "POST",
+                "content_type": "application/zip",
+                "confirmation_token": self.server.upload_token,
+                "max_file_bytes": self.server.intake.config.max_download_bytes if self.server.intake is not None else 0,
+                "biz_types": [spec.label for spec in SCENARIO_SPECS],
+                "callback_required": False,
             },
             "oss_intake": {
                 "enabled": self.server.intake is not None,
@@ -1666,23 +1854,32 @@ class Handler(BaseHTTPRequestHandler):
                 "authenticated": False,
                 "authentication_required": False,
                 "single_worker": False,
-                "pipeline": "download_then_serial_audit",
+                "pipeline": ("download_then_bounded_parallel_audit"
+                             if self.server.intake is not None and self.server.intake.config.audit_workers > 1
+                             else "download_then_serial_audit"),
                 "download_before_audit": True,
                 "download_worker_count": 1,
-                "audit_worker_count": 1,
-                "single_audit_worker": True,
+                "audit_worker_count": (self.server.intake.config.audit_workers
+                                       if self.server.intake is not None else DEFAULT_AUDIT_WORKERS),
+                "single_audit_worker": (self.server.intake is None
+                                        or self.server.intake.config.audit_workers == 1),
                 "terminal_replay_policy": "new_attempt",
                 "callback_result_format": "scenario_error_facts_markdown",
                 "callback_transport": "direct",
-                "request_fields": ["verifyCode", "analyzeId", "downloadUrl", "bizType", "largeVenueFee"],
-                "optional_request_fields": ["largeVenueFee"],
+                "request_fields": ["verifyCode", "analyzeId", "downloadUrl", "bizType", "largeVenueFee", "cvsOtcChannel"],
+                "optional_request_fields": ["largeVenueFee", "cvsOtcChannel"],
                 "required_request_fields": ["verifyCode", "analyzeId", "downloadUrl", "bizType"],
                 "large_venue_fee_policy": {
                     "type": "boolean", "scenario": "promotional_display", "material": "atrium_agreement",
                     "true": "required", "false": "not_required", "omitted": "legacy_material_evidence",
                 },
+                "cvs_otc_channel_policy": {
+                    "scenario": "entry_fee", "true": "cvs_otc", "otherwise": "normal",
+                    "omitted": False, "normalization": "json_boolean_true_only",
+                },
                 "biz_type_policy": "exact_value_skill_mapping_then_material_gate",
                 "biz_type_values": [spec.label for spec in SCENARIO_SPECS],
+                "biz_type_aliases": dict(BIZ_TYPE_ALIASES),
                 "biz_type_skill_map": {spec.label: spec.skill_name for spec in SCENARIO_SPECS},
                 "other_biz_type_policy": "complete_without_ai",
                 "other_biz_type_message": "该业务类型无需AI核销",
@@ -1775,13 +1972,42 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/config":
                 self._json(self._config())
                 return
+            if route == "/api/presence":
+                if query:
+                    raise ValueError("在线人数查询不支持参数")
+                self._json(PRESENCE.document())
+                return
+
             if route == "/api/model-settings":
                 self._json({**self.server.model_settings.public(),
                             "confirmation_token": self.server.model_settings_token})
                 return
+            if route == "/api/audit-schedule":
+                if query:
+                    raise ValueError("核销时间配置不支持查询参数")
+                self._json({"settings": self.server.schedule_settings.public(),
+                            "status": self.server.intake.offpeak_status() if self.server.intake else None,
+                            "read_only": self.server.intake is None,
+                            "confirmation_token": self.server.schedule_settings_token})
+                return
             if route == "/api/runs":
                 encoded, etag = self.server.catalog.catalog_document()
                 self._json_document(encoded, etag)
+                return
+
+            if route == '/api/completion-estimates':
+                if query:raise ValueError('完成时间预估不支持查询参数')
+                jobs = self.server.intake.list(active_only=True) if self.server.intake else []
+                self._json(self.server.completion_estimator.document(jobs))
+                return
+
+            if route == '/api/execution-diagnostics':
+                from .execution_diagnostics import list_reports
+                if set(query) - {'workspace_id'}:raise ValueError('异常诊断只支持 workspace_id 查询')
+                workspace_id = (query.get('workspace_id') or [None])[0]
+                if workspace_id is not None:workspace_id = _safe_workspace_id(workspace_id)
+                items = list_reports(self.server.catalog.root, workspace_id)
+                self._json({'items':items,'count':len(items)})
                 return
 
             if route == "/api/intake/jobs":
@@ -1811,7 +2037,8 @@ class Handler(BaseHTTPRequestHandler):
                         completed=completed,
                     )
                 ]
-                self._json({"jobs": jobs, "count": len(jobs)})
+                self._json({"jobs": jobs, "count": len(jobs),
+                            "offpeak": intake.offpeak_status()})
                 return
 
             intake_match = re.fullmatch(r"/api/intake/jobs/([a-f0-9]{24})", route)
@@ -1829,6 +2056,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             workspace_id = _safe_workspace_id(match.group(1))
             tail = match.group(2) or ""
+            if tail == 'materials/preview':
+                self._serve_submitted_material(workspace_id,query)
+                return
             if not tail or tail == "snapshot":
                 encoded, etag = self.server.catalog.snapshot_document(workspace_id)
                 self._json_document(encoded, etag)
@@ -1895,19 +2125,14 @@ class Handler(BaseHTTPRequestHandler):
             if (run_match is None and intake_match is None) or parsed.query:
                 self._error(HTTPStatus.NOT_FOUND, "删除接口不存在")
                 return
-            origin = urlparse(str(self.headers.get("Origin") or ""))
-            host = str(self.headers.get("Host") or "")
             if (
-                origin.scheme != "http"
-                or origin.netloc.lower() != host.lower()
-                or origin.hostname not in self.server.deletion_hosts
-                or origin.path or origin.params or origin.query or origin.fragment
-                or self.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin"
+                not Handler._same_origin_allowed(self)
                 or not secrets.compare_digest(
                     str(self.headers.get("X-Offline-Audit-Delete-Token") or "").encode("utf-8"),
                     self.server.deletion_token.encode("utf-8"),
                 )
             ):
+                discard_rejected_body(self)
                 self._error(HTTPStatus.FORBIDDEN, "请从当前局域网工作台确认删除")
                 return
             if self.headers.get("Transfer-Encoding"):
@@ -1935,16 +2160,53 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             self._error(HTTPStatus.CONFLICT, "删除未完成：文件可能被占用或权限不足，请解除占用后重试")
 
+    def _same_origin_allowed(self) -> bool:
+        origin = urlparse(str(self.headers.get('Origin') or ''))
+        if (not origin.hostname or origin.path or origin.params or origin.query or origin.fragment
+                or origin.username or origin.password
+                or self.headers.get('Sec-Fetch-Site', 'same-origin') != 'same-origin'):
+            return False
+        if (origin.scheme == 'http'
+                and origin.netloc.lower() == str(self.headers.get('Host') or '').lower()
+                and origin.hostname in self.server.deletion_hosts):
+            return True
+        # HTTPS terminates at the explicitly approved proxy on this host.
+        # Forwarded headers alone never grant access; operation tokens remain required.
+        return bool(getattr(self.server, 'proxy_origin', '')
+                    and f'{origin.scheme}://{origin.netloc}'.lower() == self.server.proxy_origin
+                    and self.client_address[0] in self.server.proxy_client_ips)
+
+    def _update_audit_schedule(self) -> None:
+        self.close_connection = True
+        if (not Handler._same_origin_allowed(self)
+                or not secrets.compare_digest(str(self.headers.get("X-Offline-Audit-Schedule-Token") or "").encode(),
+                                              self.server.schedule_settings_token.encode())):
+            discard_rejected_body(self)
+            self._error(HTTPStatus.FORBIDDEN, "请从当前工作台配置核销时间。")
+            return
+        intake = self._require_intake()
+        if intake is None:
+            return
+        from .audit_schedule import ScheduleSettingsError, ScheduleSettingsConflict
+        try:
+            if self.headers.get("Transfer-Encoding") or urlparse(self.path).query:
+                raise ScheduleSettingsError("核销时间配置请求格式不正确。")
+            settings = intake.save_schedule_settings(self._read_request_json())
+            self._json({"settings": settings, "status": intake.offpeak_status(),
+                        "message": "核销时间已保存，等待中的单据与新单按新时段执行。"})
+        except ScheduleSettingsConflict as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
+        except (ScheduleSettingsError, ValueError) as exc:
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
+        except OSError:
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "核销时间保存失败，请稍后重试。")
+
     def _update_model_settings(self) -> None:
         self.close_connection = True
-        origin = urlparse(str(self.headers.get("Origin") or ""))
-        host = str(self.headers.get("Host") or "")
-        if (origin.scheme != "http" or origin.netloc.lower() != host.lower()
-                or origin.hostname not in self.server.deletion_hosts
-                or origin.path or origin.params or origin.query or origin.fragment
-                or self.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin"
+        if (not Handler._same_origin_allowed(self)
                 or not secrets.compare_digest(str(self.headers.get("X-Offline-Audit-Model-Token") or "").encode(),
                                               self.server.model_settings_token.encode())):
+            discard_rejected_body(self)
             self._error(HTTPStatus.FORBIDDEN, "请从当前工作台配置模型。")
             return
         from .qwen_model import QwenRequestError, probe_qwen
@@ -1952,8 +2214,27 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get("Transfer-Encoding") or urlparse(self.path).query:
                 raise ModelSettingsError("模型配置请求格式不正确。")
             payload = self._read_request_json()
+            if payload.get('action') in {'model_catalog', 'save_controls'}:
+                from .model_controls import catalog, current_controls, save_controls
+                action = payload['action']
+                expected = {'action','revision'} | (set() if action=='model_catalog' else
+                    {'deepseek_model','deepseek_effort','qwen_model','qwen_effort'})
+                if set(payload)!=expected or type(payload.get('revision')) is not int:
+                    raise ModelSettingsError('模型调整请求格式不正确，请刷新后重试。')
+                if action=='model_catalog':
+                    options=catalog(self.server.model_settings,refresh=True)
+                    self._json({'catalog':options,'controls':current_controls(self.server.model_settings),
+                                'settings':self.server.model_settings.public()})
+                else:
+                    if not self.server.model_probe_lock.acquire(blocking=False):
+                        raise ModelSettingsConflict('模型配置正在检查，请稍后再试。')
+                    try:
+                        self._json(save_controls(self.server.model_settings,payload))
+                    finally:
+                        self.server.model_probe_lock.release()
+                return
             allowed = {"action", "revision", "provider", "model", "base_url", "api_key"}
-            if set(payload) - allowed or payload.get("action") not in {"test", "activate", "gpt"}:
+            if set(payload) - allowed or payload.get("action") not in {"test", "activate", "refresh"}:
                 raise ModelSettingsError("未知的模型配置操作。")
             if type(payload.get("revision")) is not int:
                 raise ModelSettingsError("请刷新工作台后重试。")
@@ -1961,35 +2242,193 @@ class Handler(BaseHTTPRequestHandler):
                 if key in payload and not isinstance(payload[key], str):
                     raise ModelSettingsError("模型配置必须填写文字。")
             action = payload["action"]
-            if action == "gpt":
-                result = self.server.model_settings.save(ModelSelection(), expected_revision=payload["revision"])
-                self._json({"settings": result, "message": "已恢复 GPT，后续新启动的任务使用 GPT。"})
-                return
             candidate = self.server.model_settings.candidate(payload)
-            if not self.server.model_probe_lock.acquire(blocking=False):
-                raise ModelSettingsConflict("模型测试正在进行，请稍后再试。")
-            try:
-                probe = probe_qwen(candidate)
-                result = (self.server.model_settings.save(candidate, expected_revision=payload["revision"])
-                          if action == "activate" else self.server.model_settings.public())
-            finally:
-                self.server.model_probe_lock.release()
-            service = "PPIO 千问" if candidate.provider == "ppio" else "百炼千问"
-            self._json({"settings": result, "test": probe,
-                        "message": f"已切换为{service}，后续新启动的任务使用该模型。" if action == "activate" else f"{service}图片识别与 JSON 返回测试通过，当前模型未改变。"})
+            from .model_catalog import public_model_id
+            selected_model = public_model_id(candidate.model)
+            if action == "activate":
+                if self.server.model_settings.public()['revision'] != payload['revision']:
+                    raise ModelSettingsConflict("模型配置已在其他页面改变，请刷新后再操作。")
+                self.server.model_settings.availability.require(candidate)
+                result = self.server.model_settings.save(candidate, expected_revision=payload["revision"])
+                self._json({"settings": result,
+                            "message": f"已切换为 {selected_model}，后续新启动的任务使用该模型。"})
+            else:
+                if not self.server.model_probe_lock.acquire(blocking=False):
+                    raise ModelSettingsConflict("模型测试正在进行，请稍后再试。")
+                try:
+                    if action == 'refresh':
+                        from .model_availability import refresh_available_models
+                        checked = refresh_available_models(candidate, self.server.model_settings.availability)
+                    else:
+                        try:
+                            probe = probe_qwen(candidate)
+                        except QwenRequestError:
+                            self.server.model_settings.availability.record(candidate, passed=False)
+                            raise
+                        self.server.model_settings.availability.record(candidate, passed=True)
+                finally:
+                    self.server.model_probe_lock.release()
+                if action == 'refresh':
+                    self._json({"settings": self.server.model_settings.public(candidate=candidate), "check": checked,
+                                "message": f"检查完成：{checked['available']} 个模型通过图片与 JSON 测试，"
+                                           f"{checked['unavailable']} 个未通过。可选列表已更新，当前模型未改变。"})
+                else:
+                    self._json({"settings": self.server.model_settings.public(candidate=candidate), "test": probe,
+                                "message": "图片识别与 JSON 返回测试通过，当前模型未改变。"})
         except ModelSettingsConflict as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
         except (ModelSettingsError, OSSIntakeRequestError, ValueError) as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
         except QwenRequestError as exc:
-            self._error(HTTPStatus.BAD_GATEWAY, str(exc))
+            message = {
+                "auth": "API Key 认证失败，请检查密钥及所选模型的访问权限。",
+                "quota": "API Key 可用额度不足，请检查额度后重试。",
+                "rate_limit": "模型请求过于频繁，请稍后重试。",
+                "timeout": "模型返回超时，请稍后重试或选择其他型号。",
+                "configuration": "所选模型或 API Key 不支持本次图片和 JSON 请求，请重新选择。",
+                "invalid_output": "模型已返回，但图片识别或 JSON 检查未通过，当前模型未改变。",
+            }.get(exc.error_code, "模型测试暂未完成，请稍后重试。")
+            self._error(HTTPStatus.BAD_GATEWAY, message)
         except OSError:
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "模型配置保存失败，请检查本机文件权限。")
 
+    def _run_intake_job_now(self, job_id: str) -> None:
+        """Operator override: start one parked job even in the peak window."""
+        self.close_connection = True
+        if not Handler._same_origin_allowed(self):
+            discard_rejected_body(self)
+            self._error(HTTPStatus.FORBIDDEN, "请从当前核销管理中心触发立即分析")
+            return
+        intake = self._require_intake()
+        if intake is None:
+            return
+        try:
+            if urlparse(self.path).query:
+                raise OSSIntakeRequestError("立即分析请求不接受查询参数")
+            if self.headers.get("Transfer-Encoding"):
+                raise OSSIntakeRequestError("立即分析请求不接受流式请求体")
+            if self._read_request_json() != {}:
+                raise OSSIntakeRequestError("立即分析请求只能发送空对象")
+            job = intake.request_immediate(job_id)
+            self._json({
+                "job": public_job(job, input_root=intake.input_root),
+                "message": "已跳过空闲时段限制，本单立即开始核销；开始后不会再中断。",
+            })
+        except FileNotFoundError:
+            self._error(HTTPStatus.NOT_FOUND, "上传记录不存在")
+        except OSSIntakeConflictError as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
+        except OSSIntakeUnavailableError as exc:
+            self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(exc))
+        except (OSSIntakeRequestError, ValueError, json.JSONDecodeError) as exc:
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
+        except OSError as exc:
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"立即分析写入失败：{exc}")
+
+    def _run_all_intake_jobs_now(self) -> None:
+        """Operator override: start every off-peak-parked job right away."""
+        self.close_connection = True
+        if not Handler._same_origin_allowed(self):
+            discard_rejected_body(self)
+            self._error(HTTPStatus.FORBIDDEN, "请从当前核销管理中心触发立即分析")
+            return
+        intake = self._require_intake()
+        if intake is None:
+            return
+        try:
+            if urlparse(self.path).query:
+                raise OSSIntakeRequestError("立即分析请求不接受查询参数")
+            if self.headers.get("Transfer-Encoding"):
+                raise OSSIntakeRequestError("立即分析请求不接受流式请求体")
+            if self._read_request_json() != {}:
+                raise OSSIntakeRequestError("立即分析请求只能发送空对象")
+            jobs = intake.request_immediate_all()
+            self._json({
+                "jobs": [public_job(job, input_root=intake.input_root)
+                         for job in jobs],
+                "count": len(jobs),
+                "message": (f"已跳过空闲时段限制，{len(jobs)} 条记录立即开始核销；"
+                            "开始后不会再中断。") if jobs else "当前没有等待空闲时段的记录。",
+            })
+        except OSSIntakeUnavailableError as exc:
+            self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(exc))
+        except (OSSIntakeRequestError, ValueError, json.JSONDecodeError) as exc:
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
+        except OSError as exc:
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"立即分析写入失败：{exc}")
+
+    def _upload_archive(self) -> None:
+        self.close_connection = True
+        if (not Handler._same_origin_allowed(self)
+                or not secrets.compare_digest(str(self.headers.get('X-Offline-Audit-Upload-Token') or '').encode(),
+                                              self.server.upload_token.encode())):
+            discard_rejected_body(self)
+            self._error(HTTPStatus.FORBIDDEN, '请从当前核销管理中心上传资料')
+            return
+        intake = self._require_intake()
+        if intake is None:return
+        try:
+            if (self.headers.get('Transfer-Encoding') or self.headers.get('Content-Encoding')
+                    or self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/zip'):
+                raise OSSIntakeRequestError('请使用 ZIP 文件直接上传')
+            raw_length = str(self.headers.get('Content-Length') or '')
+            if not re.fullmatch(r'[0-9]+', raw_length):
+                raise OSSIntakeRequestError('上传请求缺少有效的文件大小')
+            length = int(raw_length)
+            if length > intake.config.max_download_bytes:
+                discard_rejected_body(self)
+                self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, '资料包超过当前上传大小上限')
+                return
+
+            params = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+            if (set(params) - {'filename','bizType','requestId','largeVenueFee','cvsOtcChannel','verifyCode','analyzeId'}
+                    or not {'filename','bizType','requestId'}.issubset(params)
+                    or any(len(value) != 1 for value in params.values())):
+                raise OSSIntakeRequestError('请提供文件名、核销类型和上传提交标识')
+            venue = params.get('largeVenueFee', [None])[0]
+            if venue not in (None, 'true', 'false'):
+                raise OSSIntakeRequestError('商场入场费选项无效')
+            analyze_id = params.get('analyzeId', [None])[0]
+            if analyze_id is not None:
+                if re.fullmatch(r'[1-9][0-9]{0,18}', analyze_id) is None:
+                    raise OSSIntakeRequestError('analyzeId 必须是 64 位正整数')
+                analyze_id = int(analyze_id)
+            self.connection.settimeout(120)
+            job, created = intake.submit_upload(self.rfile, length=length, filename=params['filename'][0],
+                                                biz_type=params['bizType'][0], request_id=params['requestId'][0],
+                                                large_venue_fee=None if venue is None else venue == 'true',
+                                                cvs_otc_channel=params.get('cvsOtcChannel', ['false'])[0] == 'true',
+                                                verify_code=params.get('verifyCode', [None])[0], analyze_id=analyze_id)
+            self._json({'job':public_job(job, input_root=intake.input_root), 'duplicate':not created,
+                        'status_url':f"/api/intake/jobs/{job['job_id']}"}, HTTPStatus.ACCEPTED)
+        except OSSIntakeConflictError as exc:self._error(HTTPStatus.CONFLICT, str(exc))
+        except OSSIntakeUnavailableError as exc:self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(exc))
+        except (OSSIntakeRequestError, ValueError) as exc:
+            # Invalid upload metadata can be rejected before the ZIP body is
+            # read. Drain only the existing bounded allowance so Windows
+            # clients receive the actual 400 response instead of a TCP reset.
+            discard_rejected_body(self)
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
+        except TimeoutError:self._error(HTTPStatus.REQUEST_TIMEOUT, '上传超时，请检查网络后重试')
+        except OSError:self._error(HTTPStatus.INTERNAL_SERVER_ERROR, '资料接收失败，请稍后重新上传')
+
     def do_POST(self) -> None:  # noqa: N802
         route = urlparse(self.path).path.rstrip("/") or "/"
+        if route == '/api/intake/upload':
+            self._upload_archive()
+            return
         if route == "/api/model-settings":
             self._update_model_settings()
+            return
+        if route == "/api/audit-schedule":
+            self._update_audit_schedule()
+            return
+        run_now_match = re.fullmatch(r"/api/intake/jobs/([a-f0-9]{24})/run-now", route)
+        if run_now_match:
+            self._run_intake_job_now(run_now_match.group(1))
+            return
+        if route == "/api/intake/jobs/run-now":
+            self._run_all_intake_jobs_now()
             return
         review_match = re.fullmatch(r"/api/runs/([^/]+)/manual-review", route)
         if review_match:
@@ -2018,6 +2457,18 @@ class Handler(BaseHTTPRequestHandler):
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                     f"人工核验状态写入失败：{exc}",
                 )
+            return
+        if route == "/api/presence":
+            try:
+                payload = self._read_request_json()
+            except (ValueError, json.JSONDecodeError) as exc:
+                self._error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            client_id = payload.get("client_id")
+            if not isinstance(client_id, str) or not client_id.strip():
+                self._error(HTTPStatus.BAD_REQUEST, "在线心跳必须包含 client_id")
+                return
+            self._json(PRESENCE.document(client_id.strip()[:64]))
             return
         if route != "/api/intake/oss":
             self.close_connection = True
@@ -2049,6 +2500,14 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"OSS 入站写入失败：{exc}")
 
 
+def _warm_catalog(catalog: "WorkbenchCatalog") -> None:
+    """Build the run catalog once in the background so first page load is fast."""
+    try:
+        catalog.catalog_document()
+    except Exception:
+        pass
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="启动线下活动核销固定局域网工作台")
     parser.add_argument("--host", default=DEFAULT_HOST, help="监听地址，默认 0.0.0.0")
@@ -2062,6 +2521,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--enable-oss-intake",
         action="store_true",
         help="启用 OSS 自动投递接口",
+    )
+    parser.add_argument(
+        "--oss-audit-workers",
+        type=int,
+        choices=(1, 2),
+        help=(
+            "并行核销 worker 数（1 或 2）；缺省读环境变量 "
+            "OFFLINE_AUDIT_OSS_AUDIT_WORKERS，仍缺省则串行"
+        ),
     )
     parser.add_argument(
         "--oss-allowed-host",
@@ -2118,6 +2586,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="结果回调最多尝试次数；默认 3",
     )
+    parser.add_argument(
+        "--always-audit",
+        action="store_true",
+        help=(
+            "未保存工作台时间表时默认全天核销；保存后以时间表为准。未指定时默认按 DeepSeek 官方错峰时段"
+            "（工作日 09:00-12:00、14:00-18:00 为高峰）只在该时段外开始"
+        ),
+    )
     return parser
 
 
@@ -2145,11 +2621,20 @@ def main(argv: list[str] | None = None) -> int:
     if not (1 <= args.port <= 65535):
         print("端口必须在 1 到 65535 之间", file=sys.stderr)
         return 2
-    catalog = WorkbenchCatalog(Path(args.worktrees))
+    from .artifact_runtime import create_catalog, start_storage, close_storage
+    catalog, request_handler = create_catalog(Path(args.worktrees), WorkbenchCatalog, Handler)
+    # 启动时先封存进程已消失的运行，避免界面把死掉的运行当成进行中。
+    catalog.seal_orphans(min_interval=0)
+    threading.Thread(
+        target=_warm_catalog,
+        args=(catalog,),
+        name="workbench-catalog-warmup",
+        daemon=True,
+    ).start()
     try:
         server = WorkbenchHTTPServer(
             (args.host, args.port),
-            Handler,
+            request_handler,
             catalog=catalog,
         )
     except OSError as exc:
@@ -2177,6 +2662,14 @@ def main(argv: list[str] | None = None) -> int:
         try:
             config = OSSIntakeConfig(
                 allowed_hosts=tuple(allowed_hosts),
+                audit_workers=(
+                    args.oss_audit_workers
+                    if args.oss_audit_workers is not None
+                    else _environment_int(
+                        "OFFLINE_AUDIT_OSS_AUDIT_WORKERS",
+                        DEFAULT_AUDIT_WORKERS,
+                    )
+                ),
                 producer_model=args.oss_producer_model,
                 max_download_bytes=(
                     args.oss_max_bytes
@@ -2233,6 +2726,10 @@ def main(argv: list[str] | None = None) -> int:
                         DEFAULT_CALLBACK_ATTEMPTS,
                     )
                 ),
+                offpeak_only=not (
+                    args.always_audit
+                    or _environment_flag("OFFLINE_AUDIT_ALWAYS_AUDIT")
+                ),
             )
             server.intake = OSSIntakeService(
                 worktrees_root=catalog.root,
@@ -2243,6 +2740,7 @@ def main(argv: list[str] | None = None) -> int:
             server.server_close()
             print(f"OSS 入站接口配置失败：{exc}", file=sys.stderr)
             return 2
+    start_storage(catalog, server.intake)
     config = {
         "local": f"http://127.0.0.1:{args.port}/",
         "lan": [
@@ -2269,6 +2767,7 @@ def main(argv: list[str] | None = None) -> int:
         pass
     finally:
         server.server_close()
+        close_storage(catalog)
     return 0
 
 

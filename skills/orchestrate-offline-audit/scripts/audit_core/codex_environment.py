@@ -6,6 +6,7 @@ from functools import lru_cache
 import io
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,16 @@ def _current_user_sid() -> str:
     return sid
 
 
+def _is_junction(path: Path) -> bool:
+    probe = getattr(path, "is_junction", None)
+    if callable(probe):
+        return probe()
+    # Python 3.11 has no Path.is_junction. Its Windows lstat still exposes
+    # reparse attributes; reject those rather than weakening the link check.
+    return bool(getattr(path.lstat(), "st_file_attributes", 0)
+                & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
 def prepare_model_directory(directory: Path) -> None:
     if sys.platform != "win32":
         return
@@ -47,7 +58,7 @@ def prepare_model_directory(directory: Path) -> None:
     path = Path(directory)
     temporary = Path(tempfile.gettempdir()).resolve()
     resolved = path.resolve()
-    if (not path.is_dir() or path.is_symlink() or path.is_junction()
+    if (not path.is_dir() or path.is_symlink() or _is_junction(path)
             or resolved == temporary or not resolved.is_relative_to(temporary)):
         raise AuditError("模型读取权限只能配置在本次系统临时材料目录内（configuration）")
     try:

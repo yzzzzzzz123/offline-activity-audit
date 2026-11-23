@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import stat
 import subprocess
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +13,19 @@ from audit_core.common import AuditError
 
 
 class CodexEnvironmentTests(unittest.TestCase):
+    def test_python311_reparse_directory_is_rejected_before_acl_change(self) -> None:
+        with TemporaryDirectory() as temporary:
+            stage = Path(temporary) / "stage"; stage.mkdir()
+            with (patch.object(environment.sys, "platform", "win32"),
+                  patch.object(environment.tempfile, "gettempdir", return_value=temporary),
+                  patch.object(type(stage), "is_junction", None, create=True),
+                  patch.object(type(stage), "lstat", return_value=SimpleNamespace(
+                      st_mode=stat.S_IFDIR, st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)),
+                  patch.object(environment.subprocess, "run") as run):
+                with self.assertRaises(AuditError):
+                    environment.prepare_model_directory(stage)
+                run.assert_not_called()
+
     def test_windows_explicit_backend_keeps_login_profile_out(self) -> None:
         with patch.object(environment.sys, "platform", "win32"):
             self.assertEqual(environment.sandbox_arguments(), [

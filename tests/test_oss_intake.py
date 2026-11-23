@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest import mock
 from urllib.parse import quote
+from audit_core.workbench_html import API_VERSION
 
 from audit_core.oss_intake import (
     FORMAL_RUNNER,
@@ -96,6 +97,9 @@ def _config() -> OSSIntakeConfig:
         producer_model="codex",
         workbench_url="http://127.0.0.1:8080/",
         callback_url=CALLBACK_URL,
+        # Scheduling is covered by tests.test_offpeak_gate; these tests assert
+        # transport behaviour and must not depend on the wall clock.
+        offpeak_only=False,
     )
 
 
@@ -149,6 +153,10 @@ def _wait_for_job(
 
 
 class OSSIntakeValidationTests(unittest.TestCase):
+    def setUp(self):
+        from audit_core.model_settings import ModelSelection
+        model=mock.patch('audit_core.model_settings.ModelSettingsStore.snapshot',return_value=ModelSelection(api_key='sk_test_fixture_only'))
+        model.start();self.addCleanup(model.stop)
     def test_biz_type_is_preserved_for_routing_without_changing_object_identity(self) -> None:
         original = normalize_submission(
             _payload(), _config(), url_validator=_no_network_url_validator,
@@ -618,8 +626,8 @@ class OSSIntakeValidationTests(unittest.TestCase):
             self.assertEqual(result["workspace_id"], "20260831-codex")
             self.assertIn(str(FORMAL_RUNNER), captured)
             self.assertIn("--input-dir", captured)
-            self.assertEqual(captured[captured.index("--model") + 1], "gpt-6.1-sol")
-            self.assertEqual(captured[captured.index("--reasoning-effort") + 1], "high")
+            self.assertEqual(captured[captured.index("--model") + 1], "qwen/qwen3.8-max")
+            self.assertEqual(captured[captured.index("--reasoning-effort") + 1], "default")
             self.assertEqual(captured[captured.index("--input-source") + 1], "oss")
             self.assertIn("--worktrees", captured)
             self.assertIn("--scenario", captured)
@@ -767,8 +775,8 @@ class OSSIntakeValidationTests(unittest.TestCase):
         self.assertEqual(
             result,
             "## 维护费用核销\n\n"
-            "- 未提交可读取的POS电子表。\n"
-            "- 合同未显示有效盖章。",
+            "1. 未提交可读取的POS电子表。\n"
+            "2. 合同未显示有效盖章。",
         )
 
     def test_callback_result_uses_markdown_from_same_formal_worktree(self) -> None:
@@ -965,6 +973,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
             root = Path(temporary)
             config = OSSIntakeConfig(
                 allowed_hosts=(OSS_HOST,),
+                offpeak_only=False,
             )
             service = OSSIntakeService(
                 worktrees_root=root,
@@ -986,6 +995,7 @@ class OSSIntakeServiceTests(unittest.TestCase):
             config = OSSIntakeConfig(
                 allowed_hosts=(OSS_HOST,),
                 callback_required=False,
+                offpeak_only=False,
             )
             service = OSSIntakeService(
                 worktrees_root=root,
@@ -1544,7 +1554,9 @@ class OSSIntakeServiceTests(unittest.TestCase):
                 )
                 self.assertTrue(source.is_file())
                 self.assertEqual(failed["delivery"]["input_file"], str(source))
-                self.assertEqual(failed["failure"]["code"], "intake_failed")
+                self.assertEqual(failed["failure"]["code"], "audit_failed")
+                self.assertEqual(failed["result"]["status"], "failed")
+                self.assertEqual(failed["callback"]["status"], "delivered")
                 rerun, rerun_created = service.submit(
                     _payload(
                         verify_code="HX202608310002",
@@ -1717,6 +1729,29 @@ class OSSIntakeHTTPTests(unittest.TestCase):
     def _request(self, path: str) -> urllib.request.Request:
         return urllib.request.Request(self.base + path)
 
+    def test_run_now_bulk_endpoint_requires_same_origin(self) -> None:
+        def post(origin: str) -> urllib.request.Request:
+            return urllib.request.Request(
+                self.base + "/api/intake/jobs/run-now",
+                data=b"{}",
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": origin,
+                    "Sec-Fetch-Site": "same-origin",
+                },
+                method="POST",
+            )
+
+        with self.opener.open(post(self.base), timeout=5) as response:
+            value = json.load(response)
+        self.assertEqual(value["count"], 0)
+        self.assertEqual(value["jobs"], [])
+        self.assertIn("没有等待", value["message"])
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.opener.open(post("https://evil.example"), timeout=5)
+        with caught.exception as response:
+            self.assertEqual(response.code, 403)
+
     def test_http_rejects_file_id_and_missing_analyze_id(self) -> None:
         missing_id = _payload()
         missing_id.pop("analyzeId")
@@ -1873,7 +1908,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
 
         with self.opener.open(self.base + "/api/config", timeout=5) as response:
             config = json.load(response)
-        self.assertEqual(config["api_version"], "1.56")
+        self.assertEqual(config["api_version"], API_VERSION)
         self.assertEqual(config["material_problem_policy"], "require_exact_material_items_before_audit")
         self.assertTrue(config["oss_intake"]["enabled"])
         self.assertEqual(config["oss_intake"]["list_endpoint"], "/api/intake/jobs")
@@ -1909,9 +1944,10 @@ class OSSIntakeHTTPTests(unittest.TestCase):
         self.assertFalse(config["oss_intake"]["receive_only"])
         self.assertEqual(
             config["oss_intake"]["request_fields"],
-            ["verifyCode", "analyzeId", "downloadUrl", "bizType", "largeVenueFee"],
+            ["verifyCode", "analyzeId", "downloadUrl", "bizType", "largeVenueFee", "cvsOtcChannel"],
         )
-        self.assertEqual(config["oss_intake"]["optional_request_fields"], ["largeVenueFee"])
+        self.assertEqual(config["oss_intake"]["optional_request_fields"], ["largeVenueFee", "cvsOtcChannel"])
+        self.assertEqual(config["oss_intake"]["cvs_otc_channel_policy"]["normalization"], "json_boolean_true_only")
         self.assertEqual(config["oss_intake"]["required_request_fields"], ["verifyCode", "analyzeId", "downloadUrl", "bizType"])
         self.assertEqual(config["oss_intake"]["large_venue_fee_policy"], {
             "type": "boolean", "scenario": "promotional_display", "material": "atrium_agreement",
@@ -1926,6 +1962,7 @@ class OSSIntakeHTTPTests(unittest.TestCase):
         self.assertEqual(config["oss_intake"]["biz_type_skill_map"], expected_mapping)
         self.assertEqual(set(config["oss_intake"]["biz_type_values"]), set(expected_mapping))
         self.assertEqual(config["oss_intake"]["biz_type_policy"], "exact_value_skill_mapping_then_material_gate")
+        self.assertEqual(config["oss_intake"]["biz_type_aliases"], {"堆头": "陈列堆头", "陈列": "陈列堆头", "物料制作": "KT板等物料制作", "pos达标激励": "POS达标激励"})
         self.assertEqual(config["oss_intake"]["other_biz_type_policy"], "complete_without_ai")
         self.assertEqual(config["oss_intake"]["other_biz_type_message"], "该业务类型无需AI核销")
         self.assertEqual(config["oss_intake"]["input_directory"], "input")
@@ -1939,9 +1976,13 @@ class OSSIntakeHTTPTests(unittest.TestCase):
             {job_id, replay_job["job_id"]},
         )
         with self.opener.open(self.base + "/api/intake/jobs?active=1", timeout=5) as response:
-            self.assertEqual(json.load(response), {"jobs": [], "count": 0})
+            empty = json.load(response)
+        self.assertEqual((empty["jobs"], empty["count"]), ([], 0))
+        self.assertIn("offpeak", empty)
         with self.opener.open(self.base + "/api/intake/jobs?completed=0", timeout=5) as response:
-            self.assertEqual(json.load(response), {"jobs": [], "count": 0})
+            empty = json.load(response)
+        self.assertEqual((empty["jobs"], empty["count"]), ([], 0))
+        self.assertIn("offpeak", empty)
 
         self.intake.store.update(
             str(replay_job["job_id"]),

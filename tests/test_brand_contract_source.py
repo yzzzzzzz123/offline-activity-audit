@@ -1,4 +1,5 @@
 """Brand agreements define the standard; dealer submissions remain claims."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -9,8 +10,9 @@ from audit_core.common import AuditError
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_evidence import audit_decision
 from audit_core.pdf_materials import PdfEvidenceProvider
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.pdf_policy import (
-    BRAND_CONTRACT_CLARIFICATION, CONTRACT_REFERENCE_RULES,
+    BRAND_CONTRACT_CLARIFICATION, CONTRACT_REFERENCE_RULES, APPLICATION_RULES, rules,
     GIFT_CONTRACT_CLARIFICATION, MATERIALS, catalogue, requirements,
 )
 from tests.pdf_test_support import flags_for, unknown_checks
@@ -40,7 +42,7 @@ def gift_fixture(operation="ratio"):
         operand("c", "合同购买门槛=2", "2"),
         operand("c", "合同每次赠品数=1", "1"),
     ]
-    comparison = {"label": "本次赠品申报数量与品牌方合同约定数量", "value_kind": "quantity", "operation": operation, "operator": "eq",
+    comparison = {"label": "本次赠品申报数量与品牌方合同约定数量", "value_kind": "quantity", "operation": operation, "operator": "le",
                   "left": operand("s", "本次申报赠品数量=50", "50"), "right": right}
     evidence = unknown_checks(scenario, flags)
     check = next(c for c in evidence["checks"] if c["rule_id"] == "gift_rule_quantity")
@@ -63,13 +65,13 @@ class BrandContractSourceTests(unittest.TestCase):
             with self.subTest(contract_quote=contract_quote):
                 flags, documents, materials, evidence = contract_fixture("promotional_display")
                 documents[0]["facts"].append(claim_quote)
-                documents[2]["facts"].append(contract_quote)
+                next(d for d in documents if d["unit_id"] == "a")["facts"].append(contract_quote)
                 check = next(c for c in evidence["checks"] if c["rule_id"] == "display_quantity_price")
                 comparison = {"label": "本次堆头申报与合同约定", "operation": "value", "operator": "eq",
                               "value_kind": "unit_price" if "单价" in contract_quote else "quantity",
                               "left": operand("s", claim_quote, number),
-                              "right": [operand("c", contract_quote, number)]}
-                check.update(status="pass", reason="与合同约定一致", source_ids=["s", "c"], comparisons=[comparison])
+                              "right": [operand("a", contract_quote, number)]}
+                check.update(status="pass", reason="与合同约定一致", source_ids=["s", "a"], comparisons=[comparison])
                 result = audit_decision("promotional_display", flags, evidence, documents, materials)
                 self.assertEqual(next(c for c in result["checks"] if c["rule_id"] == check["rule_id"])["status"], "pass")
                 declared_standard = contract_quote.replace("合同约定", "结算单自填申请")
@@ -92,7 +94,7 @@ class BrandContractSourceTests(unittest.TestCase):
                 self.assertEqual(result["calculations"][0]["left_value"], "51")
 
     def test_gift_formula_preserves_contract_rounding_and_sales_operand(self):
-        for operation, expected, status in (("ratio", "50.5", "fail"), ("floor_ratio", "50", "pass")):
+        for operation, expected, status in (("ratio", "50.5", "pass"), ("floor_ratio", "50", "pass")):
             with self.subTest(operation=operation):
                 fixture = gift_fixture(operation)
                 fixture[1][2]["facts"].append("POS本次实际销量=101")
@@ -168,8 +170,11 @@ class BrandContractSourceTests(unittest.TestCase):
     def test_visual_agreement_checks_cannot_pass_using_only_execution_or_claims(self):
         for scenario, rule_ids in CONTRACT_REFERENCE_RULES.items():
             for rule_id in rule_ids:
+                if rule_id not in {r.id for r in rules(scenario)}:continue
+                if (scenario, rule_id) in APPLICATION_RULES:continue  # Independently covered by workbook source tests.
                 with self.subTest(scenario=scenario, rule_id=rule_id):
-                    flags = flags_for(scenario, temporary_staff=scenario == "personnel_incentive")
+                    flags = flags_for(scenario, temporary_staff=scenario == "personnel_incentive", photo_evidence=True,
+                                      cvs_otc=scenario == "entry_fee" and rule_id == "entry_inventory")
                     evidence = unknown_checks(scenario, flags)
                     check = next(c for c in evidence["checks"] if c["rule_id"] == rule_id)
                     check.update(status="pass", reason="现场与本次约定相符", source_ids=["photo"])
@@ -177,8 +182,23 @@ class BrandContractSourceTests(unittest.TestCase):
                                  {"unit_id": "c", "facts": ["品牌方本次活动约定"]}]
                     contract_id = "entry_agreement" if scenario == "entry_fee" else "promotion_contract"
                     materials = [{"id": contract_id, "state": "present", "source_ids": ["c"], "reason": "本次品牌方约定"}]
+                    if rule_id == "entry_inventory":
+                        materials.append({"id": "entry_system", "state": "present", "source_ids": ["photo"],
+                                          "reason": "本次终端库存明细影像"})
                     if rule_id == "staff_daily_photos":
                         materials.append({"id": "staff_photos", "state": "present", "source_ids": ["photo"], "reason": "临促现场照片"})
+                    if scenario == "price_difference_support" and rule_id in {
+                            "settlement_activity_dates", "photo_activity_dates"}:
+                        # Date decisions are calculated from source-bound date evidence.
+                        # A model's pass, even with a contract id, cannot fill missing dates.
+                        for cited in (["photo"], ["photo", "c"]):
+                            check["source_ids"] = cited
+                            result = audit_decision(scenario, flags, evidence, documents, materials)
+                            actual = next(c for c in result["checks"] if c["rule_id"] == rule_id)
+                            self.assertEqual(actual["status"], "unknown")
+                            self.assertEqual(actual["comparisons"], [])
+                            self.assertEqual(check["status"], "pass")
+                        continue
                     with self.assertRaises(AuditError):
                         audit_decision(scenario, flags, evidence, documents, materials)
                     check["source_ids"].append("c")
@@ -187,6 +207,22 @@ class BrandContractSourceTests(unittest.TestCase):
                     check.update(status="unknown", reason="合同没有明确本次活动范围", source_ids=["c"])
                     result = audit_decision(scenario, flags, evidence, documents, materials)
                     self.assertEqual(next(c for c in result["checks"] if c["rule_id"] == rule_id)["status"], "unknown")
+
+    def test_price_dates_require_actual_contract_quote_not_a_model_pass(self):
+        from tests.test_price_support_activity_dates import fixture
+
+        dates, documents, materials, units = fixture(photos=())
+        flags = flags_for("price_difference_support")
+        evidence = unknown_checks("price_difference_support", flags, materials=materials, units=units)
+        evidence["activity_dates"] = dates
+        result = audit_decision("price_difference_support", flags, evidence, documents, materials, units=units)
+        actual = {item["rule_id"]: item for item in result["checks"]}
+        self.assertEqual(actual["settlement_activity_dates"]["status"], "pass")
+        self.assertEqual(actual["photo_activity_dates"]["status"], "unknown")
+        # Even identical wording in the settlement is not the contract authority.
+        dates["contract"]["periods"][0]["unit_id"] = "settlement"
+        with self.assertRaises(AuditError):
+            audit_decision("price_difference_support", flags, evidence, documents, materials, units=units)
 
     def test_visible_missing_fields_can_still_fail_without_contract_reference(self):
         flags = flags_for("promotional_display")
@@ -203,14 +239,15 @@ class BrandContractSourceTests(unittest.TestCase):
         for scenario in MATERIALS:
             with self.subTest(scenario=scenario):
                 flags = flags_for(scenario)
-                response = unknown_checks(scenario, flags)
-                provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+                response = unknown_checks(scenario, flags, materials=[], units=[])
+                provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
                 captured = []
 
                 def fake_call(root, used_skill, schema, prompt, **kwargs):
                     captured.append(render_prompt(prompt))
-                    kwargs["validator"](response)
-                    return response
+                    value = {key: item for key, item in response.items() if key in schema['properties']}
+                    kwargs["validator"](value)
+                    return value
 
                 case = {"scenario": scenario, "archive_id": "a001", "flags": flags, "documents": [], "materials": []}
                 with tempfile.TemporaryDirectory() as temporary, patch.object(provider, "_call", side_effect=fake_call):

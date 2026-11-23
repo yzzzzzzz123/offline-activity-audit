@@ -93,7 +93,7 @@ class CompletedWorktreeRefreshTests(unittest.TestCase):
         self.assertEqual([item["error_count_after"] for item in preview["results"]], [1, 1])
         for item in preview["results"]:
             self.assertEqual(len(item["files"]), 4)
-            self.assertEqual(item["summary"], "## 维护费用\n\n- POS 销售电子表未提交。")
+            self.assertEqual(item["summary"], "## 维护费用\n\n1. POS 销售电子表未提交。")
         calls = []
 
         def write_after_all_backups(path, content):

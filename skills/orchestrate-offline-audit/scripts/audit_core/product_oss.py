@@ -31,7 +31,8 @@ def json_bytes(value: Any) -> bytes:
 
 def credential_path() -> Path:
     if os.name != "nt":
-        raise AuditError("当前商品 OSS 凭据使用 Windows 当前用户 DPAPI；迁移主机须重新配置凭据")
+        return Path(os.environ.get('OFFLINE_AUDIT_PRODUCT_OSS_CREDENTIALS_FILE') or
+                    Path.home() / '.local/share/offline-activity-audit/product-images/credentials.json')
     return Path(os.environ["LOCALAPPDATA"]) / "OfflineActivityAudit/ProductImages/credentials.dpapi"
 
 
@@ -68,6 +69,24 @@ def save_credentials(value: dict, *, replace: bool = False) -> None:
     if target.exists() and not replace:
         raise AuditError("私有凭据已存在；更新须显式使用 --replace-credentials")
     target.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != 'nt':
+        if target.is_symlink():
+            raise AuditError('私有凭据文件不能是链接')
+        import tempfile
+        target.parent.chmod(0o700)
+        descriptor, pending_name = tempfile.mkstemp(prefix='.credentials-', dir=target.parent)
+        pending = Path(pending_name)
+        try:
+            with os.fdopen(descriptor, 'wb') as handle:
+                handle.write(json_bytes(value)); handle.flush(); os.fsync(handle.fileno())
+            pending.chmod(0o600)
+            if replace:
+                os.replace(pending, target)
+            else:
+                os.link(pending, target)
+        finally:
+            pending.unlink(missing_ok=True)
+        return
     identity = subprocess.run(["whoami.exe", "/user", "/fo", "csv", "/nh"], check=True,
                               capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
     sid = re.search(r"S-1-\d+(?:-\d+)+", identity.stdout)
@@ -140,7 +159,13 @@ class ProductOSS:
         from alibabacloud_oss_v2.transport.requests_client import RequestsHttpClient
 
         try:
-            credentials = json.loads(_crypt(credential_path().read_bytes(), decrypt=True))
+            if os.name == 'nt':
+                credentials = json.loads(_crypt(credential_path().read_bytes(), decrypt=True))
+            else:
+                from .private_credentials import read_private_file
+                credentials = json.loads(read_private_file(credential_path()))
+            if set(credentials) != {'accessKeyId','accessKeySecret'} or any(not isinstance(v,str) or not re.fullmatch(r'[A-Za-z0-9]{16,128}',v) for v in credentials.values()):
+                raise ValueError()
         except (OSError, ValueError):
             raise AuditError("商品 OSS 私有凭据未配置或无法读取") from None
         self.oss = oss
@@ -165,10 +190,16 @@ class ProductOSS:
         self.session.close()
 
     def _call(self, function, request, *, missing_ok=False):
+        from .execution_trace import record_step
+        operation = getattr(function, "__name__", "oss_operation")
+        record_step("oss.request", "执行OSS对象请求：" + operation, {"operation": operation,
+                    "bucket": BUCKET, "object_key": getattr(request, "key", None)}, status="started")
         try:
             return function(request)
         except Exception as exc:
             code = error_code(exc)
+            record_step("oss.failed", "OSS对象请求失败", {"operation": operation, "object_key": getattr(request, "key", None),
+                        "error_code": code}, status="failed")
             if missing_ok and code == "NoSuchKey":
                 return None
             raise AuditError(f"商品 OSS 请求失败（{code}），未使用旧图片或泄露原始认证响应") from None
@@ -218,9 +249,16 @@ class ProductOSS:
                 if size != result.content_length or (expected_sha and digest.hexdigest() != expected_sha):
                     raise AuditError("商品 OSS 对象 SHA-256 或完整长度校验失败")
         except AuditError:
+            from .execution_trace import record_step
+            record_step("oss.integrity_failed", "OSS对象完整性检查未通过", {"object_key": key,
+                        "expected_sha256": expected_sha, "expected_size": expected_size, "read_bytes": size}, status="failed")
             raise
         except Exception as exc:
             raise AuditError(f"商品 OSS 对象流读取失败（{error_code(exc)}）") from None
+        from .execution_trace import record_step
+        record_step("oss.read_completed", "OSS对象已完整读取", {"object_key": key, "size_bytes": size,
+                    "sha256": digest.hexdigest(), "expected_sha256": expected_sha, "expected_size": expected_size,
+                    "matches_manifest": expected_sha is not None and digest.hexdigest() == expected_sha})
         return digest.hexdigest() if output is not None else b"".join(pieces)
 
     def put(self, key: str, body, *, size: int, sha: str, content_type: str, forbid_overwrite=True) -> None:

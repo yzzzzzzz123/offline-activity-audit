@@ -100,11 +100,14 @@ GENERIC_SCENARIOS = frozenset(
 )
 SCENARIO_LABELS = {item.scenario: item.label for item in SCENARIO_SPECS}
 BIZ_TYPE_SCENARIOS = {item.label: item.scenario for item in SCENARIO_SPECS}
+BIZ_TYPE_ALIASES = {"堆头": "陈列堆头", "陈列": "陈列堆头", "物料制作": "KT板等物料制作", "pos达标激励": "POS达标激励"}
 
 
 def scenario_for_biz_type(value: object) -> str | None:
-    """Match only the eight agreed business values, without aliases or inference."""
-    return BIZ_TYPE_SCENARIOS.get(value) if isinstance(value, str) else None
+    """Match canonical values and explicitly approved aliases; preserve the input."""
+    if not isinstance(value, str):
+        return None
+    return BIZ_TYPE_SCENARIOS.get(BIZ_TYPE_ALIASES.get(value, value))
 
 
 SCENARIO_SHEETS = {item.scenario: item.sheet_name for item in SCENARIO_SPECS}

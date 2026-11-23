@@ -4,17 +4,28 @@ import hashlib
 import json
 import re
 import unicodedata
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
 
 from jsonschema import Draft202012Validator, FormatChecker
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 class AuditError(RuntimeError):
     """Raised when evidence cannot be audited safely."""
+
+
+class CheckEvidenceError(AuditError):
+    """A general check-contract failure; no model instructions or source payload."""
+
+    def __init__(self, message: str, rule_id: str, code: str, field_path: str):
+        super().__init__(message)
+        self.rule_id = rule_id
+        self.validation_code = code
+        self.field_path = field_path
 
 
 BIZ_TYPE_FAILURE_MESSAGE = "无法识别核销类型"
@@ -42,6 +53,20 @@ POSTER_MATERIAL_QUANTITY_CALIBRATION_PREFIX = (
 
 def now_utc() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def china_timezone():
+    """Return Asia/Shanghai, with a deterministic fallback for minimal images.
+
+    Linux servers normally provide the system tz database.  A Windows build or
+    a slim container may not; modern mainland China has no daylight-saving
+    transition, so UTC+08:00 is the correct operational fallback rather than a
+    startup failure that makes every material import look broken.
+    """
+    try:
+        return ZoneInfo("Asia/Shanghai")
+    except ZoneInfoNotFoundError:
+        return timezone(timedelta(hours=8), name="Asia/Shanghai")
 
 
 def load_json(path: str | Path) -> dict[str, Any]:

@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "description": "全部为虚构的页面展示样例，不是实际核销结果。",
+  "records": [
+    {
+      "id": "demo-personnel",
+      "title": "演示｜秋季人员激励活动",
+      "date": "2026-10-20T09:20:00+08:00",
+      "scenario": "personnel_incentive",
+      "label": "人员激励",
+      "source": "input",
+      "issues": [
+        {"title": "红包凭证合计少于本次结算金额", "file": "演示_红包凭证.jpg", "reason": "样例结算金额为 1,200 元，样例红包凭证去重后合计为 1,100 元，尚差 100 元。", "action": "核对本次实际付款记录，补充对应凭证或更正结算金额。", "category": "金额计算"},
+        {"title": "POS 明细缺少销售单价", "file": "演示_POS销售.xlsx", "reason": "样例表格列有商品、数量和金额，但没有销售单价，无法按原始数据复算。", "action": "补充包含销售单价的本次 POS 电子表。", "category": "核销资料"}
+      ],
+      "checks": ["合同主体与活动期间一致", "结算商品名称与样例销售明细对应"]
+    },
+    {
+      "id": "demo-display",
+      "title": "演示｜华东门店陈列活动",
+      "date": "2026-10-19T14:15:00+08:00",
+      "scenario": "promotional_display",
+      "label": "陈列堆头",
+      "source": "input-oss",
+      "issues": [
+        {"title": "一家门店缺少活动现场照片", "file": "演示_门店返图清单.xlsx", "reason": "样例合同包含三家门店，返图清单仅覆盖其中两家，未见春晓路店的现场照片。", "action": "补充春晓路店在本次活动期间的现场照片。", "category": "活动执行"}
+      ],
+      "checks": ["样例合同已列明陈列期间和门店范围", "已提供的两家门店照片可对应活动"]
+    },
+    {
+      "id": "demo-giveaway",
+      "title": "演示｜周末搭赠促销活动",
+      "date": "2026-10-18T10:30:00+08:00",
+      "scenario": "giveaway_promotion",
+      "label": "搭赠",
+      "source": "input",
+      "issues": [
+        {"title": "赠品申报数量与约定规则不符", "file": "演示_搭赠结算单.xlsx", "reason": "样例合同约定买二赠一，样例有效销量为 100 件，对应赠品 50 件；结算单填写 60 件。", "action": "按本次有效销量和合同赠送规则核对，并更正赠品申报数量。", "category": "数量核对"}
+      ],
+      "checks": ["样例合同已明确赠送规则", "样例 POS 包含活动期间和销售数量"]
+    },
+    {
+      "id": "demo-price",
+      "title": "演示｜国庆价格补差申请",
+      "date": "2026-10-17T16:40:00+08:00",
+      "scenario": "price_difference_support",
+      "label": "补差",
+      "source": "input-oss",
+      "issues": [
+        {"title": "结算补差单价高于合同单价", "file": "演示_补差结算单.pdf", "reason": "样例合同约定每件补差 2 元，结算单按每件 3 元申报，涉及 200 件商品。", "action": "将结算单价与本次合同逐项核对，更正单价和对应金额。", "category": "金额计算"}
+      ],
+      "checks": ["样例结算数量与 POS 销量一致", "样例商品和活动期间均可对应合同"]
+    },
+    {
+      "id": "demo-pos",
+      "title": "演示｜月度 POS 达标激励",
+      "date": "2026-10-16T11:10:00+08:00",
+      "scenario": "pos_target_incentive",
+      "label": "POS达标激励",
+      "source": "input",
+      "issues": [],
+      "checks": ["样例活动期间一致", "样例 POS 字段完整", "样例销售金额复算一致", "样例结算金额与合同规则对应"]
+    },
+    {
+      "id": "demo-maintenance",
+      "title": "演示｜渠道门店维护费用",
+      "date": "2026-10-15T15:00:00+08:00",
+      "scenario": "maintenance_fee",
+      "label": "维护费用",
+      "source": "input-oss",
+      "issues": [],
+      "checks": ["样例合同主体一致", "样例资料覆盖约定期间", "样例有效凭证金额覆盖本次结算金额"]
+    }
+  ]
+}

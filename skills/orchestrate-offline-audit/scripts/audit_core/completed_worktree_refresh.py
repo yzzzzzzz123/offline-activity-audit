@@ -105,6 +105,7 @@ def _prepare_workspace(workspace: Path, root_html: Path) -> dict[str, Any]:
     updated_snapshot["run"].pop("customer_projection", None)
     snapshot_bytes = original_snapshot if updated_snapshot == snapshot else _json_bytes(updated_snapshot)
     updated_manifest = deepcopy(manifest)
+    updated_manifest["analysis_summary_display"] = {"text": summary.decode("utf-8").strip(), "source": "saved"}
     updated_manifest["analysis_summary"] = metadata
     updated_manifest["snapshot_sha256"] = _digest(snapshot_bytes)
     updated_manifest["customer_projection"] = {

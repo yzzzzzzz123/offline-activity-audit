@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "phase",
+    "scenario",
+    "rule_ids",
+    "rules",
+    "policies",
+    "max_text_bytes",
+    "max_output_tokens"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "phase": {
+      "enum": [
+        "audit",
+        "transcription",
+        "material_gate"
+      ]
+    },
+    "scenario": {
+      "type": "string"
+    },
+    "rule_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "max_text_bytes": {
+      "const": null
+    },
+    "max_output_tokens": {
+      "const": null
+    }
+  }
+}

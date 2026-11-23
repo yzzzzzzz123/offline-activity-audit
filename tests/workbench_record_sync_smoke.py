@@ -97,7 +97,7 @@ def main() -> None:
                 expect(page.locator("#as-nav-overview")).to_have_text("107")
 
                 def counts(expected: int) -> None:
-                    for selector in ("#as-hero-count", "#as-nav-overview", "#as-nav-archive"):
+                    for selector in ("#as-nav-overview", "#as-nav-archive"):
                         expect(page.locator(selector)).to_have_text(str(expected))
                     expect(page.locator("#as-rail-total")).to_have_text(f"{expected} 条记录")
                     expect(page.locator("#as-metrics .as-metric:first-child > strong")).to_have_text(str(expected))
@@ -142,11 +142,13 @@ def main() -> None:
                     colors[status] = card.locator(".as-status").evaluate("node => getComputedStyle(node).color")
                 assert len(set(colors.values())) == 3
                 page.locator(f'[data-as-technical="{stores[105].workspace.name}"]').click()
-                expect(page.locator("#as-tech-panel-summary .as-status.running")).to_be_visible()
-                expect(page.locator("#as-tech-panel-summary")).to_contain_text("2026-09-10")
+                expect(page.locator("#as-technical-context")).to_contain_text("正在核销")
+                expect(page.locator("#as-technical-context")).to_contain_text("2026-09-10")
                 page.keyboard.press("Escape")
                 page.locator(f'[data-as-technical="{stores[1].workspace.name}"]').click()
-                expect(page.locator("#as-tech-panel-summary")).to_contain_text("HX202606040013-核销资料-诚成26年4月【堆头20家】")
+                page.locator('#as-chain-support > summary').click()
+                page.locator('[data-as-resource="metadata"] > summary').click()
+                expect(page.locator('[data-as-resource="metadata"] .as-code')).to_contain_text("HX202606040013-核销资料-诚成26年4月【堆头20家】")
                 page.keyboard.press("Escape")
                 assert page.locator("#as-search, #as-archive-search, #as-refresh, #as-archive-refresh").count() == 0
                 assert page.locator("#as-archive-scenario option").count() == 11
@@ -266,8 +268,10 @@ def main() -> None:
                         assert "isolated failure fixture" not in page.locator("body").inner_text()
                         assert "RUN RECORD" not in page.locator("body").inner_text()
                         page.locator("#as-record-technical").click()
-                        expect(page.locator("#as-tech-panel-summary .as-status.failed")).to_be_visible()
-                        expect(page.locator("#as-tech-panel-summary")).to_contain_text("isolated failure fixture")
+                        expect(page.locator("#as-technical-context")).to_contain_text("核销未完成")
+                        page.locator('#as-chain-support > summary').click()
+                        page.locator('[data-as-resource="metadata"] > summary').click()
+                        expect(page.locator('[data-as-resource="metadata"] .as-code')).to_contain_text("isolated failure fixture")
                 context.close()
                 browser.close()
         finally:

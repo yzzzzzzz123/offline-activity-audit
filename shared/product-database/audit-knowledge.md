@@ -1,8 +1,9 @@
 # 核销商品数据库与参考图片边界
 
-所有核销 Skill、商品候选检索和新品图片接入的商品身份数据，统一来自 MySQL
-`product_catalog.products`。唯一读取入口为 `audit_core.product_database.load_product_catalog`。
-正式表结构见 [schema.sql](schema.sql)，部署和迁移见 [README.md](README.md)。
+所有核销 Skill、商品候选检索和新品图片接入的商品身份数据，统一来自 RDS MySQL
+专用库的 `products` 表；库名由 `OFFLINE_AUDIT_PRODUCT_DB_NAME` 配置，默认 `product_catalog`。
+唯一读取入口为 `audit_core.product_database.load_product_catalog`。
+正式表结构见 [deploy/rds/schema.sql](../../deploy/rds/schema.sql)，部署和迁移见[根目录 README](../../README.md)。
 
 ## 数据库事实
 
@@ -30,7 +31,7 @@ OSS 商品参考图采用固定路径覆盖策略，不做图片版本管理：
 
 同次正式运行在第一次需要商品知识时查询一次，使用一致的只读事务快照完成候选检索和核销，
 在当前PDF流程的技术观察记录中保存数据库条数、读取时间、内容哈希、所选商品及取图范围；历史入口保留其 `analysis/product-database.json` 路径。
-下次运行重新查询，不复用上次快照。只读账号通过 TLS 连接，凭据留在容器秘密文件中。
+下次运行重新查询，不复用上次快照。数据库连接方式按各环境实际配置维护：默认 `OFFLINE_AUDIT_PRODUCT_DB_SSL_MODE=VERIFY_IDENTITY` 校验 CA 与服务器名称；明确使用未启用 SSL 的数据库连接时，显式配置 `DISABLED`，不要求 CA，不因缺少 CA 或 TLS 失败自动切换。参半当前连接使用后者，宝塔保留 TLS；两种模式均使用只读一致性事务。Linux 凭据保存在服务用户可读的 0600 私有文件中，不使用容器秘密文件。
 连接失败、空表、非法身份或读取不完整属于系统错误，停止核销，不转成客户材料错误。
 
 ## 当前核销与现场商品对照（2026-09-22用户确认）

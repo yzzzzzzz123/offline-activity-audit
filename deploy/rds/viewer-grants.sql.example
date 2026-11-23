@@ -1,0 +1,5 @@
+-- Create the dedicated account in the RDS console, then have the DBA grant:
+-- Replace product_catalog and product_viewer with the configured dedicated names.
+-- No application DDL/DML, global privileges or remote root.
+GRANT SELECT, SHOW VIEW ON product_catalog.* TO 'product_viewer'@'%';
+-- Use the RDS console to enforce SSL/TLS for this account.

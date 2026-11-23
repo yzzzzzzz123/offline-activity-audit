@@ -4,12 +4,23 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import io
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from PIL import Image
 
 from audit_core.common import AuditError
 from audit_core.product_database import catalog_from_rows
 from audit_core.product_oss import json_bytes, manifest_key, product_prefix
+from audit_core.run_temporary import temporary_scope
+
+
+def isolate_product_image_cache(test):
+    temporary = test.enterContext(TemporaryDirectory())
+    scope = Path(temporary) / "worktrees"
+    scope.mkdir()
+    test.enterContext(temporary_scope(scope))
+    return scope
 
 
 def png_bytes(color="blue"):

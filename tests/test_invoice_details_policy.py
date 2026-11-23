@@ -1,4 +1,5 @@
 """KT receipt details can be supported by the submitted contract and settlement."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -9,6 +10,7 @@ from audit_core.common import AuditError
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_evidence import audit_decision
 from audit_core.pdf_materials import PdfEvidenceProvider
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.pdf_policy import INVOICE_DETAILS_CLARIFICATION, requirements, rules
 from tests.pdf_test_support import flags_for, unknown_checks
 
@@ -21,7 +23,8 @@ def invoice_fixture():
         {"unit_id": "settlement", "facts": ["本次结算明细为台上架90个、灯箱1个，使用指定模板且客户印章可见"]},
         {"unit_id": "photos", "facts": ["本次已提交制作完成的台上架和灯箱照片"]},
     ]
-    sources = {"invoice": "receipt", "promotion_contract": "contract",
+    documents.append({"unit_id":"application","facts":["费用代垫经销商为本次经销商"]})
+    sources = {"activity_application":"application","invoice": "receipt", "promotion_contract": "contract",
                "settlement": "settlement", "finished_photos": "photos"}
     materials = [{"id": item.id, "state": "present" if item.id in sources else "not_applicable",
                   "source_ids": [sources[item.id]] if item.id in sources else [],
@@ -29,7 +32,7 @@ def invoice_fixture():
                  for item in requirements("poster_material")]
     evidence = unknown_checks("poster_material", flags)
     observations = {
-        "invoice_details": (["receipt", "contract", "settlement"],
+        "invoice_details": (["receipt", "contract", "settlement", "application"],
                             "收据抬头、金额和日期可见，具体制作明细结合本次合同、结算单确认齐全"),
         "finished_photo": (["photos"], "已提供物料成品照片"),
         "settlement_template_seal": (["settlement"], "结算单使用指定模板且客户印章可见"),
@@ -50,21 +53,21 @@ class InvoiceDetailsPolicyTests(unittest.TestCase):
         flags, documents, materials, evidence = invoice_fixture()
         original = deepcopy(documents)
         result = audit_decision("poster_material", flags, evidence, documents, materials)
-        self.assertEqual(result["summary"]["conclusion"], "no_issues_found")
-        self.assertEqual(invoice_check(result)["source_ids"], ["receipt", "contract", "settlement"])
+        self.assertEqual(invoice_check(result)["status"], "pass")
+        self.assertEqual(invoice_check(result)["source_ids"], ["receipt", "contract", "settlement", "application"])
         self.assertEqual(invoice_check(result)["calculations"], [])
         self.assertEqual(documents, original)
 
     def test_original_receipt_with_its_own_details_needs_no_extra_detail_source(self):
         flags, documents, materials, evidence = invoice_fixture()
         documents[0]["facts"].append("收据明细：台上架90个、灯箱1个")
-        invoice_check(evidence).update(source_ids=["receipt"], reason="收据抬头、制作明细、金额和日期齐全")
+        invoice_check(evidence).update(source_ids=["receipt","application"], reason="收据抬头、制作明细、金额和日期齐全")
         result = audit_decision("poster_material", flags, evidence, documents, materials)
         self.assertEqual(invoice_check(result)["status"], "pass")
 
     def test_contract_and_settlement_cannot_replace_receipt_evidence(self):
         flags, documents, materials, evidence = invoice_fixture()
-        invoice_check(evidence)["source_ids"] = ["contract", "settlement"]
+        invoice_check(evidence)["source_ids"] = ["contract", "settlement", "application"]
         with self.assertRaisesRegex(AuditError, "须引用本次发票或收据"):
             audit_decision("poster_material", flags, evidence, documents, materials)
 
@@ -75,7 +78,7 @@ class InvoiceDetailsPolicyTests(unittest.TestCase):
                 material = next(item for item in materials if item["id"] == "invoice")
                 material.update(state=state, source_ids=[] if state == "missing" else ["receipt"],
                                 reason="未找到票据" if state == "missing" else "该图片无法确认是否为本次票据")
-                invoice_check(evidence)["source_ids"] = ["contract", "settlement"]
+                invoice_check(evidence)["source_ids"] = ["contract", "settlement", "application"]
                 result = audit_decision("poster_material", flags, evidence, documents, materials)
                 self.assertEqual(invoice_check(result)["status"], expected)
 
@@ -85,17 +88,17 @@ class InvoiceDetailsPolicyTests(unittest.TestCase):
         with self.assertRaises(AuditError):
             audit_decision("poster_material", flags, evidence, documents, materials)
 
-    def test_missing_receipt_date_remains_an_issue_after_details_are_supplied(self):
+    def test_missing_receipt_identity_remains_an_issue_after_details_are_supplied(self):
         flags, documents, materials, evidence = invoice_fixture()
-        documents[0]["facts"] = ["收据抬头为本次经销商，金额8024元，事由物料制作，日期未填"]
-        invoice_check(evidence).update(status="fail", reason="收据没有填写开具日期。")
+        documents[0]["facts"] = ["收据抬头未填，金额8024元，事由物料制作"]
+        invoice_check(evidence).update(status="fail", reason="收据没有填写抬头。")
         result = audit_decision("poster_material", flags, evidence, documents, materials)
         self.assertEqual(invoice_check(result)["status"], "fail")
-        self.assertEqual(result["noncompliance_registration"], ["收据没有填写开具日期。"])
+        self.assertIn("收据没有填写抬头。", result["noncompliance_registration"])
 
     def test_actual_audit_prompt_and_validation_accept_combined_details(self):
         flags, documents, materials, evidence = invoice_fixture()
-        provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+        provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
         captured = []
 
         def fake_call(root, skill, schema, prompt, **kwargs):
@@ -110,7 +113,7 @@ class InvoiceDetailsPolicyTests(unittest.TestCase):
         self.assertEqual(invoice_check(actual)["status"], "pass")
         self.assertEqual(len(captured), 1)
         self.assertIn(INVOICE_DETAILS_CLARIFICATION, captured[0])
-        self.assertFalse(any(rule.id == "invoice_details" for rule in rules("self_procured_gift_material")))
+        self.assertTrue(any(rule.id == "invoice_details" for rule in rules("self_procured_gift_material")))
 
 
 if __name__ == "__main__":

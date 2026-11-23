@@ -9,6 +9,28 @@ from PIL import Image
 
 from audit_core.pdf_policy import FLAGS, MATERIALS, applicability, requirements, rules
 from audit_core.scenario_registry import SCENARIO_LABELS
+from audit_core.pdf_materials import PdfEvidenceProvider as _BaseEvidenceProvider
+
+
+class SingleAgentEvidenceProvider(_BaseEvidenceProvider):
+    """Explicit compatibility fixture for tests with one prewritten audit answer.
+
+    Production keeps the main_three default. The concurrent default and its
+    result-only coordinator are exercised in test_agent_orchestration.
+    """
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('agent_mode', 'single')
+        super().__init__(*args, **kwargs)
+
+
+def isolated_stage_summary(provider, case, value, decision, root, selected, validator):
+    """Isolate evidence/rule fixtures from the separately tested model review.
+
+    test_summary_review exercises the default reviewer, transport, preservation
+    guards and final handoff. These callers test business evidence extraction.
+    """
+    validator(value, selected)
+    return value
 
 
 def fixture_cli_command(arguments, *, candidates=None):
@@ -20,7 +42,13 @@ def fixture_cli_command(arguments, *, candidates=None):
         f"sys.path.insert(0, {str(root / 'skills/orchestrate-offline-audit/scripts')!r})\n"
         "from unittest.mock import patch\n"
         "from tests.pdf_test_support import PolicyProvider\n"
-        f"with patch('audit_core.orchestrator._default_provider', return_value=PolicyProvider(candidates={candidates!r})):\n"
+        "from audit_core.model_settings import ModelSelection\n"
+        "import audit_core.workbench_runtime as runtime\n"
+        "native_audit = runtime.run_audit\n"
+        "def fixture_audit(*args, **kwargs):\n"
+        f"    kwargs['evidence_provider'] = PolicyProvider(candidates={candidates!r})\n"
+        "    return native_audit(*args, **kwargs)\n"
+        "with patch('audit_core.model_settings.ModelSettingsStore.snapshot', return_value=ModelSelection(api_key='sk_test_fixture_only')), patch.object(runtime, 'run_audit', side_effect=fixture_audit), patch('audit_core.qince_context.QinceClient.from_environment', return_value=None), patch('httpx.Client', side_effect=AssertionError('Fixture must never contact an external source')), patch('httpx.AsyncClient', side_effect=AssertionError('Fixture must never contact an external model')):\n"
         f"    runpy.run_path({str(root / 'skills/orchestrate-offline-audit/scripts/run.py')!r}, run_name='__main__')\n"
     )
     return [sys.executable, "-B", "-c", script, *arguments]
@@ -49,9 +77,16 @@ def bundle(root, name="资料.zip", files=None):
 
 def flags_for(scenario, **overrides):
     flags = dict.fromkeys(FLAGS, False)
+    flags['sales_commission'] = scenario == 'personnel_incentive'
+    if scenario=='personnel_incentive' and any(overrides.get(k) is True for k in ('training','temporary_staff','store_incentive')):
+        flags['sales_commission']=False
     flags["uses_pos"] = scenario in {
         "personnel_incentive", "giveaway_promotion", "price_difference_support", "self_procured_gift_material", "pos_target_incentive"}
     flags.update(overrides)
+    if scenario=='personnel_incentive' and 'uses_pos' not in overrides and (
+            flags.get('temporary_staff') or flags.get('training')) and not (
+            flags.get('sales_commission') or flags.get('store_incentive')):
+        flags['uses_pos']=False
     return flags
 
 
@@ -68,6 +103,11 @@ def classification(scenario, ids, *, missing=(), flags=None, candidates=None, ex
                       "reason": f"未提供{r.id}的对应资料" if r.id in missing_ids else "本次原始资料可见对应事实",
                       "source_ids": ids if r.id not in missing_ids and applicability(r.when, compared, compared_flags) is not False else []}
                      for r in requirements(compared)]
+        if compared == 'self_procured_gift_material' and compared_flags.get('uses_pos'):
+            for material in materials:
+                if material['id'] in {'pos', 'pos_excel'}:
+                    material['state'] = 'missing' if material['id'] in missing_ids else 'present'
+                    material['source_ids'] = [] if material['id'] in missing_ids else ids
         extras = deepcopy(list(extra)) if compared in candidates else []
         covered = {uid for m in materials if m["state"] in {"present", "unclear"} for uid in m["source_ids"]}
         covered.update(uid for item in extras for uid in item["source_ids"])
@@ -87,11 +127,42 @@ def classification(scenario, ids, *, missing=(), flags=None, candidates=None, ex
             "background_materials": []}
 
 
-def unknown_checks(scenario, flags):
-    return {"checks": [{"rule_id": r.id,
+def unknown_checks(scenario, flags, *, materials=None, units=None):
+    value = {**({"photo_reviews": []} if scenario == "promotional_display" else {}),
+            **({'payment_dates':None} if scenario=='personnel_incentive' else {}),
+            **({'target_tiers':None} if scenario=='pos_target_incentive' else {}),
+            **({"entry_coverage": {"total_stores": None, "scope_complete": False, "scope_source_ids": [],
+                                  "stores": [], "photos": [], "limitations": []}} if scenario == "entry_fee" else {}),
+            "checks": [{"rule_id": r.id,
                         "status": "not_applicable" if applicability(r.when, scenario, flags) is False else "unknown",
                         "reason": "不适用PDF条件" if applicability(r.when, scenario, flags) is False else f"未提供{r.text.split('。')[0]}的核验依据",
                         "source_ids": [], "comparisons": []} for r in rules(scenario)]}
+    if scenario == "promotional_display":
+        for check in value["checks"]:
+            check["source_assertions"] = []
+            if check["status"] == "unknown" and check["rule_id"] == "display_watermark":
+                check["reason"] = "测试替身未提供该项可核验依据，暂时无法确认。"
+    if scenario == "giveaway_promotion" and materials is not None:
+        proofs = list(dict.fromkeys(uid for m in materials or [] if m["id"] == "giveaway_evidence"
+            and m["state"] in {"present", "unclear"} for uid in m["source_ids"]))
+        value["giveaway_coverage"] = {"scope_complete": False, "scope_source_ids": [], "stores": [],
+            "evidence": [{"unit_id": uid, "store_name": None, "store_quote": "", "valid": False,
+                          "reason": "测试替身未提供可核验的本店证明内容"} for uid in proofs], "limitations": []}
+    # Existing direct decision tests may intentionally exercise historical evidence
+    # without these fields. New-generation doubles bind them to actual case roles.
+    if scenario == "price_difference_support" and materials is not None:
+        from audit_core.pdf_evidence import price_photo_units
+        photos = price_photo_units(materials, units or [])
+        periods = {key: {"source_ids": sorted({uid for item in materials
+                     if item["id"] == role and item["state"] == "present" for uid in item["source_ids"]}),
+                     "periods": [], "limitations": ["测试替身未提供可核验的本次活动日期原文"]}
+                   for key, role in (("contract", "promotion_contract"), ("settlement", "settlement"))}
+        value.update(price_photo_reviews=[{"unit_id": unit["unit_id"], "status": "unknown",
+                         "reason": "本张价格证明照片在测试中未提供可核验的水印和价格内容",
+                         "source_ids": [unit["unit_id"]]} for unit in photos],
+                     activity_dates={**periods, "photos": [] if flags.get("online") is True else
+                         [{"unit_id": unit["unit_id"], "quote": None} for unit in photos]})
+    return value
 
 
 class PolicyProvider:
@@ -114,6 +185,8 @@ class PolicyProvider:
             flags = self.flags.get(index)
             if flags is None and scenario == "promotional_display" and case.get("large_venue_fee") is not None:
                 flags = flags_for(scenario, atrium=case["large_venue_fee"])
+            if flags is None and scenario == "entry_fee":
+                flags = flags_for(scenario, cvs_otc=case.get("cvs_otc_channel") is True)
             documents = [{"unit_id": u["unit_id"], "roles": ["submitted"],
                           "facts": ["本次资料记载费用用途和统一结算单，客户印章可见"] if u["image"] else u["native_facts"],
                           "limitations": u["limitations"]} for u in case["units"]]
@@ -126,7 +199,18 @@ class PolicyProvider:
                 value["classification"].update(candidate_scenarios=[scenario], material_matches=[selected],
                                                 flags=selected["flags"], materials=selected["materials"])
         else:
-            value = unknown_checks(scenario, case["flags"])
+            value = unknown_checks(scenario, case["flags"], materials=case["materials"], units=case.get("units", []))
+            if scenario == "entry_fee":
+                photo_ids = {uid for material in case["materials"] if material["id"] == "shelf_photos"
+                             for uid in material["source_ids"]}
+                value["entry_coverage"]["photos"] = [{"unit_id": u["unit_id"], "store_name": None}
+                    for u in case.get("units", []) if u["unit_id"] in photo_ids and (u.get("image") or u.get("photo_reference"))]
+            if scenario == "promotional_display":
+                from audit_core.pdf_evidence import DISPLAY_PHOTO_RULES, display_photo_units
+                value["photo_reviews"] = [{"unit_id": unit["unit_id"], "checks": [
+                    {"rule_id": rule_id, "status": "unknown", "reason": "本张照片在测试中未提供可核验的内容",
+                     "source_ids": [unit["unit_id"]]} for rule_id in DISPLAY_PHOTO_RULES]}
+                    for unit in display_photo_units(scenario, case["materials"], case["units"])]
             for check in value["checks"]:
                 if check["rule_id"] in {"settlement_template_seal", "entry_agreement"}:
                     check.update(status="pass", reason="本类审核栏要求的模板和签章可见", source_ids=[case["documents"][0]["unit_id"]])

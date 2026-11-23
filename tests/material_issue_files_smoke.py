@@ -64,7 +64,7 @@ def main():
             base = f"http://127.0.0.1:{server.server_address[1]}/"
             try:
                 config = page.request.get(base + "api/config").json()
-                assert config["api_version"] == "1.56"
+                assert config["api_version"] == "1.62"
                 assert config["material_issue_file_policy"] == "related_files_only_hide_archive_gaps"
                 for width in (1440, 1280):
                     page.set_viewport_size({"width": width, "height": 960})

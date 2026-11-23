@@ -11,14 +11,32 @@
           "rule_id": {
             "type": "string",
             "enum": [
-              "gift_rule_present",
               "pos_fields",
               "pos_arithmetic",
               "pos_product_identity",
+              "settlement_seal",
+              "settlement_dealer",
+              "settlement_activity_dates",
+              "settlement_application_dates",
+              "contract_signed",
+              "contract_dealer",
+              "contract_budget_amount",
+              "contract_activity_dates",
+              "claim_ceiling",
+              "gift_rule_present",
               "gift_rule_quantity",
               "gift_finished_photos",
-              "settlement_seal",
-              "contract_signed"
+              "invoice_details",
+              "invoice_amount",
+              "application_quantity_price",
+              "settlement_calculation",
+              "gift_store_photo_content",
+              "pos_seal",
+              "pos_dealer",
+              "stamped_document_pdf",
+              "pos_activity_dates",
+              "receipt_finance_seal",
+              "gift_activity_evidence"
             ]
           },
           "status": {
@@ -32,7 +50,8 @@
           },
           "reason": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "给客户看的简短结论：直接说哪个对象有什么问题。通过项建议120字以内，问题或无法确认项建议480字以内；不复述核对过程、候选名单和已通过内容。必要原值与差异保留，完整引用和算式写在对应证据字段。字数只作写法引导，不是审核失败或资料缺失的依据。"
           },
           "source_ids": {
             "type": "array",
@@ -136,7 +155,121 @@
                 "right",
                 "operation",
                 "operator"
+              ],
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "operation": {
+                        "const": "value"
+                      }
+                    },
+                    "required": [
+                      "operation"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "right": {
+                        "maxItems": 1,
+                        "description": "直接比较每次只对应一个原值；多个来源须分别列出比较，不改为求和或任意只取一个。"
+                      }
+                    }
+                  }
+                }
               ]
+            }
+          },
+          "reference_evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "written_name",
+              "seal_name",
+              "periods"
+            ],
+            "properties": {
+              "written_name": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "unit_id",
+                      "quote",
+                      "value"
+                    ],
+                    "properties": {
+                      "unit_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "seal_name": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "unit_id",
+                      "quote",
+                      "value"
+                    ],
+                    "properties": {
+                      "unit_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "periods": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "unit_id",
+                    "quote"
+                  ],
+                  "properties": {
+                    "unit_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -146,10 +279,160 @@
           "reason",
           "source_ids",
           "comparisons"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "rule_id": {
+                  "const": "settlement_calculation"
+                }
+              },
+              "required": [
+                "rule_id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "comparisons": {
+                  "items": {
+                    "properties": {
+                      "value_kind": {
+                        "const": "amount"
+                      },
+                      "operation": {
+                        "type": "string",
+                        "enum": [
+                          "product",
+                          "sum",
+                          "value"
+                        ]
+                      }
+                    },
+                    "description": "按原始字段用途校验：行金额=本行计费因子乘积，product/eq；表内合计=全部对应明细金额，sum/eq；实际核销金额<=完整支撑金额，le。仅明确左侧支撑、右侧核销的value/ge可表示等价上限。不能仅按运算类型选方向；引用保留原始字段及原值，用途与来源由程序再次核验。结算自身复算的所有操作数只取本次结算来源，合同计划、申请预算和POS由各自要点核对。先按原字段确认金额对象：同一笔费用的行金额或唯一合计按真实因子product/eq，多行表内合计按完整明细sum/eq；只有另列的真实核销金额才增加上限比较。单笔费用的因子可分行列示，但不能跨费用拼数；不将同一合计换名为另一核销金额，不为凑比较数量重复生成算式。真实独立核销金额仍须核对，真实金额差异仍须报告。"
+                  }
+                }
+              }
+            }
+          }
         ]
       },
-      "minItems": 8,
-      "maxItems": 8
+      "minItems": 26,
+      "maxItems": 26
+    },
+    "tool_requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tool",
+          "rule_ids",
+          "fields"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string",
+            "enum": [
+              "reference_fields",
+              "linked_application_amounts",
+              "pos_calculation",
+              "source_inventory",
+              "activity_periods",
+              "pos_field_inventory",
+              "pos_matrix_identity",
+              "pos_product_lookup",
+              "case_python",
+              "project_source"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "rule_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "advance_dealer",
+                "activity_period",
+                "application_quantity",
+                "application_unit_price",
+                "application_products",
+                "application_total",
+                "approved_total"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "reference_reads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "advance_dealer",
+              "activity_period",
+              "application_quantity",
+              "application_unit_price",
+              "application_products",
+              "application_total",
+              "approved_total"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "available",
+              "multiple",
+              "missing",
+              "empty",
+              "incomplete",
+              "invalid"
+            ]
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "field",
+          "state",
+          "source_ids"
+        ]
+      }
     }
   },
   "required": [

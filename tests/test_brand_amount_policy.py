@@ -1,4 +1,5 @@
 """Brand reimbursement needs sufficient actual evidence, without a rounding allowance."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -10,7 +11,8 @@ from audit_core.customer_language import numeric_problem
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_evidence import audit_decision, audit_schema
 from audit_core.pdf_materials import PdfEvidenceProvider
-from audit_core.pdf_policy import AMOUNT_CLARIFICATION, MATERIALS
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
+from audit_core.pdf_policy import AMOUNT_CLARIFICATION, MATERIALS, APPLICATION_COMPARISON_RULES
 from tests.pdf_test_support import flags_for, unknown_checks
 
 
@@ -29,6 +31,8 @@ def numeric_case(rule_id, left, right, *, scenario="personnel_incentive",
         documents.append({"unit_id": uid, "facts": [quote]})
         terms.append({"unit_id": uid, "quote": quote, "number": number})
     right_role = "payment" if rule_id == "payment_claim_amount" else "promotion_contract"
+    if (scenario,rule_id) in APPLICATION_COMPARISON_RULES:
+        right_role="approved_claim" if rule_id=="claim_ceiling" else "activity_application"
     if rule_id == "settlement_pos_quantity":
         right_role = "pos_excel"
     if rule_id == "pos_arithmetic":
@@ -54,7 +58,7 @@ def decide(case, evidence, rule_id):
 
 class BrandAmountPolicyTests(unittest.TestCase):
     def test_final_claim_may_round_down_but_not_above_unrounded_reference(self):
-        for rule_id in ("claim_ceiling", "payment_claim_amount"):
+        for rule_id in ("payment_claim_amount",):
             for claim, expected in (("100", "pass"), ("100.005", "pass"), ("100.01", "fail")):
                 with self.subTest(rule_id=rule_id, claim=claim):
                     case, evidence, _ = numeric_case(rule_id, claim, ["100.005"],
@@ -171,26 +175,26 @@ class BrandAmountPolicyTests(unittest.TestCase):
                                     ("reward_unit_price", "unit_price")):
             with self.subTest(rule_id=rule_id):
                 case, evidence, check = numeric_case(rule_id, "101", ["100"], operation="value",
-                                                     value_kind=value_kind, operator="eq")
+                                                     value_kind=value_kind, operator="le" if rule_id=='settlement_pos_quantity' else "eq")
                 self.assertEqual(decide(case, evidence, rule_id)["status"], "fail")
                 check["comparisons"][0].update(value_kind="amount", operator="ge")
                 with self.assertRaisesRegex(AuditError, "数值类别"):
                     decide(case, evidence, rule_id)
 
-    def test_contract_ceiling_and_payment_support_are_independent(self):
+    def test_approval_total_and_payment_support_are_independent(self):
         for payment, ceiling, payment_status, ceiling_status in (
                 ("101", "100", "pass", "pass"),
-                ("99.99", "200", "fail", "pass"),
+                ("99.99", "200", "fail", "fail"),
                 ("200", "99.99", "pass", "fail")):
             with self.subTest(payment=payment, ceiling=ceiling):
                 case, evidence, payment_check = numeric_case("payment_claim_amount", "100", [payment])
-                case["documents"].append({"unit_id": "contract", "facts": [f"合同本次批准金额={ceiling}"]})
-                case["materials"].append({"id": "promotion_contract", "state": "present", "source_ids": ["contract"]})
+                case["documents"].append({"unit_id": "approval", "facts": [f"系统核销批复金额合计={ceiling}"]})
+                case["materials"].append({"id": "approved_claim", "state": "present", "source_ids": ["approval"]})
                 cap_check = next(c for c in evidence["checks"] if c["rule_id"] == "claim_ceiling")
                 comparison = deepcopy(payment_check["comparisons"][0])
-                comparison.update(operation="value", right=[{"unit_id": "contract",
-                                   "quote": f"合同本次批准金额={ceiling}", "number": ceiling}])
-                cap_check.update(status="pass", reason="比较本次合同额度", source_ids=["left", "contract"],
+                comparison.update(operation="value", operator="eq", right=[{"unit_id": "approval",
+                                   "quote": f"系统核销批复金额合计={ceiling}", "number": ceiling}])
+                cap_check.update(status="pass", reason="比较本次系统核销批复合计", source_ids=["left", "approval"],
                                  comparisons=[comparison])
                 self.assertEqual(decide(case, evidence, "payment_claim_amount")["status"], payment_status)
                 self.assertEqual(decide(case, evidence, "claim_ceiling")["status"], ceiling_status)
@@ -205,21 +209,23 @@ class BrandAmountPolicyTests(unittest.TestCase):
         for scenario in MATERIALS:
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
                 flags = flags_for(scenario)
-                response = unknown_checks(scenario, flags)
-                provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+                response = unknown_checks(scenario, flags, materials=[], units=[])
+                provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
                 captured = []
 
                 def fake_call(root, used_skill, schema, prompt, **kwargs):
                     captured.append(render_prompt(prompt))
-                    kwargs["validator"](response)
-                    return response
+                    value = {key: item for key, item in response.items() if key in schema['properties']}
+                    kwargs["validator"](value)
+                    return value
 
                 with patch.object(provider, "_call", side_effect=fake_call):
                     provider.audit({"scenario": scenario, "archive_id": "a001", "flags": flags,
                                     "documents": [], "materials": []}, Path(temporary))
                 self.assertIn(AMOUNT_CLARIFICATION, captured[0])
-                self.assertIn("本次核销金额<=本次红包合计", captured[0])
-                self.assertIn("数量合计用quantity/eq", captured[0])
+                self.assertIn("程序不设置业务门禁", captured[0])
+                from audit_core.pdf_policy import POS_COMMON_CLARIFICATION
+                self.assertIn(POS_COMMON_CLARIFICATION, captured[0])
                 comparison_schema = audit_schema(scenario)["properties"]["checks"]["items"]["properties"]["comparisons"]["items"]
                 self.assertIn("value_kind", comparison_schema["required"])
 

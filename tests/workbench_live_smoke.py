@@ -158,14 +158,9 @@ def main() -> None:
         )
         assert completed_id is not None or failed_id is not None or running_id is not None
         assert page.get_by_role("heading", name="核销管理中心").first.is_visible()
-        overview_completed_metric = page.locator("#as-metrics .as-metric").filter(
-            has_text="核销完成"
-        )
-        assert overview_completed_metric.count() == 1
-        assert overview_completed_metric.locator("small").inner_text() == "最近一次已完成核销的类型数"
-        assert overview_completed_metric.locator(":scope > strong").inner_text() == str(
-            expected_completed_zip_count
-        )
+        assert page.locator("#as-metrics .as-metric").filter(has_text="核销完成").count() == 0
+        assert page.locator('[data-as-average="tokens"]').is_visible()
+        assert page.locator('[data-as-average="duration"]').is_visible()
         expected_pending = sum(
             int(run.get("error_count") or 0)
             for run in listing["runs"]
@@ -179,7 +174,7 @@ def main() -> None:
         )
         all_runs = listing["runs"]
         completed_runs = [run for run in all_runs if run["status"] == "completed"]
-        for selector in ("#as-hero-count", "#as-nav-overview", "#as-nav-archive"):
+        for selector in ("#as-nav-overview", "#as-nav-archive"):
             assert page.locator(selector).inner_text() == str(len(all_runs))
         assert page.locator("#as-rail-total").inner_text() == f"{len(all_runs)} 条记录"
         assert page.locator("#as-metrics .as-metric:first-child > strong").inner_text() == str(len(all_runs))
@@ -452,11 +447,11 @@ def main() -> None:
 
             page.get_by_role("button", name="打开技术档案").click()
             page.wait_for_selector("#as-drawer-backdrop:not([hidden])")
-            page.get_by_role("tab", name="DOM 断点").click()
+            page.locator('#as-chain-support > summary').click()
             if page.locator("[data-as-checkpoint]").count():
-                page.locator("[data-as-checkpoint]").first.click()
+                page.locator("[data-as-checkpoint]").first.locator(':scope > summary').click()
                 page.wait_for_function(
-                    "document.querySelector('#as-checkpoint-view').textContent.includes('checkpoint_id')"
+                    "document.querySelector('[data-as-checkpoint] .as-code').textContent.includes('checkpoint_id')"
                 )
             page.get_by_role("button", name="关闭").click()
             page.get_by_role("button", name="← 返回系统总览").click()

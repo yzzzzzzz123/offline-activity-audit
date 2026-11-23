@@ -14,3 +14,17 @@ __pycache__/
 !/input/README.md
 /shared/canban-product-multimodal-knowledge-base/
 /artifacts/
+/config/
+/.env
+/release/
+/deploy/verification/
+/deploy/private/
+/deploy/seed/*.sql
+/deploy/seed/*.sha256
+/deploy/seed/*.manifest.json
+
+# Local run output and case evidence stay outside Git.
+/.runtime/
+/runtime/
+/docs/技术档案/
+/核销单AI总结-本地重跑-*.md

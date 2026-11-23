@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -19,6 +20,10 @@ _TOKEN_FIELDS = ("input_tokens", "cached_input_tokens", "output_tokens", "reason
 _ERROR_CODES = frozenset({
     "context_limit", "output_limit", "timeout", "rate_limit", "auth",
     "configuration", "invalid_output", "model_error",
+})
+GATE_VALIDATION_CODES = frozenset({
+    "gate_source_reference", "gate_source_coverage", "gate_material_list",
+    "gate_material_state", "gate_staff_condition", "gate_consistency",
 })
 _EFFORTS = frozenset({"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"})
 _STATUSES = frozenset({"success", "failed", "timeout", "error", "completed"})
@@ -37,14 +42,21 @@ class _ArtifactSink:
 _SINK: ContextVar[_ArtifactSink | None] = ContextVar("audit_model_artifact_sink", default=None)
 
 
+def current_analysis_root():
+    sink = _SINK.get()
+    return sink.root if sink is not None else None
+
+
 @contextmanager
-def collect_model_artifacts(analysis_dir: Path) -> Iterator[None]:
+def collect_model_artifacts(analysis_dir: Path, observer=None) -> Iterator[None]:
     """为当前上下文启用收集；嵌套、异常退出和并发任务不会串写其他运行。"""
     root = Path(analysis_dir).resolve()
     root.mkdir(parents=True, exist_ok=True)
     token = _SINK.set(_ArtifactSink(root))
     try:
-        yield
+        from .execution_trace import collect_execution_trace
+        with collect_execution_trace(root, observer):
+            yield
     finally:
         _SINK.reset(token)
 
@@ -183,15 +195,21 @@ def _safe_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     if _safe_label(attempt.get("label")):
         result["label"] = attempt["label"]
+    from .run_conversation import AGENT_IDS
+    if attempt.get('agent_id') in AGENT_IDS:
+        result['agent_id']=attempt['agent_id']
     model = attempt.get("model")
     if isinstance(model, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}", model) and ".." not in model:
         result["model"] = model
-    for key, allowed in (("reasoning_effort", _EFFORTS), ("status", _STATUSES), ("error_code", _ERROR_CODES)):
+    for key, allowed in (("reasoning_effort", _EFFORTS), ("configured_reasoning_effort", _EFFORTS | {"default"}),
+                         ("request_reasoning_effort", _EFFORTS | {"default"}), ("status", _STATUSES), ("error_code", _ERROR_CODES)):
         value = attempt.get(key)
         if isinstance(value, str) and value in allowed:
             result[key] = value
     for key in ("attempt", "image_count", "prompt_bytes", "delegated_agents_count",
-                "event_count", "model_event_count", "tool_completed_count", "transport_error_count"):
+                "event_count", "model_event_count", "tool_completed_count", "transport_error_count",
+                "request_message_count", "conversation_turn_count", "request_text_bytes",
+                "history_text_bytes", "content_event_count", "reasoning_event_count", "visible_output_bytes"):
         value = attempt.get(key)
         if _count(value):
             result[key] = value
@@ -199,6 +217,60 @@ def _safe_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         result["delegated_agents_count"] = None
     if attempt.get("timeout_kind") in {"total", "transport"}:
         result["timeout_kind"] = attempt["timeout_kind"]
+    stage = attempt.get("timeout_stage")
+    if isinstance(stage, str) and stage in {"connect", "read", "write", "pool", "total", "upstream", "transport"}:
+        result["timeout_stage"] = stage
+    for key in ("read_wait_seconds", "write_wait_seconds"):
+        value = attempt.get(key)
+        if type(value) in (int, float) and math.isfinite(value) and 0 < value <= 86400:
+            result[key] = value
+    if type(attempt.get("response_received")) is bool:
+        result["response_received"] = attempt["response_received"]
+    for key in ('stream_done_seen','response_body_ended','response_complete'):
+        if type(attempt.get(key)) is bool:
+            result[key] = attempt[key]
+    if attempt.get('response_mode') in {'sse','json'}:
+        result['response_mode'] = attempt['response_mode']
+    if attempt.get('response_finish_reason') in {'stop','length','content_filter','tool_calls','function_call','missing','other'}:
+        result['response_finish_reason'] = attempt['response_finish_reason']
+    if attempt.get('context_scope') in {'current_stage_only','same_run_conversation'}:
+        result['context_scope']=attempt['context_scope']
+    if type(attempt.get('conversation_history_reused')) is bool:
+        result['conversation_history_reused']=attempt['conversation_history_reused']
+    conversation_id=attempt.get('conversation_id')
+    if isinstance(conversation_id,str) and re.fullmatch(r'[a-f0-9]{32}',conversation_id):
+        result['conversation_id']=conversation_id
+    validation_stage = attempt.get("validation_stage")
+    if isinstance(validation_stage, str) and validation_stage in {"json", "schema", "evidence"}:
+        result["validation_stage"] = validation_stage
+    validation_code = attempt.get("validation_code")
+    if isinstance(validation_code, str) and validation_code in {"json_syntax", "json_object", "schema_validation",
+            "contract_reference", "unknown_source", "quote_not_in_source", "number_quote_mismatch",
+            "missing_numeric_evidence", "missing_comparison_source", "incomplete_checklist",
+            "missing_photo_source", "evidence_validation", "reading_source_coverage", "display_source_claim"} | GATE_VALIDATION_CODES:
+        result["validation_code"] = validation_code
+    root_type = attempt.get("validation_root_type")
+    if isinstance(root_type, str) and root_type in {"object", "array", "string", "number", "boolean", "null", "invalid_json"}:
+        result["validation_root_type"] = root_type
+    kinds = attempt.get("validation_schema_kinds")
+    if isinstance(kinds, list):
+        allowed_kinds = {"type", "required", "additionalProperties", "enum", "minItems", "maxItems", "minLength"}
+        safe_kinds = list(dict.fromkeys(kind for kind in kinds[:6] if isinstance(kind, str) and kind in allowed_kinds))
+        if safe_kinds:
+            result["validation_schema_kinds"] = safe_kinds
+    paths = attempt.get("validation_paths")
+    if isinstance(paths, list):
+        safe_paths = [path for path in paths[:8] if isinstance(path, str) and len(path) <= 192
+                      and re.fullmatch(r"\$|(?:[A-Za-z_][A-Za-z0-9_]{0,63}|[0-9]{1,6}|\?)(?:/(?:[A-Za-z_][A-Za-z0-9_]{0,63}|[0-9]{1,6}|\?))*", path)]
+        if safe_paths:
+            result["validation_paths"] = safe_paths
+    status = attempt.get("http_status")
+    if type(status) is int and 100 <= status <= 599:
+        result["http_status"] = status
+    request_id = attempt.get("request_id")
+    if (isinstance(request_id, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", request_id)
+            and not request_id.startswith("sk-")):
+        result["request_id"] = request_id
     if attempt.get("phase") in {"starting", "awaiting_model", "model_output", "tool_running", "transport_retry", "finished"}:
         result["phase"] = attempt["phase"]
     elapsed = attempt.get("elapsed_seconds")
@@ -206,7 +278,99 @@ def _safe_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         result["elapsed_seconds"] = elapsed
     if isinstance(attempt.get("usage"), Mapping):
         result["usage"] = _usage(attempt["usage"])
+    elif any(key in attempt for key in _TOKEN_FIELDS):
+        # PPIO/Bailian streaming counters are returned at the top level.
+        result["usage"] = _usage(attempt)
     return result
+
+
+def summarize_model_usage(analysis_dir: Path | None) -> dict[str, Any]:
+    """Sum provider counters for every attempt, including failed/retried calls.
+
+    Cached input and reasoning are subsets, never added to input + output.
+    Missing usage remains unknown. Older Qwen runs can retain their final
+    counters in a progress file even when the journal omitted its usage field.
+    Only an unambiguous completed-call match may recover those counters.
+    """
+    totals: dict[str, int | None] = dict.fromkeys(_TOKEN_FIELDS)
+    recorded = missing = 0
+    records: list[dict[str, Any]] = []
+    progress: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    if analysis_dir is not None:
+        root = Path(analysis_dir)
+        path = root / "model-metrics.jsonl"
+        try:
+            if path.is_symlink() or root.is_symlink():
+                raise OSError("Unsafe metrics path")
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    try:
+                        value = json.loads(line)
+                    except (ValueError, RecursionError):
+                        missing += 1
+                        continue
+                    if isinstance(value, dict):
+                        records.append(value)
+                    else:
+                        missing += 1
+        except (OSError, UnicodeError):
+            missing += bool(records)
+        if any(not _usage(row.get("usage")) for row in records):
+            directory = root / "model-observations"
+            if not directory.is_symlink():
+                for candidate in directory.glob("call-progress-*.json"):
+                    try:
+                        if candidate.is_symlink() or candidate.stat().st_size > 65536:
+                            continue
+                        value = json.loads(candidate.read_text(encoding="utf-8"))
+                    except (OSError, ValueError, RecursionError):
+                        continue
+                    if not isinstance(value, dict):
+                        continue
+                    elapsed = value.get("elapsed_seconds")
+                    if not (type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0):
+                        continue
+                    if _count(value.get("attempt")) and _count(value.get("model_event_count")):
+                        key = (value["attempt"], value["model_event_count"])
+                        progress.setdefault(key, []).append(value)
+    by_model: dict[str, dict[str, Any]] = {}
+    if missing:
+        by_model["unknown"] = {**dict.fromkeys(_TOKEN_FIELDS), "recorded_calls": 0, "unrecorded_calls": missing}
+    keys = [(row.get("attempt"), row.get("model_event_count")) for row in records]
+    for row, key in zip(records, keys):
+        usage = _usage(row.get("usage"))
+        if not usage and all(_count(part) for part in key) and keys.count(key) == 1:
+            candidates = progress.get(key, [])
+            elapsed = row.get("elapsed_seconds")
+            if (len(candidates) == 1 and type(elapsed) in (int, float)
+                    and math.isfinite(elapsed)
+                    and 0 <= elapsed - candidates[0]["elapsed_seconds"] < 1):
+                usage = _usage(candidates[0])
+        # Attribute only the model recorded on this actual call. In particular,
+        # current settings and the run's main model cannot identify old calls.
+        model = _safe_attempt({"model": row.get("model")}).get("model", "unknown")
+        bucket = by_model.setdefault(model, {**dict.fromkeys(_TOKEN_FIELDS), "recorded_calls": 0, "unrecorded_calls": 0})
+        if "input_tokens" in usage and "output_tokens" in usage:
+            recorded += 1
+            bucket["recorded_calls"] += 1
+        else:
+            missing += 1
+            bucket["unrecorded_calls"] += 1
+        for field, count in usage.items():
+            totals[field] = (totals[field] or 0) + count
+            bucket[field] = (bucket[field] or 0) + count
+
+    def summary(counters: dict[str, Any]) -> dict[str, Any]:
+        has_usage = counters["input_tokens"] is not None or counters["output_tokens"] is not None
+        total = (counters["input_tokens"] + counters["output_tokens"]
+                 if counters["input_tokens"] is not None and counters["output_tokens"] is not None else None)
+        return {**counters, "total_tokens": total,
+                "status": "partial" if has_usage and counters["unrecorded_calls"] else "recorded" if has_usage else "unrecorded"}
+
+    return {**summary({**totals, "recorded_calls": recorded, "unrecorded_calls": missing}),
+            "by_model": [{"model": model, **summary(counters)} for model, counters in sorted(by_model.items())]}
 
 
 def _contained_path(root: Path, name: str) -> Path:
@@ -221,7 +385,8 @@ def record_model_attempt(attempt: Mapping[str, Any]) -> None:
     sink = _SINK.get()
     if sink is None:
         return
-    payload = _safe_attempt(attempt)
+    from .run_conversation import current_agent_id, agent_scope_active
+    payload = _safe_attempt({**({'agent_id':current_agent_id()} if agent_scope_active() else {}), **attempt})
     encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
     with sink.lock:
         path = _contained_path(sink.root, "model-metrics.jsonl")
@@ -236,7 +401,6 @@ def save_model_observations(name: str, payload: Any) -> None:
         return
     if not isinstance(name, str) or len(name) > 64 or not _OBSERVATION_NAME.fullmatch(name) or name in _WINDOWS_RESERVED:
         raise ValueError("模型观察文件名只能使用安全场景标识")
-    encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False, indent=2) + "\n"
     with sink.lock:
         directory = _contained_path(sink.root, "model-observations")
         directory.mkdir(exist_ok=True)
@@ -245,8 +409,21 @@ def save_model_observations(name: str, payload: Any) -> None:
         try:
             with NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n", dir=directory, suffix=".tmp", delete=False) as handle:
                 temporary = Path(handle.name)
-                handle.write(encoded)
-            temporary.replace(destination)
+                json.dump(payload, handle, ensure_ascii=False, allow_nan=False, indent=2)
+                handle.write('\n')
+            for attempt in range(5):
+                try:
+                    temporary.replace(destination)
+                    break
+                except PermissionError:
+                    # Windows readers can briefly hold a handle without delete
+                    # sharing. Retry only this local atomic publication.
+                    if attempt == 4:
+                        raise
+                    time.sleep(.01 * (attempt + 1))
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
+    if not name.startswith("call-progress-"):
+        from .execution_trace import record_step
+        record_step("analysis.observation", "保存已校验分析记录：" + name, {"artifact": "analysis/model-observations/" + name + ".json", "observation": payload})

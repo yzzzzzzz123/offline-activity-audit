@@ -297,24 +297,23 @@ def main() -> None:
         ) == "rgb(16, 39, 49)"
         page.wait_for_selector("#as-ledger-list .as-run-card")
         assert page.get_by_role("heading", name="核销管理中心").first.is_visible()
-        overview_completed_metric = page.locator("#as-metrics .as-metric").filter(
-            has_text="核销完成"
-        )
-        assert overview_completed_metric.count() == 1
-        assert overview_completed_metric.locator("small").inner_text() == "最近一次 input 的 ZIP 总数"
-        assert overview_completed_metric.locator(":scope > strong").inner_text() == "2"
-        assert page.locator("[data-as-view]").count() == 2
+        assert page.locator("#as-metrics .as-metric").filter(has_text="核销完成").count() == 0
+        assert page.locator('[data-as-average="tokens"]').is_visible()
+        assert page.locator('[data-as-average="duration"]').is_visible()
+        assert page.locator("[data-as-view]").count() == 5
         assert page.locator('.as-nav[role="tablist"]').count() == 1
-        assert page.locator('.as-nav [role="tab"]').count() == 2
-        assert page.locator('.as-view[role="tabpanel"]').count() == 2
+        assert page.locator('.as-nav [role="tab"]').count() == 5
+        assert page.locator('.as-view[role="tabpanel"]').count() == 5
         assert page.locator('.as-nav [role="tab"]').evaluate_all(
             "nodes => nodes.map(node => node.tabIndex)"
-        ) == [0, -1]
+        ) == [0, -1, -1, -1, -1]
         assert page.locator("#as-ledger-list .as-run-card").count() == 2
         assert page.locator("#as-archive-list .as-archive-card").count() == 0
         overview_tab = page.locator('[data-as-view="overview"]')
         overview_tab.focus()
         overview_tab.press("ArrowDown")
+        assert page.locator('[data-as-view="upload"]').get_attribute("aria-selected") == "true"
+        page.locator('[data-as-view="upload"]').press("ArrowDown")
         assert page.locator('[data-as-view="archive"]').get_attribute(
             "aria-selected"
         ) == "true"
@@ -341,10 +340,8 @@ def main() -> None:
         assert page.locator('#as-archive-list[role="list"]').count() == 1
         page.locator('[data-as-view="overview"]').click()
         assert page.locator("#as-archive-list .as-archive-card").count() == 0
-        pending_metric = page.locator("#as-metrics .as-metric").filter(
-            has_text="待人工核验"
-        )
-        assert pending_metric.locator(":scope > strong").inner_text() == "2"
+        assert page.locator("#as-metrics .as-metric").count() == 4
+        assert page.locator("#as-metrics").get_by_text("待人工核验").count() == 0
 
         page.locator("#as-view-overview").evaluate(
             "node => node.dataset.sameStageSentinel = 'keep'"
@@ -382,32 +379,23 @@ def main() -> None:
         assert delete_trigger.is_enabled()
         delete_trigger.click()
         assert page.get_by_role("dialog", name="永久删除这条核销记录？").is_visible()
-        assert page.locator("#as-delete-workspace").inner_text() == workspace_id
+        record_title = page.locator(
+            f'#as-ledger-list [data-run-card="{workspace_id}"] h3'
+        ).inner_text()
+        assert page.locator("#as-delete-workspace").inner_text() == record_title
         assert page.locator("#as-delete-cancel").evaluate("node => node === document.activeElement")
         page.screenshot(path=str(screenshot_root / "desktop-delete-confirm.png"), full_page=True)
         page.keyboard.press("Escape")
         assert page.locator("#as-delete-dialog").is_hidden()
         assert delete_trigger.evaluate("node => node === document.activeElement")
         assert (ROOT / workspace_id).is_dir()
-        review = page.locator(f'#as-ledger-list [data-as-review="{workspace_id}"]')
-        assert review.count() == 1
-        assert not review.is_checked()
-        review.check()
-        page.wait_for_function(
-            "() => document.querySelector('#as-metrics .as-metric:last-child > strong')?.textContent === '0'"
-        )
-        assert review.is_checked()
-        assert "已人工核验" in page.locator(
+        assert page.locator('#as-ledger-list [data-as-review]').count() == 0
+        assert "人工核验" not in page.locator(
             f'#as-ledger-list [data-run-card="{workspace_id}"]'
         ).inner_text()
         assert page.locator(
             f'#as-ledger-list [data-run-card="{workspace_id}"] .as-run-count strong'
-        ).inner_text() == "✓"
-        review.uncheck()
-        page.wait_for_function(
-            "() => document.querySelector('#as-metrics .as-metric:last-child > strong')?.textContent === '2'"
-        )
-        assert not review.is_checked()
+        ).inner_text() == "2"
         page.screenshot(path=str(screenshot_root / "desktop-ledger.png"), full_page=True)
         page.locator(f'#as-ledger-list [data-as-open="{workspace_id}"]').click()
         page.wait_for_load_state("networkidle")
@@ -591,30 +579,23 @@ def main() -> None:
         technical_trigger = page.get_by_role("button", name="技术档案")
         technical_trigger.click()
         assert page.locator("#as-drawer-close").evaluate("node => node === document.activeElement")
-        assert page.locator('#as-drawer-backdrop [role="tablist"] [role="tab"]').count() == 4
-        page.get_by_role("tab", name="分析文件").click()
-        page.locator(
+        assert page.locator('#as-drawer-backdrop [role="tab"]').count() == 0
+        page.locator('#as-chain-support > summary').click()
+        analysis = page.locator(
             '[data-as-analysis="analysis/results/price_difference_support.json"]'
-        ).click()
-        page.wait_for_function(
-            "document.querySelector('#as-analysis-view').textContent.includes('price_difference_support')"
         )
-        assert page.locator("#as-analysis-view").get_attribute("role") == "region"
-        assert page.locator("#as-analysis-view").get_attribute("tabindex") == "0"
-        assert page.locator(".as-drawer-body").evaluate(
-            "node => node.scrollHeight === node.clientHeight"
-        )
+        analysis.locator(':scope > summary').click()
+        expect(analysis.locator('.as-code')).to_contain_text('price_difference_support')
+        assert analysis.locator('.as-code').get_attribute("role") == "region"
+        assert analysis.locator('.as-code').get_attribute("tabindex") == "0"
 
-        page.get_by_role("tab", name="DOM 断点").click()
-        page.locator("[data-as-checkpoint]").first.click()
-        page.wait_for_function(
-            "document.querySelector('#as-checkpoint-view').textContent.includes('checkpoint_id')"
-        )
+        checkpoint = page.locator("[data-as-checkpoint]").first
+        checkpoint.locator(':scope > summary').click()
+        expect(checkpoint.locator('.as-code')).to_contain_text('checkpoint_id')
 
-        page.get_by_role("tab", name="完整日志").click()
-        page.wait_for_function(
-            "document.querySelector('[data-as-tech-panel=\"log\"] .as-code').textContent.includes('核销完成')"
-        )
+        log = page.locator('[data-as-resource="log"]')
+        log.locator(':scope > summary').click()
+        expect(log.locator('.as-code')).to_contain_text('complete 资料检查完成')
         page.get_by_role("button", name="关闭").click()
         assert technical_trigger.evaluate("node => node === document.activeElement")
 
@@ -668,7 +649,7 @@ def main() -> None:
         page.goto(archive.as_uri())
         page.wait_for_selector("#as-view-overview:not([hidden])")
         assert page.locator("body.error-only-page").count() == 0
-        assert page.locator('[data-as-view]').count() == 2
+        assert page.locator('[data-as-view]').count() == 5
         page.screenshot(path=str(screenshot_root / "static-level-one.png"), full_page=True, animations="disabled")
         page.locator('[data-as-view="overview"]').click()
         assert page.locator('[data-as-delete]').count() == 0
@@ -720,8 +701,13 @@ def main() -> None:
         job = {"job_id": job_id, "status": "callback", "result": {"workspace_id": workspace_id}}
         atomic_write_json(receipt, job)
         before_errors = len(console_errors)
-        page.locator("#as-delete-confirm").click()
-        page.locator("#as-delete-error").filter(has_text="仍在运行或回调").wait_for()
+        with page.expect_response(
+            lambda response: response.request.method == "DELETE"
+            and response.url.endswith(f"/api/runs/{workspace_id}")
+        ) as rejected_delete:
+            page.locator("#as-delete-confirm").click()
+        assert rejected_delete.value.status == 409
+        page.locator("#as-delete-error").filter(has_text="记录正在处理或暂时不能修改").wait_for()
         assert page.locator("#as-delete-dialog").is_visible()
         assert (ROOT / workspace_id / "manifest.json").is_file()
         expected_errors = console_errors[before_errors:]
@@ -746,8 +732,8 @@ def main() -> None:
             f'#as-ledger-list [data-run-card="{running_workspace_id}"]'
         ).count() == 1
         page.locator('[data-as-view="archive"]').click()
-        assert page.locator("#as-archive-list").get_by_text(
-            running_workspace_id, exact=True
+        assert page.locator(
+            f'#as-archive-list [data-as-technical="{running_workspace_id}"]'
         ).count() == 1
         deletion_token = page.evaluate(
             "async () => (await fetch('/api/config')).json()"

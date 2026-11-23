@@ -82,10 +82,21 @@ class LangChainComponentTests(unittest.TestCase):
                     invoke_local(self.model, messages)
             transport.assert_not_called()
 
-    def test_parser_never_repairs_partial_json_or_accepts_unknown_fields(self):
+    def test_parser_completes_only_missing_trailing_brackets(self):
+        """A stream cut after the last token is transport truncation, not an answer.
+
+        Closing brackets are added without inventing content and the completion is
+        recorded; an unterminated string, a stray bracket or an extra field still
+        fails before the business validator runs.
+        """
         validator = Mock()
         parser = EvidenceOutputParser(schema_path=self.schema, post_validate=validator)
-        for invalid in ('{"source_file":"photo.png"', '[]',
+        self.assertEqual(invoke_local(parser, '{"source_file":"photo.png"'),
+                         {'source_file': 'photo.png'})
+        self.assertEqual(parser.last_diagnostics['validation_code'], 'json_syntax_completed')
+        validator.assert_called_once()
+        validator.reset_mock()
+        for invalid in ('{"source_file":"photo.png', '[]',
                         '{"source_file":"photo.png","invented":true}'):
             with self.subTest(invalid=invalid), self.assertRaises((ValueError, AuditError)):
                 invoke_local(parser, invalid)

@@ -1,4 +1,5 @@
 """Regression cases for the user's confirmed POS and red-packet rules."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -9,6 +10,7 @@ from audit_core.common import AuditError
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_evidence import audit_decision, classification_decision
 from audit_core.pdf_materials import PdfEvidenceProvider
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.pdf_policy import PAYMENT_COMPANY_CLARIFICATION, applicability, requirements, rules
 from tests.pdf_test_support import classification, flags_for, unknown_checks
 
@@ -37,8 +39,10 @@ def separated_classification(scenario, *, flags=None, missing=()):
 
 
 class ConfirmedPosMaterialTests(unittest.TestCase):
-    def test_every_existing_pos_type_requires_both_versions(self):
-        for scenario in POS_SCENARIOS:
+    def test_mandatory_pos_types_require_both_versions(self):
+        # Purchased gifts now have an aggregate POS-or-photo requirement;
+        # its complete, partial and absent alternatives have separate fixtures.
+        for scenario in (s for s in POS_SCENARIOS if s != 'self_procured_gift_material'):
             with self.subTest(scenario=scenario):
                 self.assertTrue({"pos", "pos_excel"}.issubset({r.id for r in requirements(scenario)}))
                 value = separated_classification(scenario)
@@ -82,26 +86,27 @@ class ConfirmedPosMaterialTests(unittest.TestCase):
                 self.assertTrue(all(c["status"] == "not_applicable" for c in checks["checks"]
                                     if c["rule_id"] in {"pos_fields", "pos_arithmetic"}))
 
-    def test_cvs_otc_entry_inventory_choice_is_preserved_and_pos_choice_requires_pair(self):
+    def test_cvs_otc_requires_inventory_and_voluntary_pos_still_requires_pair(self):
         scenario = "entry_fee"
         for uses_pos in (False, True):
             flags = flags_for(scenario, cvs_otc=True, uses_pos=uses_pos)
             value = separated_classification(scenario, flags=flags)
             documents = [{"unit_id": uid} for uid in value["source_ids"]]
             with self.subTest(uses_pos=uses_pos):
-                self.assertTrue(classification_decision(value, documents)["matched"])
+                self.assertTrue(classification_decision(value, documents, cvs_otc_channel=True)["matched"])
                 materials = {m["id"]: m for m in value["materials"]}
                 self.assertEqual(materials["entry_system"]["state"], "present")
                 for role in ("pos", "pos_excel"):
                     self.assertEqual(materials[role]["state"], "present" if uses_pos else "not_applicable")
                     if uses_pos:
                         incomplete = separated_classification(scenario, flags=flags, missing=[role])
-                        self.assertFalse(classification_decision(incomplete, documents)["matched"])
+                        self.assertFalse(classification_decision(incomplete, documents, cvs_otc_channel=True)["matched"])
         for cvs_otc, expected in ((False, False), (None, None)):
             flags = flags_for(scenario, cvs_otc=cvs_otc, uses_pos=True)
             self.assertIs(applicability("entry_pos", scenario, flags), expected)
         unclear = separated_classification(scenario, flags=flags_for(scenario, cvs_otc=None, uses_pos=True))
-        self.assertFalse(classification_decision(unclear, documents)["matched"])
+        with self.assertRaises(AuditError):
+            classification_decision(unclear, documents)
 
     def test_pos_is_optional_for_display_and_poster_but_checked_when_present(self):
         for scenario in ("promotional_display", "poster_material"):
@@ -119,17 +124,139 @@ class ConfirmedPosMaterialTests(unittest.TestCase):
 
 
 
-# Pinned independently to the eight PDF audit columns, not inferred from materials.
-AUDIT_COLUMN_IDS = {
-    "promotional_display": {"display_watermark", "display_brand", "display_material_brand", "atrium_agreement", "settlement_template_seal", "display_quantity_price", "display_size"},
-    "personnel_incentive": {"pos_fields", "pos_arithmetic", "reward_unit_price", "settlement_pos_quantity", "claim_ceiling", "payment_company", "payment_claim_amount", "staff_daily_photos", "application_quantity_price"},
-    "poster_material": {"invoice_details", "finished_photo", "settlement_template_seal"},
-    "self_procured_gift_material": {"gift_rule_present", "pos_fields", "pos_arithmetic", "gift_rule_quantity", "gift_finished_photos", "settlement_seal", "contract_signed"},
-    "price_difference_support": {"pos_fields", "pos_arithmetic", "reward_unit_price", "settlement_pos_quantity", "claim_ceiling", "full_reduction_evidence", "price_evidence", "application_quantity_price"},
-    "giveaway_promotion": {"pos_fields", "pos_arithmetic", "reward_unit_price", "settlement_pos_quantity", "claim_ceiling", "giveaway_evidence", "application_quantity_price"},
-    "entry_fee": {"entry_agreement", "entry_sku", "entry_watermark", "entry_duplicate"},
-    "pos_target_incentive": {"pos_fields", "pos_arithmetic", "reward_unit_price", "settlement_pos_quantity", "claim_ceiling", "application_quantity_price"},
-}
+# Pinned to the eight PDF audit columns and explicit confirmed additions, not materials.
+AUDIT_COLUMN_IDS = {'entry_fee': {'entry_agreement',
+               'entry_application_products',
+               'entry_duplicate',
+               'entry_inventory',
+               'entry_photo_coverage',
+               'entry_sku',
+               'entry_watermark'},
+ 'giveaway_promotion': {'activity_photo_content',
+                        'application_products',
+                        'claim_ceiling',
+                        'contract_activity_dates',
+                        'contract_budget_amount',
+                        'contract_dealer',
+                        'contract_signed',
+                        'gift_rule_quantity',
+                        'giveaway_evidence',
+                        'pos_dealer',
+                        'pos_seal',
+                        'reward_unit_price',
+                        'settlement_activity_dates',
+                        'settlement_application_dates',
+                        'settlement_calculation',
+                        'settlement_dealer',
+                        'settlement_seal'},
+ 'personnel_incentive': {'application_claim_ceiling',
+                         'application_products',
+                         'application_quantity_price',
+                         'claim_ceiling',
+                         'contract_activity_dates',
+                         'contract_budget_amount',
+                         'contract_dealer',
+                         'contract_signed',
+                         'payment_activity_dates',
+                         'payment_claim_amount',
+                         'payment_company',
+                         'payment_statement_dealer',
+                         'payment_statement_seal',
+                         'pos_dealer',
+                         'pos_seal',
+                         'reward_unit_price',
+                         'settlement_activity_dates',
+                         'settlement_application_dates',
+                         'settlement_calculation',
+                         'settlement_dealer',
+                         'settlement_pos_quantity',
+                         'settlement_seal',
+                         'staff_headcount',
+                         'staff_photo_content',
+                         'staff_total_unit_price',
+                         'training_photo_content'},
+ 'pos_target_incentive': {'contract_activity_dates',
+                          'contract_budget_amount',
+                          'contract_dealer',
+                          'contract_signed',
+                          'pos_dealer',
+                          'pos_sales_amount',
+                          'pos_seal',
+                          'settlement_activity_dates',
+                          'settlement_application_dates',
+                          'settlement_dealer',
+                          'settlement_seal',
+                          'target_reward'},
+ 'poster_material': {'claim_ceiling',
+                     'contract_activity_dates',
+                     'contract_budget_amount',
+                     'contract_dealer',
+                     'contract_signed',
+                     'finished_photo',
+                     'invoice_amount',
+                     'invoice_details',
+                     'material_list_amount',
+                     'posting_before_after',
+                     'settlement_activity_dates',
+                     'settlement_application_dates',
+                     'settlement_dealer',
+                     'settlement_template_seal'},
+ 'price_difference_support': {'activity_photo_content',
+                              'application_products',
+                              'application_quantity_price',
+                              'claim_ceiling',
+                              'contract_activity_dates',
+                              'contract_budget_amount',
+                              'contract_dealer',
+                              'contract_signed',
+                              'full_reduction_evidence',
+                              'photo_activity_dates',
+                              'pos_dealer',
+                              'pos_seal',
+                              'price_evidence',
+                              'price_matches_contract',
+                              'reward_unit_price',
+                              'settlement_activity_dates',
+                              'settlement_application_dates',
+                              'settlement_calculation',
+                              'settlement_dealer',
+                              'settlement_pos_quantity',
+                              'settlement_seal'},
+ 'promotional_display': {'application_claim_ceiling',
+                         'atrium_agreement',
+                         'contract_activity_dates',
+                         'contract_budget_amount',
+                         'contract_dealer',
+                         'contract_signed',
+                         'display_brand',
+                         'display_material_brand',
+                         'display_quantity_price',
+                         'display_size',
+                         'display_watermark',
+                         'settlement_activity_dates',
+                         'settlement_application_dates',
+                         'settlement_calculation',
+                         'settlement_dealer',
+                         'settlement_template_seal'},
+ 'self_procured_gift_material': {'application_quantity_price',
+                                 'claim_ceiling',
+                                 'contract_activity_dates',
+                                 'contract_budget_amount',
+                                 'contract_dealer',
+                                 'contract_signed',
+                                 'gift_finished_photos',
+                                 'gift_rule_present',
+                                 'gift_rule_quantity',
+                                 'gift_store_photo_content',
+                                 'invoice_amount',
+                                 'invoice_details',
+                                 'pos_dealer',
+                                 'pos_seal',
+                                 'settlement_activity_dates',
+                                 'settlement_application_dates',
+                                 'settlement_calculation',
+                                 'settlement_dealer',
+                                 'settlement_seal'}}
 
 
 class AuditColumnScopeTests(unittest.TestCase):
@@ -138,13 +265,18 @@ class AuditColumnScopeTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 actual = rules(scenario)
                 common = {"pos_fields", "pos_arithmetic", "pos_product_identity"}
-                self.assertEqual({r.id for r in actual}, expected | common)
-                self.assertTrue(all(r.source == "用户2026-09-22确认·所有核销方式POS通用标准" if r.id in common
-                                    else r.source.startswith("PDF第1页") and "审核要点" in r.source for r in actual))
+                meeting = {'stamped_document_pdf'} | ({'gift_activity_evidence'} if scenario == 'self_procured_gift_material' else set())
+                additions = {'personnel_incentive': {'pos_activity_dates','contract_reward_unit_price'},
+                    'promotional_display': {'claim_ceiling'}, 'poster_material': {'receipt_finance_seal','poster_payment_dates'},
+                    'self_procured_gift_material': {'pos_activity_dates','receipt_finance_seal'},
+                    'price_difference_support': {'pos_activity_dates'}, 'giveaway_promotion': {'pos_activity_dates'},
+                    'pos_target_incentive': {'claim_ceiling','pos_activity_dates'}}
+                self.assertEqual({r.id for r in actual}, expected | common | meeting | additions.get(scenario,set()))
+                self.assertTrue(all('Sheet1!H' in r.source or r.source.startswith('用户确认') for r in actual))
 
     def test_material_only_and_background_audits_are_rejected_for_every_type(self):
         forbidden = {"scene_authenticity", "fraud", "bi_quota", "submission_deadline", "review_deadline",
-                     "pos_seal", "pos_excel_present", "pos_content_consistency", "pos_numeric_consistency",
+                     "pos_excel_present", "pos_content_consistency", "pos_numeric_consistency",
                      "payment_application_amount", "payment_evidence", "gift_all_store_photos", "entry_system"}
         for scenario in AUDIT_COLUMN_IDS:
             for rule_id in forbidden:
@@ -159,6 +291,7 @@ class AuditColumnScopeTests(unittest.TestCase):
         for scenario, material_id in (("personnel_incentive", "settlement"),
                                       ("personnel_incentive", "promotion_contract"),
                                       ("self_procured_gift_material", "invoice"),
+                                      ("self_procured_gift_material", "pos_excel"),
                                       ("self_procured_gift_material", "gift_store_photos"),
                                       ("giveaway_promotion", "gift_rule")):
             with self.subTest(scenario=scenario, material=material_id):
@@ -172,8 +305,8 @@ class AuditColumnScopeTests(unittest.TestCase):
         for scenario in AUDIT_COLUMN_IDS:
             checks = {r.id for r in rules(scenario)}
             self.assertEqual("settlement_template_seal" in checks, scenario in {"promotional_display", "poster_material"})
-            self.assertEqual("settlement_seal" in checks, scenario == "self_procured_gift_material")
-            self.assertEqual("contract_signed" in checks, scenario == "self_procured_gift_material")
+            self.assertEqual("settlement_seal" in checks, scenario not in {"entry_fee","promotional_display","poster_material"})
+            self.assertEqual("contract_signed" in checks, scenario != "entry_fee")
 
     def test_unsigned_contract_is_present_at_gate_and_only_audited_in_self_procured_gifts(self):
         for scenario in ("personnel_incentive", "self_procured_gift_material"):
@@ -182,17 +315,14 @@ class AuditColumnScopeTests(unittest.TestCase):
             self.assertTrue(classification_decision(value, documents)["matched"])
             flags = flags_for(scenario)
             evidence = unknown_checks(scenario, flags)
-            if scenario == "self_procured_gift_material":
+            if scenario in {"personnel_incentive","self_procured_gift_material"}:
                 check = next(c for c in evidence["checks"] if c["rule_id"] == "contract_signed")
                 contract = next(m for m in value["materials"] if m["id"] == "promotion_contract")
                 check.update(status="fail", source_ids=contract["source_ids"], reason="本次促销合同已收到，但未签章")
             actual = audit_decision(scenario, flags, evidence, documents, value["materials"])
-            if scenario == "personnel_incentive":
-                self.assertNotIn("contract_signed", {c["rule_id"] for c in actual["checks"]})
-            else:
-                self.assertEqual(next(c for c in actual["checks"] if c["rule_id"] == "contract_signed")["status"], "fail")
+            self.assertEqual(next(c for c in actual["checks"] if c["rule_id"] == "contract_signed")["status"], "fail")
 
-    def test_red_packet_compares_claim_not_application_and_wages_do_not_inherit_it(self):
+    def test_red_packet_and_wages_compare_actual_claim_with_separate_brand_applicability(self):
         scenario = "personnel_incentive"
         flags = flags_for(scenario, red_packet=True)
         documents = [{"unit_id": "p", "facts": ["红包金额=900"]}, {"unit_id": "s", "facts": ["核销金额=1000"]}]
@@ -205,17 +335,19 @@ class AuditColumnScopeTests(unittest.TestCase):
         actual = audit_decision(scenario, flags, evidence, documents)
         self.assertEqual(next(c for c in actual["checks"] if c["rule_id"] == "payment_claim_amount")["status"], "fail")
         self.assertNotIn("payment_application_amount", {c["rule_id"] for c in actual["checks"]})
-        flags = flags_for(scenario, red_packet=False)
+        flags = flags_for(scenario, red_packet=False, temporary_staff=True, sales_commission=False)
         actual = audit_decision(scenario, flags, unknown_checks(scenario, flags), [])
-        self.assertTrue(all(c["status"] == "not_applicable" for c in actual["checks"] if c["rule_id"] in {"payment_company", "payment_claim_amount"}))
+        self.assertEqual(next(c for c in actual['checks'] if c['rule_id']=='payment_company')['status'],'not_applicable')
+        self.assertNotEqual(next(c for c in actual['checks'] if c['rule_id']=='payment_claim_amount')['status'],'not_applicable')
 
 
 class MultipleRedPacketTests(unittest.TestCase):
-    def test_audit_receives_all_payment_images_for_cross_image_comparison(self):
-        # Includes images beyond the first six-page transcription batch.
-        for scenario, red_packet, expected_count in (("personnel_incentive", True, 8),
-                                                      ("personnel_incentive", False, 0),
-                                                      ("poster_material", False, 0)):
+    def test_audit_lists_payment_originals_without_preloading_them(self):
+        # Included images beyond the first six-page transcription batch stay
+        # addressable by filename; none is attached unless the model asks.
+        for scenario, red_packet in (("personnel_incentive", True),
+                                     ("personnel_incentive", False),
+                                     ("poster_material", False)):
             with self.subTest(scenario=scenario, red_packet=red_packet), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 units = [{"unit_id": f"p{i}", "image": root / f"p{i}.png"} for i in range(8)]
@@ -224,20 +356,20 @@ class MultipleRedPacketTests(unittest.TestCase):
                 evidence = unknown_checks(scenario, flags)
                 documents = [{"unit_id": unit["unit_id"], "facts": ["可见原始记录"]} for unit in units]
                 materials = [{"id": "payment", "state": "present", "source_ids": [f"p{i}" for i in range(8)]}]
-                provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+                provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
                 with patch.object(provider, "_call", return_value=evidence) as call:
                     provider.audit({"scenario": scenario, "archive_id": "a001", "flags": flags,
                                     "materials": materials, "documents": documents, "units": units}, root)
                 images = call.call_args.kwargs["images"]
-                payment_paths = {unit["image"] for unit in units}
-                self.assertEqual([image for image in images if image in payment_paths],
-                                 [unit["image"] for unit in units[:expected_count]])
-                self.assertNotIn(root / "unrelated.png", images)
+                prompt = render_prompt(call.call_args.args[3])
+                self.assertEqual(images, [])
+                for unit in units:
+                    self.assertIn(f'"unit_id": "{unit["unit_id"]}", "image": '
+                                  f'"{unit["image"].name}"', prompt)
                 if scenario == "personnel_incentive" and red_packet:
-                    prompt = render_prompt(call.call_args.args[3])
                     self.assertIn(PAYMENT_COMPANY_CLARIFICATION, prompt)
-                    self.assertIn("单笔>1000元须有名称，单笔<=1000元不强制", prompt)
-                    self.assertIn("600元+600元虽合计1200元，两笔均不触发名称要求", prompt)
+                    self.assertIn("参半、小箭头或重点品牌字样", prompt)
+                    self.assertIn("不按1000元门槛检查经销商公司名称", prompt)
                     self.assertNotIn("检查大额品牌公司名称", prompt)
 
     def fixture(self, amounts, claim="1000"):

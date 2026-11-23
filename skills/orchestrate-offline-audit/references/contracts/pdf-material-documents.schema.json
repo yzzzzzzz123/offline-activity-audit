@@ -32,6 +32,65 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "sheet_layout": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "sheet": {
+                "type": "string",
+                "minLength": 1
+              },
+              "state": {
+                "enum": [
+                  "visible",
+                  "hidden",
+                  "veryHidden"
+                ]
+              },
+              "merged_ranges": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "hidden_rows": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "hidden_columns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "min": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "max": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "min",
+                    "max"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "sheet",
+              "state",
+              "merged_ranges",
+              "hidden_rows",
+              "hidden_columns"
+            ]
           }
         },
         "required": [

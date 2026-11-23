@@ -388,7 +388,8 @@ def _windows_user_environment(name: str) -> str:
 
 
 def _configured_secret(name: str) -> str:
-    return str(os.environ.get(name) or "").strip() or _windows_user_environment(name)
+    from .private_credentials import environment_secret
+    return environment_secret(name) or _windows_user_environment(name)
 
 
 def baidu_maps_mcp_lookup_from_environment() -> McpLookup | None:

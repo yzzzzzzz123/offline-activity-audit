@@ -1,14 +1,42 @@
-"""The eight material lists and audit points in the user-approved one-page PDF.
+"""Eight supported audit types and their approved current fee policy.
 
 This catalogue is the allow-list for new audits. Historical processors are not
 part of this policy. Presence of a file is distinct from validity of its contents.
+The PDF definitions below retain compatible prior decisions; fee_policy_source
+applies the user-approved workbook to the authoritative exported catalogue.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 
 
-POLICY_VERSION = "2026-09-23.pdf.33"
+POLICY_VERSION = "2026-11-13.pdf.45"
+SUBMITTED_SOURCE_CHECKS = {
+    "pos_fields": {"scope": "uses_pos",
+                   "requirement": "POS电子版须有每个SKU的销售单价，不以金额除数量补造单价。"},
+    "application_activity_dates": {"scope": "personnel_incentive_with_linked_qince_application",
+                   "requirement": "本次促销合同、结算单的执行周期分别与精确关联的勤策申请周期核对。"},
+}
+SUBMITTED_SOURCE_CLARIFICATION = (
+    "POS两版等实际资料要求仍由模型盘点，不作为程序停止业务审核的条件；"
+    "已提交且可确定读取的POS Excel仍检查SKU销售单价缺列或缺值，不以金额除数量补造单价，"
+    "盖章版、合同及商品库不能补齐Excel缺项。人员激励本单精确关联的勤策申请有明确起止日期时，"
+    "分别与本次促销合同、结算单的执行周期核对；两份文件相互一致不能掩盖它们与申请不一致。"
+    "已有可审核资料不受另一份资料缺少掩盖，继续完成本类业务审核；程序提示不覆盖模型判断。"
+    "勤策未取得不新增缺件，日期不清或多个申请周期无法唯一对应时保留无法确认，不猜日期或挑选有利周期。"
+)
+IMAGE_FACT_REUSE_CLARIFICATION = (
+    "用户2026-11-03确认以节省模型Token为目标：图片历史检索由本部署的本地算法执行，不增加模型复核或必办人工任务。"
+    "仅原始图片字节完全相同、模型及可见事实提取契约版本一致时，复用已验证的roles/facts/limitations，"
+    "重新绑定本次真实来源与每个图片位置；文件名、缓存内容或其他来源不能补造本图可见事实。"
+    "首次图片仍按原有批量方式读取；裁剪、翻转、改水印及仅感知指纹相近的图片不能复用旧识别事实。"
+    "资料门禁、本次合同与商品外观等审核继续按本单执行，不能复用旧审核结论或免除必要的本次视觉核对。"
+    "只将本部署实际解析的现场照片加入跨单索引，不混入合同、付款、模板、商品参考图或其他客户环境。"
+    "排除同一核销单的重交、重试与重新分析；不同单据原图字节相同时，由程序列明文件一致事实及历史来源，"
+    "不由此认定造假、重复报销或拒付。仅场景相似的候选保留技术记录，不作为已确认问题。"
+    "历史索引从本功能启用后处理的照片积累，未补建的历史不宣称已全量查重；不自动重审、回填或补发旧结果。"
+    "本项独立于条码费entry_duplicate的本单水印地址比较，不扩大或改变该原有审核项。"
+)
 PRODUCT_PHOTO_CLARIFICATION = (
     "用户2026-09-22确认：所有已有的现场照片对应SKU检查共用按需取图流程。"
     "先从品牌方本次合同、产品推广协议及其申请说明确定本次需核对的商品；"
@@ -30,8 +58,37 @@ ENTRY_SKU_CLARIFICATION = (
     "用户2026-09-22确认：条码费按每家门店核对本次产品推广协议约定的全部商品，"
     "每个对应SKU须在该店实际照片中清晰可见，允许同店多张照片合起来补齐。"
     "未拍到或看不清的商品逐店逐项说明，不能以另店照片补齐，也不能只检查已经拍到的部分商品后通过。"
-    "不规定固定照片张数，不强制拍清条码数字；商品外观按共用的数据库OSS按需取图流程对照。"
+    "照片提供范围按用户2026-11-03确认的渠道规则执行：非CVS/OTC须全量门店；CVS/OTC按门店数量分档，"
+    "只核对本次应提供的照片门店，不因其他门店按比例免交照片而报SKU缺失；实际提交的每张照片仍完整分析。"
+    "不强制拍清条码数字；商品外观按共用的数据库OSS按需取图流程对照。"
 )
+ENTRY_CHANNEL_CLARIFICATION = (
+    "用户2026-11-03根据进场费HX202608160003确认：是否属于CVS或OTC渠道由接口cvsOtcChannel决定，"
+    "仅JSON布尔值true为是；false、未传、null、字符串、数字等其余情况均为否，AI不得从资料重新判断或追问渠道。"
+    "属于其中任意一种渠道即为是，不要求同时属于两种。CVS/OTC渠道按用户提供的IMG_8009.JPG表提供上架照片，"
+    "另须提供覆盖全部本次进场门店及公司进场商品的终端库存明细盖章版，POS不能替代该库存明细。"
+    "少于20家须全部门店照片；20至50家（含50家，用户明确50家按80%至少40家）须覆盖至少80%的门店；"
+    "51至100家须覆盖至少50%的门店；大于100家按原图要求照片不少于50张，不擅自改成50家。"
+    "比例结果不足整家时向上取整，保证达到对应比例；同店多图不能在按门店比例的档位重复计为多家。"
+    "其他渠道须全量门店上架照片，不因门店多而套用抽样比例，也不新增终端库存明细必交要求。"
+    "门店范围及数量从品牌方本次产品推广协议和实际关联明细确认，可对完整门店清单逐店计数，"
+    "不从文件名、经销商自填申报或参与客户数猜门店总数，不新增接口必填门店数量。"
+    "资料已交但范围不全、库存明细无盖章、照片不能对应门店或数量不能确认时，分别列具体不足或无法确认，"
+    "不能把内容问题写成文件未交，也不沿用渠道未说明的问题。"
+)
+
+
+def entry_photo_requirement(total_stores: int, cvs_otc_channel: bool) -> tuple[str, int]:
+    """Return the approved evidence unit and inclusive minimum using integers."""
+    if type(total_stores) is not int or total_stores <= 0:
+        raise ValueError("进场门店数量须为已确认的正整数")
+    if cvs_otc_channel is not True or total_stores < 20:
+        return "stores", total_stores
+    if total_stores <= 50:
+        return "stores", (total_stores * 4 + 4) // 5
+    if total_stores <= 100:
+        return "stores", (total_stores + 1) // 2
+    return "photos", 50
 SOURCE_TITLE = "费用核销类型-资料与标准清单-20260918.pdf"
 BIZ_TYPE_NAME_CLARIFICATION = (
     "用户2026-09-21确认：业务系统bizType中的‘条码费’对应原PDF‘进场费’。"
@@ -41,9 +98,13 @@ BIZ_TYPE_NAME_CLARIFICATION = (
 )
 ROUTING_CLARIFICATION = (
     '用户2026-09-21最终确认：bizType为必填字符串，只允许条码费、陈列堆头、人员激励、POS达标激励、搭赠、KT板等物料制作、补差、外采赠品这八个规范值进入AI核销。'
-    '程序按原值精确匹配、一一对应八个Skill，不调用AI选型，不接受旧称、同义词、内部标识、大小写变体或模糊匹配。'
-    '命中后AI只核对指定Skill资料门禁；资料内容、ZIP名和文件名不能改变类型。'
-    '缺少、多余及条件不明逐项列问题并正常完成，不判核销失败；门禁满足后才业务审核。'
+    '用户2026-10-24确认：接口bizType兼容“堆头”，与“陈列堆头”统一进入promotional_display及audit-promotional-display的既有资料门禁和审核；原始bizType保留用于追溯。'
+    '用户2026-11-03确认HX202607010003、HX202609270009属于KT板等物料制作：接口bizType精确兼容“物料制作”，固定进入poster_material及audit-poster-material的既有资料门禁和审核；原始bizType保留，审核标准不变。'
+    '用户2026-11-03确认：接口bizType精确兼容“陈列”，与“陈列堆头”统一进入promotional_display及audit-promotional-display的既有资料门禁和审核，原始bizType保留。'
+    '用户2026-11-03确认：接口bizType精确兼容“pos达标激励”，与“POS达标激励”统一进入pos_target_incentive及audit-pos-target-incentive的既有资料门禁和审核，原始bizType保留。'
+    '程序按八个规范值及“堆头”“陈列”“物料制作”“pos达标激励”四项明确别名精确映射对应Skill，不调用AI选型；其他旧称、同义词、内部标识、大小写变体或模糊匹配仍不接受。'
+    '命中后由同一AI盘点指定Skill资料并完成本类业务审核；资料内容、ZIP名和文件名不能改变类型。'
+    '资料缺少、多余或条件不明均继续审核可判断的内容；是否形成具体问题由模型结合原文和真实规则判断，不设置程序资料门禁。'
     '其他非空bizType正常完成，不下载资料、不调用AI，回调result精确为“该业务类型无需AI核销”。'
     '缺失、null、空字符串或纯空白仍失败，回调result精确为“无法识别核销类型”。'
     '非字符串返回400。'
@@ -51,7 +112,7 @@ ROUTING_CLARIFICATION = (
 )
 RESULT_CLARIFICATION = (
     '用户2026-09-21确认：AI只列具体错误点，之后由人工复核，不决定整单或部分费用是否核销。'
-    'bizType命中八个规范值后，程序固定选择对应Skill；资料缺少、多余、条件不明和业务错误均正常完成并列出具体问题，不改选类型，门禁不满足不进入业务审核。'
+    'bizType命中八个规范值或已确认的“堆头”“陈列”“物料制作”“pos达标激励”别名后，选择对应Skill；同一执行模型自主盘点资料和完成审核，资料缺项不跳过业务审核。'
     '其他非空值不进入AI核销，正常完成并回调“该业务类型无需AI核销”。'
     '缺失、null或空白失败并回调“无法识别核销类型”；网络、代理、断电、程序或AI中断记failed。'
     '审核栏的“直接0核销”等后果仅保留原文出处；页面、摘要和回调一致。'
@@ -67,7 +128,7 @@ AUDIT_SCOPE_CLARIFICATION = (
 )
 POS_CLARIFICATION = (
     "此前确认的POS两版资料门禁保留：要求POS的类型须有Excel版及盖章版；培训可免两版，"
-    "选择提交须成套；CVS/OTC条码费可用库存表，选择POS时须两版。按实际资料内容识别，不凭文件名。"
+    "选择提交须成套；CVS/OTC条码费须全量终端库存明细盖章版，POS不能替代库存明细；自愿提供POS时仍须两版。按实际资料内容识别，不凭文件名。"
     "按用户最新‘只看审核要点’要求，资料栏的盖章、双版描述不自动成为盖章或两版一致性的独立审核项；"
     "POS字段、计算及商品库一致性按用户2026-09-22最新确认的通用标准执行，与结算单的对应关系仍按各类已有审核项执行。"
     "用户同日进一步明确：先有Excel版，再由同一Excel增加盖章形成盖章版；数据以Excel版为准。"
@@ -80,23 +141,40 @@ POS_COMMON_CLARIFICATION = (
     "⑥销售金额；⑦销售金额及数量合计。缺项即不完整；已提供但缺字段须指出具体缺项，不能说整份POS未交。"
     "用户同日最终明确：只必含上述5+2项，额外的产品编码及其他字段不审核；无论该编码称我方编码还是商超编号，缺失、归属不明或与库内对不上均不报错。"
     "此确认覆盖此前‘填写产品编码就必须与库内一致’的口径，不再要求辨认额外编码归属，也不以额外编码筛选或排除商品。"
-    "商品名称与69码仍实际查询商品库，须唯一对应同一商品；名称允许简称和模糊匹配，明确规格、款式等不能冲突，69码须与库内原值一致，不能截断、改写或模糊匹配。"
+    "用户2026-11-04根据HX202609010032反馈更新POS商品身份口径：实际查询商品库，以准确69码为准；"
+    "经销商系统商品名称、颜色或包装描述与商品库不同，不据此报告商品不符或同码多商品歧义。"
+    "商品名称仍为5+2必含字段，保留原文，不用库内名称补写缺项。69码须与库内原值准确匹配，不截断、改写或模糊匹配；"
+    "同码多条内部记录全部保留，不随意选择一个产品编码；本更新仅用于POS身份核对，不改变现场照片所需商品参考定位。"
     "销售金额仍按已确认的不小于口径复算：列示金额≥数量×销售单价，列示金额合计≥明细金额之和；数量合计须相等，按十进制原精度处理。"
+    "逐行金额与数量、金额合计须覆盖全部对应销售明细，跨表格分段保持原文件和工作表归属，不用抽样或局部求和比较整表总计；不能确认完整范围或缺少公式缓存时具体说明，不能猜数通过或误报差额。"
     "用户明确先有Excel版，再在相同内容上加盖章；所有POS数据以Excel版为准。字段完整性、商品查库、复算、与结算单销量比较和赠品公式的实际销量均读取Excel。"
     "盖章版保留既有资料门禁，不覆盖Excel、不以它补齐Excel缺项，不另立两版差异问题；Excel不可读时说明Excel具体缺口，不能回退盖章版猜数。"
     "不以合同、结算单或库内记录补写Excel缺少的字段。"
     "仅查商品身份时读取轻量数据库字段，不访问OSS图片清单或下载商品图片；现场照片外观核对另按本次商品范围按需取图。"
-    "库内未找到对应商品时直接说明‘库内无参考商品’，保留原商品名称或编码；多个候选、标识冲突和系统故障须区分，不能都说库内无商品。"
+    "准确69码未查到时直接说明‘库内无参考商品’，保留原商品名称及69码；数据库连接故障必须按系统故障处理，不能冒充库内无商品。"
     "不涉及POS时不要求新交POS；原本无需POS的类型实际提供POS时纳入通用检查，资料按已有两版成套口径盘点。"
     "本次未恢复POS印章、两版一致性或EAN校验位的独立审核，也不新增其他基础通用项目。"
+    "用户2026-11-04根据门店达成奖励反馈补充读取方式：保留实际表头、层级、单位和原始单元格对应，"
+    "销售额、实销金额、合计金额及含税POS等字段须按本表实际含义识别，不能仅因列名不是销售金额就报金额列缺失。"
+    "门店汇总销售金额不等于各SKU销售金额，目标金额和奖金也不等于销售金额；不能把门店金额重复填到每个SKU，"
+    "不能把奖励人数当销量、把奖励单价当销售单价，实际缺SKU对应单价时仍具体说明，不以金额除数量补造。"
+    "门店达成跟踪表、奖金分配表先按内容作为本次结算的补充或业务背景，不能只因含POS或销售字样就当逐SKU销售明细要求其补条码。"
+    "真正POS仍执行既有5+2和全量复算；字段有但本行关系无法确认与未提供字段须区分，不把一种辅助表的问题扩大成所有POS均不可读。"
 )
 PAYMENT_COMPANY_CLARIFICATION = (
+    "用户2026-11-04根据HX202609220034、HX202607150035确认：门店/区域达成奖励支付截图无需注明经销商公司名称，"
+    "不能仅因单笔超过1000元报缺名称。须先按本次合同和结算单识别实际奖励用途；"
+    "同一活动兼有门店达成奖和区域业务达成奖时，均按各自每店/每人的约定核对，不能改成逐SKU计提。"
+    "本例外不免除既有付款归属、去重和实际支付金额核对；混合其他用途时只对门店/区域达成奖励适用。"
+    "以下名称口径仅适用于仍需检查名称的其他个人红包，不覆盖上述达成奖励例外。"
     "用户2026-09-22明确：人员激励大额红包所需公司名称指本次经销商公司名称，执行口径据此更正。"
     "结合本次合同中的经销商主体、结算单客户名称等原文确认对应关系，不能用产品品牌名或无法对应主体的群名、个人昵称替代经销商公司名称。"
     "截图确实没写公司名称时指出缺少经销商公司名称；已见名称但与本次经销商的对应关系不清楚时说明具体无法确认的内容。"
     "不自定必须完整工商全称或额外证明文件的要求；原PDF的文字仅保留作出处，最新执行以本次用户确认的经销商主体为准。"
 )
 PAYMENT_CLARIFICATION = (
+    "先执行用户2026-11-04确认的门店/区域达成奖励例外：此类奖励支付截图不要求经销商公司名称；"
+    "纯门店/区域达成奖励时payment_company不适用，混合结算只对其他仍适用的个人红包执行原名称规则。"
     "按人员激励审核要点2及用户2026-09-22最新确认：经销商公司名称要求按每一笔实际红包金额判断，"
     "单笔超过1000元须有经销商公司名称；单笔等于或低于1000元不触发此要求，不能因多笔合计超过1000元扩大要求。"
     "金额比较按用户2026-09-22确认执行：本次实际红包合计大于等于品牌方本次核销金额即可，少于才报金额不足。用于发放人员激励的微信转账截图同样按此业务用途识别，不能仅因界面写‘转账’就改为临促工资。实际工资打款不套用红包检查。"
@@ -120,6 +198,10 @@ BRAND_CONTRACT_CLARIFICATION = (
     "结算单数值仍是待核对的申报值。结算销量仍与POS销量核对；红包合计与本次核销金额按用户2026-09-22确认的不小于关系核对。"
     "合同未写、看不清、存在冲突或不能对应本次项目时，说明具体无法确认的约定，不能改用结算单自证或用合同总额代替本次金额。"
     "本次统一的是已有审核项的基准来源，不新增审核项、必交申请表、合同字段或数量上限，也不把计划数量自动当作实际销量。"
+    "用户2026-11-03确认：本次合同引用的终端、商品等明细可从本次关联的勤策核销、申请及方案取得，作为独立来源保留。"
+    "按核销单、申请单及申请行实际关联，只取已有审核需要的信息；已取得对应资料时不因ZIP没有单独附件报未提供。"
+    "核销申报不能自证合同约定，客户不自动等于终端，参与客户数不能替代门店名单；仍须结合合同确认引用和活动对应关系。"
+    "补充明细不能证明照片现场或补写POS字段，不新增必交字段、审批前置、状态审核、接口或其他审核要求；未接入时沿用原有资料。"
 )
 AMOUNT_CLARIFICATION = (
     "用户2026-09-22确认：我们是品牌方，已有金额审核按经销商本次有效凭证金额大于等于品牌方本次核销金额判断。"
@@ -148,13 +230,25 @@ DISPLAY_BRAND_CLARIFICATION = (
     "宣传物料的品牌范围不能扩展为实物货品允许集团品牌混摆；申请区域外相邻货架不计入混摆。"
 )
 STAFF_PHOTO_CLARIFICATION = (
-    "用户2026-09-22明确临促照片按每店每天全量核对：本次有临促的每家门店，在合同安排临促的每一天均须有对应照片，"
-    "照片带水印，画面含临促人员和产品。只确认整场活动每天有照片不能证明各门店每天均已覆盖。"
-    "有无临促、临促门店及各店临促日期以品牌方本次合同中的活动申请说明和明确安排为准，先按门店列出应覆盖的日期，再对应本次实际照片。"
-    "某店某日的缺口不能用其他门店或其他日期的照片补足，照片张数相等也不能代替门店与日期的对应。"
-    "缺照片时列明具体门店和日期；已交照片缺水印、缺人员或产品画面时分别指出，不说整份照片资料未提交。"
-    "合同安排、照片日期或门店归属看不清时说明具体无法确认的内容，不猜测缺交或通过；不能仅因没照片就认定没有临促。"
-    "不另增每位临促个人逐日照片或固定张数要求，不把本规则扩展为其他核销类型都要逐日拍照。"
+    "用户2026-11-02根据人员激励HX202610170008明确：仅本次结算单或促销合同正文明确肯定涉及临促时，"
+    "才要求提供对应临促资料或照片，归入staff_photos；本次细化覆盖此前临促一律可选的口径。"
+    "未提及、字段空白、仅有空模板标题、明确无临促或无法确认时不要求补交，也不新增有无临促必填项。"
+    "不能按文件名、目录名、付款截图、已有照片或缺少照片推断临促条件；否定语句不能按关键词当作肯定。"
+    "条件依据须保留结算单或促销合同中的原文及来源；来源冲突或内容不清时不能强判缺少临促资料。"
+    "自愿提供的临促资料保留原始来源，不算清单外资料；不恢复逐店逐日覆盖、水印、人员或产品画面的临促必审检查。"
+    "不因此豁免人员激励既有POS、付款证明、合同、结算单及数量金额等其他适用要求。"
+)
+DISPLAY_TABLE_PHOTO_CLARIFICATION = (
+    "用户2026-11-01根据地堆陈列HX202610110012确认：陈列照片允许由电子表格统一收集，必须逐张读取分析。"
+    "Excel浮动图片和WPS单元格图片与单独提交的照片属于同一display_photos资料项；表格原文用于对应门店、日期和活动，"
+    "不能代替照片本身的水印或现场画面。保留原文件、工作表、行列及图片来源，一行多图、多个工作表和重复使用的图片位置均不得漏读。"
+    "按每张实际照片执行本类已有照片审核要求，不能抽样、只查首图或用某张合格照片代表整张表；"
+    "通过照片审核项时必须引用全部本次陈列照片来源。每张照片仍须分别说明实际水印、实物品牌、宣传物料和陈列大小，"
+    "完整逐图分析保留符合、不符、看不清及不适用的检查结果。"
+    "用户2026-11-02根据地堆陈列HX202610150048进一步明确：AI总结、持久摘要与回调只列具体不符合项、无法确认项和资料问题，不列通过或不适用项；同一张照片的摘要只取有问题的单项，不能夹入该照片其余已通过的说明。"
+    "无法确认只说明具体限制，不当作已确认违规；原有场景分组和连续数字编号保留，不加建议、后果或重复标题。"
+    "有图片缺失、归属不明或看不清时定位具体工作表和行列说明，"
+    "不凭单元格文字补造图片内容，也不新增固定张数、额外字段必填或其他审核标准。"
 )
 # Each numeric comparison declares what it measures. In particular, monetary
 # POS arithmetic must not relax quantity totals in the same PDF audit point.
@@ -168,6 +262,38 @@ COMPARISON_OPERATORS = {
     "display_quantity_price": {"quantity": "eq", "unit_price": "eq"},
     "gift_rule_quantity": {"quantity": "eq"},
 }
+
+
+def comparison_operators(scenario: str, rule_id: str | None = None) -> dict:
+    """Preserve each comparison's purpose, including row equality vs claim ceiling."""
+    from copy import deepcopy
+    result = deepcopy(COMPARISON_OPERATORS)
+    result.update(deepcopy(globals().get('SCENARIO_COMPARISON_OPERATORS', {}).get(scenario, {})))
+    return result.get(rule_id, {}) if rule_id is not None else result
+
+
+PRICE_SUPPORT_CLARIFICATION = (
+    "用户2026-11-03根据补差HX202607070032、HX202608210011、HX202604110016确认："
+    "补差结算单逐商品申报销量不得大于对应POS Excel实际销量，少于或等于均符合；"
+    "left取结算申报、right取POS全量对应明细，quantity/le；POS内部数量合计仍须相等，其他类型不改变。"
+    "合同的预计销售数量与本次补差计费数量是不同用途，不能仅因合同出现两个数量就报冲突，"
+    "先区分字段含义、商品、单位及本次费用范围；不把预计销量自动作为补差数量上限，也不改写原文单位。"
+    "普通价格补差不要求满减活动证明；仅本次资料明确涉及满减返还时才要求，不明、未提或否定不强制补交。"
+    "逐张看原图活动价签，整数价格本身不等于看不清，不能仅因无小数或水印靠近就判价格缺失；"
+    "区分已交但无价格、被遮挡看不清与整份证明未交，准确定位有问题的那张，不把一张缺价写成全部无价。"
+    "本次新增补差专属日期核验：结算单活动起止日期须与品牌方本次促销合同一致，"
+    "每张线下价格证明照片的水印拍摄日期须位于该合同活动起止日期闭区间内；"
+    "日期逐字引用各自来源，缺年、看不清、约定冲突或不能关联本次活动时明确不能确认，不从文件名猜日期。"
+    "日期、水印、价格各自独立核对，有价不能掩盖周期外日期，日期在内也不能掩盖无价。"
+)
+GIFT_MATERIAL_CLARIFICATION = (
+    "用户2026-11-03根据外采赠品HX202609210063、HX202610240009确认：发票或收据属于必要交易凭证；"
+    "银行、微信等采购转账交易记录为可选辅助资料，实际提交归purchase_transaction_record，不报多交，"
+    "未提交不报缺少，不新增付款金额或交易真实性审核，且不能代替本类必交发票或收据。"
+    "外采赠品成品照片与活动门店现场照片可由同一实际照片同时证明，保留两种资料角色和真实来源；"
+    "两项都未提交时合并说明缺少外采赠品及活动门店现场照片，不重复列两条；"
+    "已提交但内容不全、模糊或范围不足仍分别说明具体问题，不用一张合格照片代替其他门店。"
+)
 GIFT_CONTRACT_CLARIFICATION = (
     "用户2026-09-22确认：外采赠品数量核对以品牌方本次促销合同约定的赠送规则和数量为准。"
     "合同直接约定本次赠品数量时引用该约定；按销量计算时，实际销量来自本次POS，购买门槛、赠送比例及计算范围和单位来自合同。"
@@ -208,10 +334,10 @@ CONTRACT_COMPARISON_RULES = {
 # the execution evidence. Missing visible fields can still fail independently.
 CONTRACT_REFERENCE_RULES = {
     "promotional_display": frozenset({"display_watermark", "display_brand", "display_size"}),
-    "personnel_incentive": frozenset({"staff_daily_photos"}),
     "giveaway_promotion": frozenset({"giveaway_evidence"}),
     "self_procured_gift_material": frozenset({"gift_finished_photos"}),
-    "entry_fee": frozenset({"entry_sku", "entry_watermark"}),
+    "price_difference_support": frozenset({"settlement_activity_dates", "photo_activity_dates"}),
+    "entry_fee": frozenset({"entry_sku", "entry_watermark", "entry_inventory"}),
 }
 INVOICE_DETAILS_CLARIFICATION = (
     "用户2026-09-23确认：KT板等物料制作的发票或收据明细允许结合本次合同、结算单认定齐全。"
@@ -235,11 +361,30 @@ TEMPLATE_CLARIFICATION = (
     "只解释这三类审核栏已有的模板要求，不扩展其他类型，也不改变原有盖章检查。"
 )
 SEAL_CLARIFICATION = (
-    "用户2026-09-21确认：审核要点要求盖章或签章但未限定章的种类时，默认有盖章即可，"
-    "不额外要求必须是公章、财务专用章或合同专用章；后续业务明确调整时再修改。"
-    "已能确认盖章时，不因无法区分章的种类认定不合格或无法核验；盖章本身看不清时说明具体情况。"
+    "用户2026-11-16明确：不再区分公章、财务章、合同章、结算单章、业务章、部门章或其他章种，"
+    "只要文件上有任何实际印章即视为已盖章；已能确认盖章时，不因无法区分章种认定不合格或无法核验。"
+    "仍须核对印章主体能否对应本单经销商；印章可见到经销商名称的核心字号或主体词"
+    "（商号、‘商贸’‘有限公司’等）即可确认，不要求逐字读出完整印章名称，"
+    "也不因局部被文字图案叠压、墨色深浅、边角缺失、印章形状或颜色就判看不清。"
+    "只有完全无法辨认盖章主体，或所见主体明显是终端门店、其他公司时才说明无法确认或不符。"
+    "整份文件没有任何实际印章或签字图形时，直接记录未盖章/未签章；"
+    "不能把印刷公司名称、标题、已填写内容或另一份已盖章文件当作本文件已盖章。"
     "原文明写的客户盖章、双方盖章仍按原要求核对，不能把双方盖章改为任意一方盖章。"
     "本口径仅解释已有签章审核，不新增其他类型的印章检查，不因缺章把已交文件说成未交。"
+)
+CONTRACT_SIGNATURE_CLARIFICATION = (
+    "促销合同签章必须独立看合同页面本身：整份合同没有任何实际印章或签字图形时，"
+    "直接记录为未签章、contract_signed不符，不能把合同标题、双方印刷名称、已填写的合同内容、"
+    "结算单或其他文件上的印章当作本合同已签章。只有确实存在印章或签字、但主体完全无法辨认时，"
+    "才属于无法确认；局部叠压、墨色深浅或边角缺失不影响按SEAL_CLARIFICATION核对盖章主体。"
+)
+PHOTO_REUSE_CLARIFICATION = (
+    "同一核销单的photo_reuse_advice.same_claim_candidates是本地感知相似度技术候选，不是已确认造假结论。"
+    "必须逐对读取unit_ids对应照片的source_file、水印门店、水印日期和可见画面，比较商品排列、堆头或货架结构、"
+    "镜头角度、背景及同一物体细节。画面高度一致但水印显示不同申请门店时，应在两张照片各自的现场/水印检查中"
+    "写明“疑似同一现场照片跨门店复用，需人工并排复核并补交各门店独立原图”，并保留文件名、店名、日期及相似依据；"
+    "不得直接写“已确认造假”或据此拒付。若只是同店多角度、不同商品或画面明显不同，应写明排除理由。"
+    "未进入候选列表的照片不因缺少候选而自动通过，仍按已读事实逐张核对。"
 )
 ATRIUM_CLARIFICATION = (
     "用户2026-09-23确认：AI分析接口新增largeVenueFee，表示是否包含大型活动场地费，取值为布尔值true或false。"
@@ -250,14 +395,76 @@ ATRIUM_CLARIFICATION = (
     "适用条件未明确时说明暂时无法确定是否需要入场协议，不直接报缺少协议，也不猜测豁免。"
     "需要但未交协议时列出‘缺少商场入场协议’，正常完成资料检查，不记核销失败。"
 )
+DISPLAY_SIZE_ESTIMATION_CLARIFICATION = (
+    "用户2026-11-08确认：陈列大小允许结合商品包装、可辨认排数及现场参照进行合理估算，不要求精确实测。"
+    "先直接数本图可见的横向列数、前后排数或纵位，再结合对应包装或柜体给出宽、深及适用面积的粗略估算和判断；"
+    "reason写清已看见几排几列、所用大致边长及推算结果，不能跳过计数和估算只说尺寸无法确认。"
+    "优先使用本单已取得且与现场商品、包装单位对应的长宽高；未取得精确值时，也可用可辨认的同类同规格包装常见尺寸区间作估算，"
+    "明确这是估算假设而非本次实测或接口原值，不把所有牙膏、纸箱、地砖预设为同一固定尺寸。"
+    "说明具体参照商品、包装摆放方向、沿宽/深方向可见的数量、间距及完整边界，按数量与对应边长推算长度或占地范围；"
+    "结合透视和已确认同店的补充角度交叉判断，不把正面四排、货架层数或堆叠高度直接当成地面深度或平方米。"
+    "占地估算不要求地面全部入镜：柜体、围板或台面的宽深轮廓能合理对应整体占地时，可结合顶部、侧面及包装排列估算其地面投影，"
+    "不能仅因底部未入镜、被柜身遮挡或没有箱装精确尺寸就停止估算。可辨认的单件排列也可帮助估算组合包装，"
+    "但不能把单件尺寸直接当外箱尺寸，台面外挑或下部收窄等可见差异须考虑。"
+    "须先尝试适用的包装区间及可见柜体参照；仍不能确认时说明已能判断的宽或深、尝试过的参照及真正缺少的边界或方向，"
+    "不能只重复地面未入镜、箱装尺寸未取得或没有标尺。"
+    "估算依据和可见范围足以支持大体达到合同规格时可判符合，不能仅因没有尺子、尺寸文字或精确主档尺寸就判无法确认。"
+    "合理估算不是精密实测，不要求估算区间下限严格超过合同值，也不能仅因正常估算区间跨越合同值就强制判未知或不符。"
+    "只有可见事实及合理估算明确支持明显小于要求时才报尺寸不足；关键边界、深度或参照确实不足以形成合理估算时只说明具体仍不能确认之处，"
+    "不能把无法精确测量写成已确认尺寸不达标。不增加固定尺寸、容差、标尺照片或补测资料必交要求。"
+)
+LOCATION_REFERENCE_CLARIFICATION = (
+    "用户2026-11-08确认：勤策终端详细地址仅作辅助认店参照，不要求照片水印逐字包含省市区、道路门牌或主档完整地址。"
+    "按本次实际门店名单，联合照片可见店名、简称、店招、分店特征、已有关联和地址片段判断；"
+    "已有依据能合理对应同一活动门店且无相反事实时可确认对应，不因水印地址较简略、主档更详细或文本不完全相同继续报问题。"
+    "不要求每张照片同时提供所有定位线索，不新增地图查询或地址证明。地址文本比较只是辅助，文本不同本身不等于门店不符。"
+    "同一连锁多家分店确实无法区分时，客户摘要只说本图无法对应哪家活动门店，候选和排除过程留在技术记录；有明确相反地点时指出真实冲突，"
+    "不把仅同城、同连锁、经销商名称或文件名当作同店证明，不跨店借用其他照片的地址。"
+    "原有照片日期、拍摄时间及地址水印要求仍按各类型适用规则检查，地址简略不等于地址水印缺失。"
+    "陈列水印日期及活动门店对应判通过时，保留本单实际对应的独立系统申请来源引用；合同不能代替申请。"
+    "接口已取到申请字段但本项漏引来源时，不能说字段未取得，应如实区分已取数与尚未完成本项关联核对。"
+    "用户2026-11-09进一步确认：门店名称在POS、结算明细、合同及本单勤策申请之间允许有约束的语义模糊匹配，"
+    "同日再次明确：本单名称大体相近、核心商号一致且没有明确不同分店或地点事实时，按匹配满足处理；"
+    "不要求逐字同名、详细地址齐全、专门的别名证明或额外一一映射字段，不仅因未明确写两名称为同店就判无法对应。"
+    "不能把名称逐字一致或另有别名证明作为必需条件。匹配只在本单按申请单号和申请行ID精确关联的实际门店名单内进行，"
+    "先核对本次经销商、活动期间及资料角色，不借其他核销单、未关联申请、历史别名或整个客户库补齐。"
+    "两侧已有门店编号时优先核对原编号，明确编号不一致不能靠名称相近覆盖；商品69码仍准确对应，金额、数量、单价和日期不做模糊比较。"
+    "可结合核心商号、简称、分店特征、地点片段、通用超市或水果生鲜等业态描述及完整本单对应关系判断；"
+    "括号、空格、店字及通用业态词不同不自动形成疑点，地点备注也不自动当作另一个分店。"
+    "一侧含分店名而另一侧仅有核心商号或建档描述时，若本单其他明确分店已对应，结合本次真实经销商、期间、商品范围及完整名单，"
+    "没有明确相反分店或地点事实，可以接受为本次对应，不额外要求证明唯一对应；不因此改写系统门店主档或建立跨单永久别名。"
+    "仅同城、同一连锁、同一经销商、商品集合相同、金额或数量相等、或仅剩一条记录，均不能单独证明同店。"
+    "存在明确不同的分店或地点、编号冲突时保留真实冲突；本单确有两家不同分店且本图无法区分时才保留无法确认，"
+    "不能只因系统有多个相似名称就制造歧义，也不能无视明确分店冲突只选相似度最高者。"
+    "按门店身份去重后对应，同店多个SKU行保留原关联，不将一份门店明细重复分配给多个不同门店以凑齐。"
+    "技术档案逐项保留两侧原名、申请单号与行ID、候选、所用实际线索、冲突排除及判定理由；"
+    "勤策主档空返回只说明该次未取得补充参照，不否定本单其他已有充分对应依据，也不能编造已取得地址。"
+    "用户2026-11-13根据HX202607010003确认：照片水印门店名与本单申请名单中的门店名完全不同（例如水印写‘明珠超市大城店’，名单写‘明珠购物超市(康复路店)’），但同属本单经销商及同一连锁、且本单名单内没有同名门店时，不得直接判该照片超出申请门店范围或与本次活动无关；"
+    "应如实写明两侧原名、可对应的连锁与地点线索及仍需确认的差异，按门店归属无法确认处理，同时保留该图已可见的品牌、赠品及物料事实；"
+    "门店覆盖结论先说明待确认归属的照片，再列真正没有可核验照片的门店；名称不一致本身不构成缺件或核销失败。"
+)
 DISPLAY_SIZE_CLARIFICATION = (
     "用户2026-09-21确认：陈列堆头申请的尺寸、规格从本次促销合同读取，再与本次对应的现场照片核对。"
     "保留合同实际写明的规格含义和单位，不用结算单或照片反推申请尺寸，不自行给‘标准堆头’补固定尺寸。"
+    "合同仅写端架时按端架实际含义识别，不能自行升级为整组端架、整架或全部边界均须入镜；"
+    "照片结构足以确认对应端架陈列及合同已有规格时可通过大小项。只有合同明确约定整组或完整范围时，才核对该完整范围。"
+    "合同写1平米堆头或者端架时，保留二选一，普通端架不额外要求平方米证明，也不能套用只适用于整组端架的结构分支。"
+    "本类照片清晰展示全貌等既有要求仍在对应照片项独立核对，不能转写为合同未要求的整组尺寸门槛。"
     "由AI结合合同约定及照片可见事实判断；合同未写清、看不清、对应项目不明或照片不足以判断时，"
-    "说明具体无法确认的内容，不猜尺寸，也不直接判尺寸不符。"
+    "说明具体无法确认的内容，不凭空编造精确尺寸，也不直接判尺寸不符。"
     "不另增申请表或专门测量照片作为必交资料，不自定面积、列数或误差阈值。"
+    "用户2026-11-04根据HX202609220029、HX202610270011要求修复规格识别：先区分面积、长度、整组端架和纵位/列数，"
+    "结合合同实际含义及本图可见完整边界、分隔和已确认同店的补充视角核对；没有尺寸文字或标尺不自动表示无法核对纵位，"
+    "不能把货架层数当纵位。面积可按下述包装及排列参照合理估算，不把地砖、纸箱统一假定为固定尺寸；确实不可确认时说明具体遮挡或参照缺口。"
+    "用户2026-11-04根据HX202610110014确认修正二选一的执行：合同写整组端架或1平米堆头时，"
+    "先分别核对整组端架与面积，不把或关系改为同时满足；整组端架按架体结构和完整陈列边界判断，"
+    "不能仅因没有标尺、面积文字或占地标识就说无法确认整组端架。面积仍须说明参照与估算依据，不凭规模猜测。"
+    "无本次合同明确的逐店限定时，关联申请字段单独写1平堆不自行排除合同允许的端架选项；"
+    "有明确逐店执行约定时按真实限定核对，不能借其他门店的限定或自行覆盖来源冲突。"
+    "二选一任一规格有足够可见事实确认满足即可通过本图大小项，不因另一选项无法测量继续报问题；"
+    "没有可确认满足的选项且仍有真实未知时说明具体缺口，不改成已确认不符，不增加测量资料要求。"
     "用户2026-09-22进一步确认：本类已有审核需要的数量、单价、门店和执行期间同样从品牌方本次合同读取。"
-)
+) + DISPLAY_SIZE_ESTIMATION_CLARIFICATION
 ENTRY_ADDRESS_DUPLICATE_CLARIFICATION = (
     "用户2026-09-21确认：条码费（原PDF进场费）审核第3项的‘存量是否重复’，检查本次核销单照片水印中的门店地址，"
     "不是查商品以前是否上架、费用是否申请或核销过。"
@@ -273,12 +480,44 @@ ENTRY_ADDRESS_DUPLICATE_CLARIFICATION = (
     "即使同批处理多张核销单，也须逐单独立查重，不能把不同单据的地址混在一起。"
     "没有其他核销单或历史照片不属于资料缺失或无法核验的原因。"
 )
+PHOTO_TIME_PRESENCE_CLARIFICATION = (
+    "用户2026-11-16确认放宽拍摄时间存在性：本图水印时间位置已读出数字，就视为已显示拍摄时间。"
+    "例如识别到15、17或16等时间数字即可，不要求冒号、完整分钟或秒数；"
+    "不因分钟未读全、分隔符不清或没有秒数判缺失、无法确认或不符合，也不单独为补齐这些字形重复回看。"
+    "审核说明统一表述为已显示拍摄时间；客户问题摘要不列这一已满足项，"
+    "也不强调只读到数字、只识别到15或分钟不清等识别限制。"
+    "原始识别片段及限制保留在技术记录，不补造完整时间。"
+    "数字须来自本图水印时间位置，价签、商品规格、条码、单独日期或普通编号不冒充拍摄时间。"
+    "本条只放宽拍摄时间存在性，日期是否在活动期间、门店对应及其他画面问题仍按本类规则独立核对。"
+)
+PHOTO_TIME_READING_GUIDANCE = (
+    "照片拍摄时间须结合本图日期、地点及水印排版读取，如实转录可辨数字、原标点和所在位置。"
+    "时间可能为大号白字、单独一行、分行或与日期地点分开显示；冒号、点号或换行须结合本图实际字形识别，"
+    "不能把同一时分拆成两个编号，也不能仅因字号大、叠在商品或宣传板上就认定为后期编号。"
+    "能读全时分时照录；只读出部分时间数字时保留原片段，不补造分钟或秒数。"
+    "价签、规格、编号也可能含数字或分隔符，不能只按数字格式当作拍摄时间；须看本图水印上下文。"
+    "未转录到时间不等于原图没有时间；不能用其他照片、文件名、EXIF或申请日期补写本图时分。"
+    "水印年份须逐位辨认，特别复核末位5与6等相近字形，不因当前年份或申请周期补成年份。"
+    "初读日期与同图星期不自洽时，先回看该张原图的年份及日期字形，再判断；"
+    "星期仅是识别复核线索，不能据星期反推或改写原日期，也不能把OCR误读直接认定为原图日期冲突。"
+) + PHOTO_TIME_PRESENCE_CLARIFICATION
+COMPANY_TEXT_READING_GUIDANCE = (
+    "公司名称先按字形和完整词组柔性识别，手写抬头、打印落款、印章圆弧文字分别读取并保留位置；"
+    "旋转页面按实际文字方向理解，沿圆章弧线分段辨认，区分红色印文、黑色表格线和正文叠印。"
+    "先记录可见核心字号和可辨片段，局部重叠或墨色深浅不等于整个章名不可读；"
+    "不能把叠加笔画拼成另一家确定的完整公司名称，不用有限公司、商贸等通用后缀猜公司。"
+    "同页重复写明的同一名称可作为字形参照，仍分别说明抬头与印章实际可见内容；"
+    "跨页的本单申请或文书只作后续主体对应参照，不冒充本图已看见的印文字。"
+    "核对主体时结合可见核心字号及本单资料作柔性对应，不因标点、括号或个别疑似误识字直接报公司不一致；"
+    "拟据手写或印章识别作主体问题判断而字形有叠压、旋转或近形字疑点时，先请求对应原图复核，"
+    "不复述初读的错误全名作为新的证据，不要求逐字完整章名才承认盖章。"
+)
 PHOTO_WATERMARK_CLARIFICATION = (
     "用户2026-09-21确认：搭赠、补差、外采赠品已有照片审核中的水印，均须包含拍摄时间和门店地址，缺一即不完整。"
     "具体指出哪份照片缺哪项；看不清时说明无法确认，不把已交照片说成未交。"
     "补差的满减证明采用现场照片时同样适用；采用小票等其他证明时不套用照片水印要求，线上小象超市截图的既有例外保留。"
     "本次只明确水印的组成，不新增日期范围、地址一致性、定位距离或固定水印样式的检查，"
-    "也不另立外采赠品门店现场照片的独立审核项，不扩展KT或条码费的水印要求；人员临促照片按用户2026-09-22单独确认执行。"
+    "也不另立外采赠品门店现场照片的独立审核项，不扩展KT或条码费的水印要求；人员临促资料仅在本次结算单或促销合同明确涉及临促时必交，不恢复临促照片内容必审。"
 )
 GIVEAWAY_EVIDENCE_CLARIFICATION = (
     "用户2026-09-21明确搭赠审核第2项的‘关键信息’：全量活动照片或小票二选一。"
@@ -289,6 +528,9 @@ GIVEAWAY_EVIDENCE_CLARIFICATION = (
     "两类来源共同归入同一个搭赠活动证明资料项，混合提交本身不算多交，不能因甲店交照片就要求乙店也交照片。"
     "照片、小票分别按各自已有要求检查；不要求两类同时提交，不把小票四项套作每张照片的字段要求，也不要求小票带水印。"
     "全量按本次已明确的活动范围核对，不自定固定照片张数或每笔交易必交小票的要求，不能仅凭局部照片推定全量。"
+    "用户2026-11-04根据HX202610090047和HX202610020004确认：使用本单精确关联的勤策核销、申请终端名单与实际照片/小票逐店比对；"
+    "完整名单可确认时逐个列出缺少有效证明的具体门店，不笼统只说附件未见或未覆盖全部，不固定写15家或5张。"
+    "同店多个SKU去重；已交证明但店名不清、简称有歧义或名单不全时说明无法确认，不臆造缺店名单。"
     "同一张小票的多张图片可相互补全，先合并查看再判断缺项，不能用另一笔小票的信息补缺。"
     "用户另已确认：照片水印须包含拍摄时间和门店地址，缺一即不完整。"
     "已交照片或小票但缺水印、画面或字段时，逐项说明具体缺少或看不清的内容，不说文件未提交。"
@@ -314,7 +556,7 @@ class Rule:
 
 
 FLAGS = (
-    "training", "temporary_staff", "atrium", "cvs_otc", "online",
+    "training", "temporary_staff", "store_incentive", "atrium", "cvs_otc", "online",
     "full_reduction", "uses_pos", "photo_evidence", "red_packet",
 )
 
@@ -322,20 +564,21 @@ FLAGS = (
 MATERIAL_LABELS = {
     "pos": "盖章版销售明细（POS）", "pos_excel": "Excel版销售明细（POS）",
     "settlement": "结算单", "promotion_contract": "促销合同", "payment": "红包或工资打款截图",
-    "staff_photos": "临促每天的活动照片", "display_photos": "陈列活动照片",
+    "staff_photos": "临促资料或照片", "display_photos": "陈列活动照片",
     "atrium_agreement": "商场入场协议", "invoice": "发票或收据", "finished_photos": "物料成品照片",
     "gift_rule": "活动赠送规则", "gift_finished_photos": "外采赠品成品照片",
     "gift_store_photos": "活动门店现场照片", "price_evidence": "活动价格证明",
     "full_reduction_evidence": "满减活动证明", "giveaway_evidence": "搭赠活动照片或小票",
-    "entry_agreement": "产品推广协议", "entry_system": "进场商品销售明细或库存表",
+    "entry_agreement": "进场约定资料", "entry_system": "全量终端库存明细盖章版",
     "shelf_photos": "商品上架照片",
+    "purchase_transaction_record": "采购交易记录（辅助资料）",
 }
 
 BASE_MATERIALS = (
     Requirement("settlement", "结算单（公司统一模板，客户盖章）"),
     Requirement("promotion_contract", "签章后的促销合同"),
 )
-POS_MATERIAL = Requirement("pos", "经销商盖章 POS 数据（客户公章或财务章的盖章版，与Excel版完整内容一致）")
+POS_MATERIAL = Requirement("pos", "经销商盖章 POS 数据（不区分章种，实际盖章即可，与Excel版完整内容一致）")
 POS_EXCEL = Requirement("pos_excel", "POS 明细 Excel 版（与盖章版成套提供，完整内容一致）")
 OPTIONAL_POS = (Requirement("pos", POS_MATERIAL.text + "；实际涉及POS时提供", "uses_pos"),
                 Requirement("pos_excel", POS_EXCEL.text + "；实际涉及POS时提供", "uses_pos"))
@@ -352,8 +595,8 @@ MATERIALS = {
     "personnel_incentive": (
         Requirement("pos", POS_MATERIAL.text + "；培训费可不提供", "not_training"),
         Requirement("pos_excel", POS_EXCEL.text + "；培训费可不提供", "not_training"),
-        Requirement("payment", "红包截图或临促工资打款截图（有无临促读取本次促销合同中的活动申请说明确认）"),
-        Requirement("staff_photos", "各临促门店在本次安排临促的每一天的水印照片，含临促人员和产品（有无临促及门店日期安排读取本次促销合同中的活动申请说明确认）", "temporary_staff"),
+        Requirement("payment", "红包截图或工资打款截图，按本次实际付款用途识别；临促字段可不填写"),
+        Requirement("staff_photos", "仅本次结算单或促销合同明确肯定涉及临促时提供对应资料或照片；未提、空白、否定或无法确认不要求，自愿提供不算多交，不恢复逐日照片内容必审", "confirmed_temporary_staff"),
         *BASE_MATERIALS,
     ),
     "poster_material": (
@@ -364,6 +607,7 @@ MATERIALS = {
     ),
     "self_procured_gift_material": (
         INVOICE, GIFT_RULE, POS_MATERIAL, POS_EXCEL,
+        Requirement("purchase_transaction_record", "采购交易记录或转账截图，仅作可选辅助资料，不能替代发票或收据", "optional"),
         Requirement("gift_finished_photos", "包含外采赠品的成品水印照片"),
         Requirement("gift_store_photos", "活动期间所有门店现场水印照片，清晰展示促销内容和客户自采物料"),
         *BASE_MATERIALS,
@@ -371,7 +615,7 @@ MATERIALS = {
     "price_difference_support": (
         POS_MATERIAL, POS_EXCEL,
         Requirement("price_evidence", "所有活动门店清晰展示活动价格的现场水印照片，或线上小象超市截图"),
-        Requirement("full_reduction_evidence", "满减返还活动存在证明（现场水印照片、小票等，须对应本次费用，可与价格证明共用同一来源）"),
+        Requirement("full_reduction_evidence", "仅本次明确涉及满减返还时提供活动存在证明（现场水印照片、小票等，可与价格证明共用同一来源）；普通价格补差不要求", "confirmed_full_reduction"),
         *BASE_MATERIALS,
     ),
     "giveaway_promotion": (
@@ -380,10 +624,10 @@ MATERIALS = {
         *BASE_MATERIALS,
     ),
     "entry_fee": (
-        Requirement("entry_agreement", "产品推广协议（公司统一标准模板，双方盖章）"),
-        Requirement("entry_system", "带公司进场产品的 POS 或终端库存表（适用于 CVS/OTC 渠道；选择POS时由下列POS两版共同证明）", "cvs_otc"),
+        Requirement("entry_agreement", "进场约定资料：产品推广协议（公司统一标准模板，双方盖章），或本次精确关联且能确定实际进场终端与商品范围的勤策明细；已有可核对的勤策约定时不重复要求协议文件"),
+        Requirement("entry_system", "全量终端库存明细盖章版，覆盖本次全部进场门店及公司进场商品；仅cvsOtcChannel=true时必交，POS不能替代", "cvs_otc"),
         *OPTIONAL_POS,
-        Requirement("shelf_photos", "日期、地址、店名水印照片，清晰可辨具体 SKU"),
+        Requirement("shelf_photos", "商品上架照片；CVS/OTC按已确认门店分档提供，其他渠道覆盖全部门店；实际照片按本类已有SKU及地址要求核对"),
     ),
     "pos_target_incentive": (
         POS_MATERIAL, POS_EXCEL,
@@ -395,7 +639,7 @@ MATERIALS = {
 POS_RULES = (
     Rule("pos_fields", "以POS Excel版为准，只检查5+2项：活动时间、商品SKU/编码（69码）、商品名称、销售数量、销售单价、销售金额及销售金额和数量合计，缺项即不完整。额外产品编码及其他列不审核。", when="uses_pos"),
     Rule("pos_arithmetic", "用户2026-09-22确认：POS列示销售金额须大于等于数量×销售单价，列示金额合计须大于等于对应明细金额之和；数量合计仍须相等。逐字引用原始数值，由程序按十进制原精度复算，不用舍入或容差掩盖不足。", when="uses_pos", numeric=True),
-    Rule("pos_product_identity", "以POS Excel中的商品名称加69码查询商品库，名称允许模糊匹配且须唯一对应，69码须准确一致。额外产品编码即使与我方库不一致也不审核、不报错、不参与定位。缺失字段不从库内或盖章版补写；库内没有对应商品时说明‘库内无参考商品’并保留商品名称或69码。", when="uses_pos"),
+    Rule("pos_product_identity", "用户2026-11-04确认：以POS Excel原始69码准确查询商品库，经销商商品名称、颜色、包装描述差异不报商品不符；名称字段仍必含且保留原文。同码内部记录全部保留，不随意选择编码。额外产品编码不审核、不报错、不参与定位。缺失字段不从库内或盖章版补写；准确69码未查到时说明‘库内无参考商品’并保留原商品名称及69码。", when="uses_pos"),
 )
 SKU_RULES = (
     Rule("reward_unit_price", "用户2026-09-22最终确认：结算单申报的奖励/补差单价须等于品牌方本次合同对应69码的约定单价；少于或高于均不符，不将POS零售价当作奖励单价，最终金额抹零不能放宽单价一致要求。", "zero", "not_training", True),
@@ -418,9 +662,8 @@ RULES = {
     ),
     "personnel_incentive": (
         *POS_RULES, *SKU_RULES,
-        Rule("payment_company", "逐笔核对红包：单笔金额超过1000元须注明本次经销商公司名称，缺名称按缺资料处理；单笔等于或低于1000元不强制名称，不因多笔合计超过1000元追加名称要求。先结合全部相关截图判断每笔的完整信息，金额看不清不能按小额免除。" + PAYMENT_COMPANY_CLARIFICATION, when="red_packet"),
+        Rule("payment_company", "先区分本次实际奖励用途：门店/区域达成奖励支付截图不要求经销商公司名称。对其他仍适用的个人红包，单笔金额超过1000元须注明本次经销商公司名称；单笔等于或低于1000元不强制名称，不因多笔合计超过1000元追加名称要求。先结合全部相关截图判断每笔的完整信息，金额看不清不能按小额免除。" + PAYMENT_COMPANY_CLARIFICATION, when="red_packet"),
         Rule("payment_claim_amount", "根据资料内容判断属于本次核销的红包，将各笔金额去重后合计。用户2026-09-22确认：本次红包合计须大于等于结算单本次核销金额，少于时报告金额不足；多于或相等均通过本项。不把每笔红包分别与核销总额比较，不以合同申请金额代替本次核销金额；归属或金额无法确认时说明具体原因，不猜测通过。", when="red_packet", numeric=True),
-        Rule("staff_daily_photos", "临促照片按每家门店、每一天全量核对；缺少任一门店任一临促日的照片，或照片缺水印、临促人员或产品画面，逐项记录具体问题。" + STAFF_PHOTO_CLARIFICATION, when="temporary_staff"),
         QUANTITY_PRICE_RULE,
     ),
     "poster_material": (
@@ -439,8 +682,10 @@ RULES = {
     ),
     "price_difference_support": (
         *POS_RULES, *SKU_RULES,
-        Rule("full_reduction_evidence", "满减返还须有现场水印照片、小票等活动存在证明；无对应证明按缺资料处理。" + PHOTO_WATERMARK_CLARIFICATION),
-        Rule("price_evidence", "门店照片缺水印或活动价格不清晰，按缺资料处理；线上小象超市截图不套用线下水印格式。不从资料栏另加门店全量覆盖审核。" + PHOTO_WATERMARK_CLARIFICATION),
+        Rule("full_reduction_evidence", "仅明确满减返还时须有对应活动存在证明；普通价格补差不要求。" + PHOTO_WATERMARK_CLARIFICATION, when="confirmed_full_reduction"),
+        Rule("price_evidence", "逐张核对门店照片水印及活动价格，准确定位无价或遮挡图片；整数价格可读不算缺失。线上小象超市截图不套用线下水印格式。不从资料栏另加门店全量覆盖审核。" + PHOTO_WATERMARK_CLARIFICATION + PRICE_SUPPORT_CLARIFICATION),
+        Rule("settlement_activity_dates", "结算单活动起止日期须与品牌方本次促销合同一致；分别引用原文，缺少或冲突时说明具体日期。"),
+        Rule("photo_activity_dates", "逐张核对线下价格证明照片的水印拍摄日期位于本次合同活动起止日期闭区间内；不能用其他照片日期或结算日期代替。", when="offline_price"),
         QUANTITY_PRICE_RULE,
     ),
     "giveaway_promotion": (
@@ -450,10 +695,17 @@ RULES = {
     ),
     "entry_fee": (
         *POS_RULES,
-        Rule("entry_agreement", "产品推广协议非公司统一模板或未双方盖章，按缺资料处理。" + TEMPLATE_CLARIFICATION + SEAL_CLARIFICATION),
+        Rule("entry_agreement", "使用产品推广协议时，非公司统一模板或未双方盖章，按缺资料处理。"
+             "用户2026-11-04根据条码费反馈确认：本次关联勤策明细已能确定实际进场终端及商品范围时，不重复要求上传产品推广协议；"
+             "使用勤策来源须核对核销行、申请行及实际终端商品的精确关联，不把系统记录写成已盖章协议。"
+             "没有可用关联依据时保留具体参照缺口；有协议但协议本身不合规不能用勤策掩盖。"
+             + TEMPLATE_CLARIFICATION + SEAL_CLARIFICATION),
         Rule("entry_sku", "照片中的具体SKU须可辨识并与品牌方本次产品推广协议约定的商品一致；已交照片但商品看不清时如实说明，不说照片未交。协议约定不明时说明具体参照缺口。" + ENTRY_SKU_CLARIFICATION),
         Rule("entry_watermark", "水印中的门店地址与品牌方本次产品推广协议约定的门店地址一致；约定不明时说明参照缺口，不从资料栏增加日期、店名必填或活动周期检查。"),
         Rule("entry_duplicate", ENTRY_ADDRESS_DUPLICATE_CLARIFICATION),
+        Rule("entry_photo_coverage", "按接口确定渠道，核对上架照片的门店覆盖或张数。" + ENTRY_CHANNEL_CLARIFICATION),
+        Rule("entry_inventory", "CVS/OTC须有全量终端库存明细盖章版，核对是否覆盖本次全部进场门店及公司进场商品；POS不得替代。"
+             "已交但无盖章、明细缺门店或缺商品须具体说明，不能说整份资料未交；看不清时记无法确认。", when="cvs_otc"),
     ),
     "pos_target_incentive": (*POS_RULES, *SKU_RULES, QUANTITY_PRICE_RULE),
 }
@@ -461,35 +713,57 @@ RULES = {
 # Literal audit-column point numbers allow every runtime check to be traced.
 RULE_POINTS = {
     "promotional_display": {"display_watermark": "1", "display_brand": "2", "display_material_brand": "3", "atrium_agreement": "4", "settlement_template_seal": "5", "display_quantity_price": "6", "display_size": "7"},
-    "personnel_incentive": {"pos_fields": "1", "pos_arithmetic": "1", "reward_unit_price": "1①", "settlement_pos_quantity": "1②", "claim_ceiling": "1③", "payment_company": "2", "payment_claim_amount": "2", "staff_daily_photos": "3", "application_quantity_price": "4"},
+    "personnel_incentive": {"pos_fields": "1", "pos_arithmetic": "1", "reward_unit_price": "1①", "settlement_pos_quantity": "1②", "claim_ceiling": "1③", "payment_company": "2", "payment_claim_amount": "2", "application_quantity_price": "4"},
     "poster_material": {"invoice_details": "1", "finished_photo": "2", "settlement_template_seal": "3"},
     "self_procured_gift_material": {"gift_rule_present": "1", "pos_fields": "2", "pos_arithmetic": "2", "gift_rule_quantity": "2", "gift_finished_photos": "3", "settlement_seal": "4", "contract_signed": "4"},
-    "price_difference_support": {"pos_fields": "1", "pos_arithmetic": "1", "reward_unit_price": "1①", "settlement_pos_quantity": "1②", "claim_ceiling": "1③", "full_reduction_evidence": "2", "price_evidence": "3", "application_quantity_price": "4"},
+    "price_difference_support": {"pos_fields": "1", "pos_arithmetic": "1", "reward_unit_price": "1①", "settlement_pos_quantity": "1②", "claim_ceiling": "1③", "full_reduction_evidence": "2", "price_evidence": "3", "application_quantity_price": "4", "settlement_activity_dates": "用户2026-11-03确认·补差结算活动周期", "photo_activity_dates": "用户2026-11-03确认·补差照片活动周期"},
     "giveaway_promotion": {"pos_fields": "1", "pos_arithmetic": "1", "reward_unit_price": "1①", "settlement_pos_quantity": "1②", "claim_ceiling": "1③", "giveaway_evidence": "2", "application_quantity_price": "3"},
-    "entry_fee": {"entry_agreement": "1", "entry_sku": "2", "entry_watermark": "3", "entry_duplicate": "3（存量判重）"},
+    "entry_fee": {"entry_agreement": "1", "entry_sku": "2", "entry_watermark": "3", "entry_duplicate": "3（存量判重）",
+                  "entry_photo_coverage": "用户2026-11-03确认·渠道照片覆盖", "entry_inventory": "用户2026-11-03确认·全量终端库存盖章版"},
     "pos_target_incentive": {"pos_fields": "1", "pos_arithmetic": "1", "reward_unit_price": "1①", "settlement_pos_quantity": "1②", "claim_ceiling": "1③", "application_quantity_price": "2"},
 }
 
 MATERIAL_RULE_IDS = {
-    "pos_excel": "pos_fields", "staff_photos": "staff_daily_photos", "display_photos": "display_watermark",
+    "pos_excel": "pos_fields", "display_photos": "display_watermark",
     "atrium_agreement": "atrium_agreement", "invoice": "invoice_details", "finished_photos": "finished_photo",
     "gift_rule": "gift_rule_present", "gift_finished_photos": "gift_finished_photos",
     "price_evidence": "price_evidence", "full_reduction_evidence": "full_reduction_evidence",
     "giveaway_evidence": "giveaway_evidence", "entry_agreement": "entry_agreement", "shelf_photos": "entry_watermark",
+    "entry_system": "entry_inventory",
 }
 
 
 def applicability(when: str, scenario: str, flags: dict) -> bool | None:
+    from .fee_policy_source import extra_applicability
+    extra=extra_applicability(when,scenario,flags)
+    if extra is not NotImplemented:return extra
     if when == "always":
         return True
+    if when == "optional":
+        return False
+    if when == "confirmed_temporary_staff":
+        return scenario == "personnel_incentive" and flags.get("temporary_staff") is True
+    if when == "confirmed_full_reduction":
+        return scenario == "price_difference_support" and flags.get("full_reduction") is True
+    if when == "offline_price":
+        return scenario == "price_difference_support" and flags.get("online") is not True
     if when == "not_training":
         if scenario != "personnel_incentive":
             return True
         return not flags["training"] if flags.get("training") is not None else None
+    if when == "sku_sales_settlement":
+        if scenario == "personnel_incentive" and (
+                flags.get("temporary_staff") is True or flags.get("store_incentive") is True):
+            return False
+        return applicability("not_training", scenario, flags)
+    if when == "non_store_red_packet":
+        if scenario == "personnel_incentive" and flags.get("store_incentive") is True:
+            return False
+        return flags.get("red_packet")
     if when == "required_pos":
         if scenario == "personnel_incentive":
-            return applicability("not_training", scenario, flags)
-        return scenario in {"self_procured_gift_material", "price_difference_support", "giveaway_promotion", "pos_target_incentive"}
+            return applicability("personnel_pos", scenario, flags)
+        return scenario in {"price_difference_support", "giveaway_promotion", "pos_target_incentive", "self_procured_gift_material"}
     if when == "entry_pos":
         if flags.get("cvs_otc") is False:
             return False
@@ -504,34 +778,26 @@ def requirements(scenario: str) -> tuple[Requirement, ...]:
 
 
 def rules(scenario: str) -> tuple[Rule, ...]:
-    from .scenario_registry import SCENARIO_LABELS
     common_ids = {r.id for r in POS_RULES}
     if {r.id for r in RULES[scenario]} != set(RULE_POINTS[scenario]) | common_ids:
-        raise ValueError("审核项目须逐项对应本类PDF审核要点，不能从资料清单生成")
-    source_label = "进场费" if scenario == "entry_fee" else SCENARIO_LABELS[scenario]
-    result = tuple(replace(r, source=("用户2026-09-22确认·所有核销方式POS通用标准" if r.id in common_ids
-                                     else f"PDF第1页·{source_label}·审核要点{RULE_POINTS[scenario][r.id]}"))
-                   for r in RULES[scenario])
-    if scenario in CONTRACT_COMPARISON_RULES:
-        result = tuple(replace(rule, text=rule.text +
-            " 用户2026-09-22确认：批准的数量、单价或金额参照值从品牌方本次促销合同读取，"
-            "不能取结算单自行填写的申请值或POS销售单价代替约定；合同未写、看不清或对应不明时记无法核验，"
-            "不以合同总额自动代替本次申请金额。")
-            if rule.id in CONTRACT_COMPARISON_RULES[scenario] and rule.id != "gift_rule_quantity" else rule for rule in result)
-    if scenario == "poster_material":
-        result = tuple(replace(rule, source=rule.source + "及用户2026-09-23确认的合同、结算单补充明细口径")
-                       if rule.id == "invoice_details" else rule for rule in result)
-    return result
+        raise ValueError("审核项目须逐项对应本类已批准规则，不能从资料背景推导")
+    return tuple(replace(r, source=r.source or (
+        "用户确认的所有涉及POS类型通用5+2及原值复算标准" if r.id in common_ids else
+        f"{SOURCE_TITLE}·Sheet1!H{RULE_POINTS[scenario][r.id]}")) for r in RULES[scenario])
 
 
 def catalogue() -> dict:
     from .scenario_registry import SCENARIO_LABELS
-    return {"version": POLICY_VERSION, "source": SOURCE_TITLE, "page": 1,
+    return {"version": POLICY_VERSION, "source": SOURCE_TITLE, "sheet": "Sheet1", "source_rows": SOURCE_ROWS, "source_sha256": SOURCE_SHA256,
+            "interpretations": globals().get('POLICY_INTERPRETATIONS', {}),
+            "submitted_source_checks": SUBMITTED_SOURCE_CHECKS,
             "clarifications": [BIZ_TYPE_NAME_CLARIFICATION, RESULT_CLARIFICATION, POS_CLARIFICATION, POS_COMMON_CLARIFICATION, PAYMENT_CLARIFICATION, PERSONNEL_CONTRACT_CLARIFICATION,
                                SKU_CONTRACT_CLARIFICATION, BRAND_CONTRACT_CLARIFICATION, GIFT_CONTRACT_CLARIFICATION, AMOUNT_CLARIFICATION,
-                               UNIT_PRICE_CLARIFICATION, DISPLAY_BRAND_CLARIFICATION, STAFF_PHOTO_CLARIFICATION, PAYMENT_COMPANY_CLARIFICATION,
+                               UNIT_PRICE_CLARIFICATION, DISPLAY_BRAND_CLARIFICATION, STAFF_PHOTO_CLARIFICATION, DISPLAY_TABLE_PHOTO_CLARIFICATION, PAYMENT_COMPANY_CLARIFICATION,
                                AUDIT_SCOPE_CLARIFICATION, ATRIUM_CLARIFICATION, PRODUCT_PHOTO_CLARIFICATION,
-                               INVOICE_DETAILS_CLARIFICATION],
+                               INVOICE_DETAILS_CLARIFICATION, IMAGE_FACT_REUSE_CLARIFICATION, ENTRY_CHANNEL_CLARIFICATION,
+                               PRICE_SUPPORT_CLARIFICATION, GIFT_MATERIAL_CLARIFICATION, SUBMITTED_SOURCE_CLARIFICATION, LOCATION_REFERENCE_CLARIFICATION,
+                               PHOTO_TIME_PRESENCE_CLARIFICATION],
             "types": {key: {"label": SCENARIO_LABELS[key],
                             "materials": [asdict(r) for r in value],
                             "audit_points": [asdict(r) for r in rules(key)]}
@@ -545,3 +811,18 @@ def material_catalogue() -> dict:
         scenario: {"label": entry["label"], "materials": entry["materials"]}
         for scenario, entry in policy["types"].items()
     }}
+
+
+# The latest workbook replaces conflicting legacy PDF standards for new runs.
+# Historical manifests/snapshots retain their recorded policy version.
+from .fee_policy_source import apply_workbook_policy, SOURCE_ROWS, WORKBOOK_CLARIFICATION
+_legacy_seal_clarification = SEAL_CLARIFICATION
+apply_workbook_policy(globals())
+SOURCE_SHA256 = "79bec5967cc9b26f57dc7e3f60ee4af57671f497c488f30fbe55d3ced86e6ee1"
+
+# The POS arithmetic/identity supplement survives; the old prohibition of POS
+# seal checks does not override the workbook's explicit H-column checks.
+POS_COMMON_CLARIFICATION = POS_COMMON_CLARIFICATION.replace("本次未恢复POS印章、两版一致性或EAN校验位的独立审核", "POS盖章及经销商按新表H列检查，不新增两版数据差异或EAN校验位审核")
+
+from .fee_policy_nov17 import apply_nov17_policy
+apply_nov17_policy(globals(), _legacy_seal_clarification)

@@ -1,0 +1,226 @@
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "unit_id",
+      "written_dealer_name",
+      "seal_name",
+      "activity_period"
+    ],
+    "properties": {
+      "unit_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "written_dealer_name": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state",
+          "fact_indexes"
+        ],
+        "properties": {
+          "state": {
+            "enum": [
+              "present",
+              "absent",
+              "unclear",
+              "not_applicable"
+            ]
+          },
+          "fact_indexes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "present"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "fact_indexes": {
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "absent",
+                    "not_applicable"
+                  ]
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "fact_indexes": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "seal_name": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state",
+          "fact_indexes"
+        ],
+        "properties": {
+          "state": {
+            "enum": [
+              "present",
+              "absent",
+              "unclear",
+              "not_applicable"
+            ]
+          },
+          "fact_indexes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "present"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "fact_indexes": {
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "absent",
+                    "not_applicable"
+                  ]
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "fact_indexes": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "activity_period": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state",
+          "fact_indexes"
+        ],
+        "properties": {
+          "state": {
+            "enum": [
+              "present",
+              "absent",
+              "unclear",
+              "not_applicable"
+            ]
+          },
+          "fact_indexes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "present"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "fact_indexes": {
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "absent",
+                    "not_applicable"
+                  ]
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "fact_indexes": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

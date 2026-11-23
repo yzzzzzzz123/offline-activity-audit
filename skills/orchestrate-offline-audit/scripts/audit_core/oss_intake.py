@@ -25,9 +25,10 @@ from email.message import Message
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 from urllib.parse import quote, unquote, urljoin, urlparse
-from zoneinfo import ZoneInfo
 
-from .common import AuditError, BIZ_TYPE_FAILURE_MESSAGE, BIZ_TYPE_NOT_REQUIRED_MESSAGE, biz_type_skip_result
+from .common import (AuditError, BIZ_TYPE_FAILURE_MESSAGE,
+                     BIZ_TYPE_NOT_REQUIRED_MESSAGE, biz_type_skip_result,
+                     china_timezone)
 from .scenario_registry import scenario_for_biz_type
 from .customer_language import SYSTEM_FAILURE_MESSAGE
 from .codex_runner import DEFAULT_MODEL, DEFAULT_REASONING_EFFORT
@@ -56,6 +57,7 @@ DEFAULT_MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024
 DEFAULT_DOWNLOAD_TIMEOUT_SECONDS = 60
 DEFAULT_CALLBACK_TIMEOUT_SECONDS = 30
 DEFAULT_CALLBACK_ATTEMPTS = 3
+DEFAULT_AUDIT_WORKERS = 1
 CALLBACK_PATH = "/api/v1/ai/analyze/callback"
 MAX_CALLBACK_RESULT_CHARS = 20_000
 MAX_REQUEST_BYTES = 64 * 1024
@@ -67,6 +69,7 @@ ACTIVE_JOB_STATUSES = {
     "accepted",
     "downloading",
     "downloaded",
+    "waiting_offpeak",
     "running",
     "callback",
 }
@@ -79,6 +82,12 @@ def _attempt_job_id(identity_job_id: str, attempt: int) -> str:
         return identity_job_id
     value = f"{identity_job_id}:attempt:{attempt}"
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
+
+
+def _beijing_now() -> datetime:
+    """Wall clock used by the off-peak gate; injectable for tests."""
+    from .offpeak import beijing_now
+    return beijing_now()
 
 
 class OSSIntakeError(AuditError):
@@ -149,8 +158,12 @@ class OSSIntakeConfig:
     callback_token: str | None = None
     callback_timeout_seconds: int = DEFAULT_CALLBACK_TIMEOUT_SECONDS
     callback_attempts: int = DEFAULT_CALLBACK_ATTEMPTS
+    audit_workers: int = DEFAULT_AUDIT_WORKERS
+    offpeak_only: bool = True
 
     def __post_init__(self) -> None:
+        if type(self.audit_workers) is not int or self.audit_workers not in (1, 2):
+            raise OSSIntakeRequestError("OSS 核销并发数只能为整数 1 或 2")
         hosts = tuple(sorted({_normalized_host(value) for value in self.allowed_hosts}))
         if not hosts:
             raise OSSIntakeRequestError("启用 OSS 接口时必须配置至少一个精确下载域名")
@@ -211,6 +224,7 @@ class OSSIntakeConfig:
             callback_timeout_seconds,
         )
         object.__setattr__(self, "callback_attempts", callback_attempts)
+        object.__setattr__(self, "offpeak_only", bool(self.offpeak_only))
 
 
 def _validate_download_url(
@@ -293,7 +307,7 @@ def _safe_object_basename(object_key: str) -> str:
 
 def _business_date(value: Any) -> str:
     if value is None or value == "":
-        return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+        return datetime.now(china_timezone()).strftime("%Y%m%d")
     if not isinstance(value, str):
         raise OSSIntakeRequestError("business_date 必须是字符串")
     raw = value.strip()
@@ -422,6 +436,7 @@ def _normalize_compact_submission(
         # Keep the historical object fingerprint; this value selects the Skill.
         "biz_type": biz_type,
         "large_venue_fee": large_venue_fee,
+        "cvs_otc_channel": payload.get("cvsOtcChannel") is True,
         "bucket": host,
         "object_key": object_key,
         "basename": basename,
@@ -766,9 +781,15 @@ def run_formal_audit_subprocess(
     cancel_event: threading.Event | None = None,
     biz_type: str | None = None,
     large_venue_fee: bool | None = None,
+    cvs_otc_channel: bool = False,
+    input_source: str = "oss",
+    verify_code: str | None = None,
 ) -> dict[str, Any]:
-    from .model_settings import ModelSettingsStore, SNAPSHOT_ENV
-    selection = ModelSettingsStore(worktrees_root).snapshot()
+    from .model_settings import API_PROVIDERS, ModelSettingsStore, SNAPSHOT_ENV
+    from .session_model import upload_override, ENV as SESSION_ENV, PROVIDER as SESSION_PROVIDER, MODEL as SESSION_MODEL
+    session = upload_override(worktrees_root, input_source=input_source, verify_code=verify_code,
+                              input_dir=input_dir, run_id=run_id)
+    selection = None if session else ModelSettingsStore(worktrees_root).snapshot()
     with tempfile.TemporaryDirectory(
         prefix="offline-audit-oss-result-"
     ) as temporary:
@@ -780,15 +801,15 @@ def run_formal_audit_subprocess(
             "--run-id",
             run_id,
             "--producer-model",
-            selection.provider if selection.provider in {"qwen", "ppio"} else producer_model,
+            SESSION_PROVIDER if session else (selection.provider if selection.provider in API_PROVIDERS else producer_model),
             "--model",
-            selection.model,
+            SESSION_MODEL if session else selection.model,
             "--reasoning-effort",
-            selection.reasoning_effort,
+            "default" if session else selection.reasoning_effort,
             "--input-dir",
             str(input_dir),
             "--input-source",
-            "oss",
+            input_source,
             "--worktrees",
             str(worktrees_root),
             "--result-json",
@@ -800,6 +821,9 @@ def run_formal_audit_subprocess(
             command.append("--biz-type=" + biz_type)
         if large_venue_fee is not None:
             command.append("--large-venue-fee=" + json.dumps(large_venue_fee))
+        command.append("--cvs-otc-channel=" + json.dumps(cvs_otc_channel is True))
+        if verify_code:
+            command.extend(["--verify-code", verify_code])
         if workbench_url:
             command.extend(["--workbench-url", workbench_url])
         environment = os.environ.copy()
@@ -807,7 +831,12 @@ def run_formal_audit_subprocess(
         environment["PYTHONIOENCODING"] = "utf-8"
         # One immutable snapshot per formal process: switching the workbench
         # cannot change models half way through an existing audit.
-        environment[SNAPSHOT_ENV] = selection.subprocess_value()
+        if session:
+            environment.pop(SNAPSHOT_ENV, None)
+            environment[SESSION_ENV] = json.dumps(session, ensure_ascii=False)
+        else:
+            environment.pop(SESSION_ENV, None)
+            environment[SNAPSHOT_ENV] = selection.subprocess_value()
         kwargs: dict[str, Any] = {}
         if os.name == "nt":
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -1065,6 +1094,8 @@ class OSSIntakeStore:
         self.jobs_root = self.root / "jobs"
         self.jobs_root.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        from .worker_handoff import restore_handoff
+        self._handoff_jobs = restore_handoff(self.root)
         self._recover_interrupted_jobs()
 
     def _path(self, job_id: str) -> Path:
@@ -1073,20 +1104,33 @@ class OSSIntakeStore:
         return self.jobs_root / f"{job_id}.json"
 
     def _recover_interrupted_jobs(self) -> None:
+        restored={j['job_id'] for j in self._handoff_jobs}
         for path in self.jobs_root.glob("*.json"):
+            if path.stem in restored:continue
             try:
                 job = read_json_file(path)
             except (OSError, ValueError, json.JSONDecodeError):
                 continue
             if str(job.get("status")) not in ACTIVE_JOB_STATUSES:
                 continue
+            if str(job.get("status")) == "waiting_offpeak":
+                # The new service re-queues these through the gate; they never
+                # started, so a restart is not an interrupted run.
+                continue
+            job['interrupted_status'] = str(job['status'])
             job["status"] = "failed"
             job["updated_at"] = utc_now()
             job["finished_at"] = utc_now()
             job["failure"] = {
                 "code": "service_restarted",
-                "message": "服务在任务完成前重启；如需重新分析，请使用同一业务字段和新的临时下载地址再次投递。",
+                "message": ("服务在任务完成前重启；原始资料包已保留，请在资料上传模块重新提交。"
+                            if job.get('input_source') == 'input' else
+                            "服务在任务完成前重启；如需重新分析，请使用同一业务字段和新的临时下载地址再次投递。"),
             }
+            from .execution_diagnostics import report_failure
+            job['execution_diagnostic'] = report_failure(
+                OSSIntakeExecutionError('服务启动时发现上次任务未完成；中断前状态及任务回执已保留，具体中断原因待核实。'),
+                stage='service_recovery', worktrees=self.root.parent, run_id=job.get('run_id'))
             atomic_write_json(path, job)
 
     def _jobs_for_identity(self, identity_job_id: str) -> list[dict[str, Any]]:
@@ -1142,6 +1186,8 @@ class OSSIntakeStore:
                         raise OSSIntakeConflictError("活动任务的bizType不能更改，请等待本次处理结束后重新提交")
                     if existing.get("largeVenueFee") is not submission.get("large_venue_fee"):
                         raise OSSIntakeConflictError("活动任务的largeVenueFee不能更改，请等待本次处理结束后重新提交")
+                    if (existing.get("cvsOtcChannel") is True) != (submission.get("cvs_otc_channel") is True):
+                        raise OSSIntakeConflictError("活动任务的cvsOtcChannel不能更改，请等待本次处理结束后重新提交")
                     return existing, False
                 attempt = max(int(item.get("attempt") or 1) for item in identity_jobs) + 1
                 supersedes_job_id = str(existing["job_id"])
@@ -1173,6 +1219,7 @@ class OSSIntakeStore:
                 "analyzeId": submission.get("analyze_id"),
                 "bizType": submission.get("biz_type"),
                 "largeVenueFee": submission.get("large_venue_fee"),
+                "cvsOtcChannel": submission.get("cvs_otc_channel") is True,
                 "idempotency_fingerprint": submission["fingerprint"],
                 "status": "accepted",
                 "created_at": now,
@@ -1276,12 +1323,15 @@ class OSSIntakeService:
         runner: AuditRunner = run_formal_audit_subprocess,
         url_validator: URLValidator = _validate_download_url,
         callback_sender: CallbackSender = post_analysis_callback,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.worktrees_root = worktrees_root.resolve()
         self.worktrees_root.mkdir(parents=True, exist_ok=True)
         self.input_root = input_root.resolve()
         self.input_root.mkdir(parents=True, exist_ok=True)
         self.config = config
+        from .audit_schedule import AuditScheduleStore
+        self.schedule_settings = AuditScheduleStore(self.worktrees_root)
         self.store = OSSIntakeStore(self.worktrees_root / ".intake")
         self.downloader = downloader
         self.runner = runner
@@ -1291,19 +1341,41 @@ class OSSIntakeService:
         self._audit_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
         self._closed = threading.Event()
         self._lifecycle_lock = threading.Lock()
+        self._upload_slots = threading.BoundedSemaphore(2)
         self._controls: dict[str, _JobControl] = {}
+        self._clock = clock or _beijing_now
+        self._offpeak_pending: dict[str, dict[str, Any]] = {}
+        self._offpeak_lock = threading.RLock()
+        self._offpeak_wake = threading.Event()
+        self._forced_immediate: set[str] = set()
         self._download_worker = threading.Thread(
             target=self._download_worker_loop,
             name="offline-audit-oss-download",
             daemon=True,
         )
-        self._audit_worker = threading.Thread(
-            target=self._audit_worker_loop,
-            name="offline-audit-oss-audit",
+        self._audit_workers = [
+            threading.Thread(
+                target=self._audit_worker_loop,
+                name=f"offline-audit-oss-audit-{index + 1}",
+                daemon=True,
+            )
+            for index in range(config.audit_workers)
+        ]
+        if self.store._handoff_jobs:
+            from .worker_handoff import submission_from_job
+            for job in sorted(self.store._handoff_jobs,key=lambda j:j['created_at']):
+                self._controls[job['job_id']]=_JobControl()
+                self._audit_queue.put(submission_from_job(job))
+        self._requeue_offpeak_waits()
+        self._offpeak_thread = threading.Thread(
+            target=self._offpeak_loop,
+            name="offline-audit-offpeak-release",
             daemon=True,
         )
         self._download_worker.start()
-        self._audit_worker.start()
+        for worker in self._audit_workers:
+            worker.start()
+        self._offpeak_thread.start()
 
     def submit(self, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         submission = normalize_submission(
@@ -1322,6 +1394,70 @@ class OSSIntakeService:
                 self._controls[str(submission["job_id"])] = _JobControl()
                 self._download_queue.put(submission)
         return job, created
+
+    def submit_upload(self, stream, *, length: int, filename: str, biz_type: str,
+                      request_id: str, large_venue_fee: bool | None = None,
+                      cvs_otc_channel: bool = False, verify_code: str | None = None,
+                      analyze_id: int | None = None) -> tuple[dict[str, Any], bool]:
+        from .local_upload import upload_metadata, receive_zip
+        from .run_temporary import ManagedTemporaryDirectory
+        import shutil
+        from datetime import datetime
+
+        metadata = upload_metadata(filename, biz_type, request_id, large_venue_fee, cvs_otc_channel,
+                                   verify_code=verify_code, analyze_id=analyze_id)
+        if self.config.receive_only:
+            raise OSSIntakeUnavailableError('服务当前仅接收系统资料，暂不能开始手动核销')
+        if not self._upload_slots.acquire(blocking=False):
+            raise OSSIntakeUnavailableError('当前已有资料正在上传，请稍后再试')
+        try:
+            with ManagedTemporaryDirectory('upload', scope=self.worktrees_root) as temporary:
+                staged = Path(temporary) / filename
+                checksum = receive_zip(stream, length, staged, self.config.max_download_bytes)
+                job_id = hashlib.sha256(('local-upload:' + request_id).encode()).hexdigest()[:24]
+                fingerprint_fields = [checksum, filename, biz_type, large_venue_fee]
+                # An omitted/false channel keeps pre-field retry identities.
+                if metadata['cvs_otc_channel']:
+                    fingerprint_fields.append(True)
+                if metadata['verify_code'] is not None or metadata['analyze_id'] is not None:
+                    fingerprint_fields.append({'verifyCode': metadata['verify_code'], 'analyzeId': metadata['analyze_id']})
+                fingerprint = hashlib.sha256(json.dumps(fingerprint_fields, ensure_ascii=False).encode()).hexdigest()
+                submission = {**metadata, 'job_id':job_id, 'event_id':'local-upload:' + request_id,
+                              'fingerprint':fingerprint, 'run_id':datetime.now().strftime('%Y%m%d') + '-upload-' + job_id[:12],
+                              'producer_model':self.config.producer_model, 'bucket':None, 'object_key':filename,
+                              'size':length, 'sha256':checksum, 'callback_required':False, 'input_source':'input'}
+                with self._lifecycle_lock:
+                    if self._closed.is_set():raise OSSIntakeUnavailableError('服务正在关闭，请稍后重新上传')
+                    try:existing = self.store.get(job_id)
+                    except FileNotFoundError:existing = None
+                    if existing is not None:
+                        if existing.get('idempotency_fingerprint') != fingerprint:
+                            raise OSSIntakeConflictError('同一上传提交的资料或核销类型已变化，请重新选择文件')
+                        return existing, False
+                    directory = self.input_root / job_id
+                    if directory.is_symlink() or directory.resolve().parent != self.input_root:
+                        raise OSSIntakeRequestError('上传目录归属无效')
+                    try:directory.mkdir(exist_ok=False)
+                    except FileExistsError as exc:
+                        raise OSSIntakeConflictError('上次上传尚未完成，请重新选择文件后提交') from exc
+                    destination = directory / filename
+                    partial = directory / 'upload.part'
+                    try:
+                        with staged.open('rb') as source, partial.open('xb') as output:
+                            shutil.copyfileobj(source, output, length=1024 * 1024)
+                        partial.rename(destination)
+                    except BaseException:
+                        if partial.is_file() and not partial.is_symlink():partial.unlink()
+                        if not any(directory.iterdir()):directory.rmdir()
+                        raise
+                    self.store.create_or_get(submission)
+                    self.store.update(job_id, status='downloaded', started_at=utc_now(), downloaded_at=utc_now(),
+                                      input_source='input', delivery={'input_directory':str(directory),
+                                      'input_file':str(destination), 'size':length, 'sha256':checksum})
+                    self._controls[job_id] = _JobControl()
+                    self._audit_queue.put(submission)
+                    return self.store.get(job_id), True
+        finally:self._upload_slots.release()
 
     def get(self, job_id: str) -> dict[str, Any]:
         return self.store.get(job_id)
@@ -1379,6 +1515,7 @@ class OSSIntakeService:
                 return
             self._closed.set()
             self._download_queue.put(None)
+            self._offpeak_wake.set()
 
     def _download_worker_loop(self) -> None:
         while True:
@@ -1388,7 +1525,8 @@ class OSSIntakeService:
                     # The sentinel is queued after every accepted submission. Forward it
                     # only after all downloads have either failed or entered the audit
                     # queue, so close() cannot strand a verified ZIP between stages.
-                    self._audit_queue.put(None)
+                    for _ in self._audit_workers:
+                        self._audit_queue.put(None)
                     return
                 control = self._begin_job_stage(submission)
                 if control is None:
@@ -1398,6 +1536,9 @@ class OSSIntakeService:
                 finally:
                     self._end_job_stage(control)
                     self._release_terminal_control(submission, control)
+            except BaseException as exc:
+                if submission is not None:
+                    self._worker_failure(submission, exc, stage='download_worker')
             finally:
                 self._download_queue.task_done()
 
@@ -1407,6 +1548,8 @@ class OSSIntakeService:
             try:
                 if submission is None:
                     return
+                if self._hold_for_offpeak(submission):
+                    continue
                 control = self._begin_job_stage(submission)
                 if control is None:
                     continue
@@ -1415,8 +1558,172 @@ class OSSIntakeService:
                 finally:
                     self._end_job_stage(control)
                     self._release_terminal_control(submission, control)
+            except BaseException as exc:
+                if submission is not None:
+                    self._worker_failure(submission, exc, stage='audit_worker')
             finally:
                 self._audit_queue.task_done()
+
+    def _hold_for_offpeak(self, submission: dict[str, Any]) -> bool:
+        """Park a job outside the off-peak window instead of starting it.
+
+        Only the start of a run is gated. Once a worker has handed a job to the
+        formal runner, the window closing again never stops it.
+        """
+        job_id = str(submission["job_id"])
+        with self._offpeak_lock:
+            try:
+                # A queued submission can contain an obsolete force_now flag.
+                # Only the current stored grant can authorize a manual start.
+                if self.store.get(job_id).get("force_now"):
+                    return False
+            except FileNotFoundError:
+                return False
+            status = self._schedule_status()
+            if status["allowed_now"]:
+                return False
+            self._offpeak_pending[job_id] = submission
+            try:
+                self.store.update(
+                    job_id,
+                    status="waiting_offpeak",
+                    offpeak_waiting_since=utc_now(),
+                    offpeak_next_start=status["next_offpeak_start"],
+                    offpeak_window=status["window"],
+                )
+            except FileNotFoundError:
+                self._offpeak_pending.pop(job_id, None)
+                return False
+        return True
+
+    def _requeue_offpeak_waits(self) -> None:
+        """Restore jobs parked before a restart; the gate decides again."""
+        try:
+            waiting = [job for job in self.store.list(active_only=True)
+                       if str(job.get("status")) == "waiting_offpeak"]
+        except (OSError, ValueError, AuditError):
+            return
+        from .worker_handoff import submission_from_job
+        for job in sorted(waiting, key=lambda item: str(item.get("created_at") or "")):
+            job_id = str(job["job_id"])
+            try:
+                self.store.update(job_id, status="downloaded")
+            except FileNotFoundError:
+                continue
+            self._controls.setdefault(job_id, _JobControl())
+            self._audit_queue.put({**submission_from_job(job),
+                                   "force_now": job.get("force_now") is True})
+
+    def _offpeak_loop(self) -> None:
+        while not self._closed.is_set():
+            self._offpeak_wake.wait(timeout=20)
+            self._offpeak_wake.clear()
+            if self._closed.is_set():
+                return
+            try:
+                self._release_offpeak_jobs()
+            except BaseException:
+                # A release attempt never takes the queue thread down.
+                continue
+
+    def _release_offpeak_jobs(self, *, force: bool = False) -> list[str]:
+        with self._offpeak_lock:
+            status = self._schedule_status()
+            if not force and not status["allowed_now"]:
+                return []
+            pending = list(self._offpeak_pending.values())
+            self._offpeak_pending.clear()
+        released: list[str] = []
+        for submission in pending:
+            job_id = str(submission["job_id"])
+            if self._closed.is_set():
+                with self._offpeak_lock:
+                    self._offpeak_pending.setdefault(job_id, submission)
+                continue
+            try:
+                self.store.update(job_id, status="downloaded",
+                                  offpeak_released_at=utc_now())
+            except FileNotFoundError:
+                continue
+            self._audit_queue.put({**submission, "force_now": job_id in self._forced_immediate})
+            released.append(job_id)
+        return released
+
+    def request_immediate(self, job_id: str) -> dict[str, Any]:
+        """Operator button: start this job now, ignoring the off-peak gate."""
+        with self._lifecycle_lock, self._offpeak_lock:
+            if self._closed.is_set():
+                raise OSSIntakeUnavailableError("服务正在关闭，请稍后重试")
+            job = self.store.get(job_id)
+            status = str(job.get("status"))
+            if status not in {"accepted", "downloading", "downloaded", "waiting_offpeak"}:
+                raise OSSIntakeConflictError("该记录已开始核销或已结束，不能立即分析")
+            self._forced_immediate.add(job_id)
+            parked = self._offpeak_pending.pop(job_id, None)
+            if parked is not None:
+                from .worker_handoff import submission_from_job
+                self.store.update(job_id, status="downloaded", force_now=True,
+                                  offpeak_forced_at=utc_now())
+                self._audit_queue.put({**(parked or submission_from_job(job)), "force_now": True})
+            else:
+                self.store.update(job_id, force_now=True, offpeak_forced_at=utc_now())
+            return self.store.get(job_id)
+
+    def request_immediate_all(self) -> list[dict[str, Any]]:
+        """Operator button: release every job currently waiting for off-peak.
+
+        Jobs already running are left untouched, and a job whose record has
+        moved on in the meantime is skipped instead of failing the batch.
+        """
+        with self._offpeak_lock:
+            job_ids = set(self._offpeak_pending)
+        try:
+            job_ids.update(
+                str(job["job_id"])
+                for job in self.store.list(active_only=True)
+                if str(job.get("status")) == "waiting_offpeak"
+            )
+        except (OSError, ValueError, AuditError):
+            pass
+        released: list[dict[str, Any]] = []
+        for job_id in sorted(job_ids):
+            try:
+                released.append(self.request_immediate(job_id))
+            except (FileNotFoundError, OSSIntakeConflictError):
+                continue
+        return released
+
+    def _schedule_status(self) -> dict[str, Any]:
+        # Legacy startup switches are defaults only. Once the operator has
+        # saved a timetable, that timetable is the authoritative start policy.
+        startup_default = not self.config.offpeak_only and self.schedule_settings.public()['revision'] == 0
+        return self.schedule_settings.describe(self._clock(), forced_always=startup_default)
+
+    def offpeak_status(self) -> dict[str, Any]:
+        with self._offpeak_lock:
+            waiting = len(self._offpeak_pending)
+            return {**self._schedule_status(),
+                    "waiting": waiting}
+
+    def save_schedule_settings(self, payload: dict) -> dict[str, Any]:
+        """Apply to queued/new jobs, with no effect on runners already in flight."""
+        with self._offpeak_lock:
+            settings = self.schedule_settings.save(payload)
+            status = self.offpeak_status()
+            # Include materials queued behind a busy worker, not just jobs
+            # that a free worker has already parked in _offpeak_pending.
+            for job in self.store.list(active_only=True):
+                job_id = str(job['job_id'])
+                if str(job.get('status')) not in {'accepted', 'downloading', 'downloaded', 'waiting_offpeak'}:
+                    continue
+                try:
+                    self._forced_immediate.discard(job_id)
+                    self.store.update(job_id, force_now=False, offpeak_next_start=status["next_offpeak_start"],
+                                      offpeak_window=status["window"], schedule_revision=settings['revision'])
+                except FileNotFoundError:
+                    self._offpeak_pending.pop(job_id, None)
+            self._offpeak_wake.set()
+        return settings
 
     def _begin_job_stage(self, submission: dict[str, Any]) -> _JobControl | None:
         control = self._controls.get(str(submission["job_id"]))
@@ -1450,6 +1757,7 @@ class OSSIntakeService:
             with self._lifecycle_lock:
                 if self._controls.get(job_id) is control:
                     self._controls.pop(job_id, None)
+                self._forced_immediate.discard(job_id)
 
     @staticmethod
     def _raise_if_cancelled(control: _JobControl) -> None:
@@ -1555,13 +1863,22 @@ class OSSIntakeService:
     def _audit(self, submission: dict[str, Any], control: _JobControl) -> None:
         job_id = str(submission["job_id"])
         input_dir = self.input_root / job_id
-        self.store.update(
-            job_id,
-            status="running",
-            audit_started_at=utc_now(),
-            failure=None,
-        )
+        # Linearize the actual start against schedule edits. An earlier gate
+        # check cannot authorize a runner after the operator closes the window.
+        with self._offpeak_lock:
+            if self._hold_for_offpeak(submission):
+                return
+            self.store.update(
+                job_id,
+                status="running",
+                audit_started_at=utc_now(),
+                schedule_revision=self.schedule_settings.public()['revision'],
+                failure=None,
+            )
         try:
+            source_options = {'input_source':'input'} if submission.get('input_source') == 'input' else {}
+            if submission.get("verify_code"):
+                source_options["verify_code"] = submission["verify_code"]
             result = self.runner(
                 run_id=submission["run_id"],
                 producer_model=self.config.producer_model,
@@ -1570,8 +1887,10 @@ class OSSIntakeService:
                 scenario=submission.get("scenario"),
                 biz_type=submission.get("biz_type"),
                 large_venue_fee=submission.get("large_venue_fee"),
+                cvs_otc_channel=submission.get("cvs_otc_channel") is True,
                 workbench_url=self.config.workbench_url,
                 cancel_event=control.cancel_event,
+                **source_options,
             )
             self._raise_if_cancelled(control)
             result = project_run_status(result)
@@ -1579,8 +1898,22 @@ class OSSIntakeService:
                                 and (result.get("failure") or {}).get("code") == "biz_type_unrecognized")
             if result.get("status") != "completed" and not biz_type_failed:
                 raise OSSIntakeExecutionError("正式核销运行返回的结果收据无效")
-            self._finish_job(submission, control, result,
-                             failure=result["failure"] if biz_type_failed else None)
+            failure = result["failure"] if biz_type_failed else None
+        except OSSIntakeCancelledError:
+            return
+        except Exception as exc:
+            # The formal runner owns the bounded model retries. Recover its
+            # durable archive after exhaustion; never rerun AI for a callback.
+            failure = {"code": "audit_failed", "message": self._safe_failure_message(exc, submission)}
+            result = self._find_run_receipt(str(submission["run_id"])) or {"run_id": submission["run_id"]}
+            saved_failure = result.get("failure")
+            if not isinstance(saved_failure, dict) or not str(saved_failure.get("message") or "").strip():
+                saved_failure = failure
+            result = {**result, "status": "failed", "failure": saved_failure}
+            self._diagnose_job_failure(submission, exc, stage='audit')
+        try:
+            self._raise_if_cancelled(control)
+            self._finish_job(submission, control, result, failure=failure)
         except OSSIntakeCancelledError:
             return
         except BaseException as exc:
@@ -1644,18 +1977,20 @@ class OSSIntakeService:
         exc: BaseException,
     ) -> None:
         job_id = str(submission["job_id"])
+        self._diagnose_job_failure(submission, exc)
         existing_job = self.store.get(job_id)
         result = existing_job.get("result") or self._find_run_receipt(
             str(submission["run_id"])
         )
         message = self._safe_failure_message(exc, submission)
-        if isinstance(exc, OSSIntakeCallbackError):
+        if (isinstance(exc, OSSIntakeCallbackError)
+                or (existing_job.get("callback") or {}).get("status") == "sending"):
             failure_code = "callback_failed"
             callback = {
                 "required": True,
                 "status": "failed",
-                "attempts": exc.attempts,
-                "http_status": exc.http_status,
+                "attempts": getattr(exc, "attempts", 0),
+                "http_status": getattr(exc, "http_status", None),
                 "delivered_at": None,
             }
         else:
@@ -1677,6 +2012,35 @@ class OSSIntakeService:
             finished_at=utc_now(),
         )
 
+    def _worker_failure(self, submission, error, *, stage):
+        self._diagnose_job_failure(submission, error, stage=stage)
+        try:
+            self._fail_job(submission, error)
+        except BaseException as storage_error:
+            self._diagnose_job_failure(submission, storage_error, stage='job_failure_archive')
+
+    def _diagnose_job_failure(self, submission, error, *, stage=None):
+        # This boundary also covers download/callback/worker failures before a
+        # formal workspace exists. It never retries AI or sends a callback.
+        from .execution_diagnostics import report_failure, list_reports
+        try:
+            job = self.store.get(str(submission['job_id']))
+            stage = stage or str(job.get('status') or 'intake')
+            report = None
+            if stage == 'audit':
+                receipt = self._find_run_receipt(str(submission['run_id']))
+                workspace_id = (receipt or {}).get('workspace_id')
+                reports = list_reports(self.worktrees_root, workspace_id) if workspace_id else []
+                report = reports[0] if reports else None
+            report = report or report_failure(error, stage=stage, worktrees=self.worktrees_root,
+                                              run_id=submission['run_id'])
+            if report:
+                self.store.update(str(submission['job_id']), execution_diagnostic=report)
+        except BaseException:
+            # Even a broken job store cannot prevent the fallback report.
+            report_failure(error, stage=stage or 'intake', worktrees=self.worktrees_root,
+                           run_id=submission.get('run_id'))
+
     def _find_run_receipt(self, run_id: str) -> dict[str, Any] | None:
         matches: list[tuple[float, Path, dict[str, Any]]] = []
         for path in self.worktrees_root.iterdir():
@@ -1688,7 +2052,7 @@ class OSSIntakeService:
                 if str(manifest.get("run_id")) != run_id:
                     continue
                 matches.append((manifest_path.stat().st_mtime, path, manifest))
-            except (OSError, ValueError, json.JSONDecodeError):
+            except (OSError, ValueError, json.JSONDecodeError, AuditError):
                 continue
         if not matches:
             return None
@@ -1698,7 +2062,10 @@ class OSSIntakeService:
             "run_id": run_id,
             "workspace_id": manifest.get("workspace_id") or path.name,
             "status": manifest.get("status"),
+            "failure": manifest.get("failure"),
             "worktree": str(path.resolve()),
+            "snapshot": str((path / "snapshot.json").resolve()),
+            "analysis_summary": str((path / ANALYSIS_SUMMARY_FILENAME).resolve()),
             "workbench_url": (
                 f"{base}/?run={quote(path.name, safe='')}" if base else None
             ),
@@ -1737,6 +2104,7 @@ def public_job(job: dict[str, Any], *, input_root: Path = DEFAULT_OSS_INPUT_ROOT
         result.setdefault("bizType", result.pop("planType"))
     result.setdefault("bizType", None)
     result.setdefault("largeVenueFee", None)
+    result.setdefault("cvsOtcChannel", False)
     delivery = result.get("delivery")
     job_id = str(result.get("job_id") or "")
     if isinstance(delivery, dict) and JOB_ID_PATTERN.fullmatch(job_id):

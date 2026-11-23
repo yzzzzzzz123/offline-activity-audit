@@ -185,6 +185,11 @@ def run_audit(
     scenario: str | None = None,
     biz_type: str | None = None,
     large_venue_fee: bool | None = None,
+    cvs_otc_channel: bool = False,
+    verify_code: str | None = None,
+    qince_data: dict | None = None,
+    worktrees_root: str | Path | None = None,
+    workspace_id: str | None = None,
     observer: RunObserver | None = None,
 ) -> dict[str, Any]:
     normalized_run_id = normalize_run_id(run_id)
@@ -199,6 +204,10 @@ def run_audit(
         input_dir=input_dir, temporary_root=temporary_root,
         provider=provider, scenario=scenario, observer=observer, biz_type=biz_type,
         large_venue_fee=large_venue_fee,
+        cvs_otc_channel=cvs_otc_channel is True,
+        verify_code=verify_code, qince_data=qince_data,
+        worktrees_root=Path(worktrees_root).resolve() if worktrees_root is not None else output_root,
+        workspace_id=workspace_id,
     )
     try:
         return workflow.run()

@@ -332,12 +332,16 @@ def _pdf_policy_checks(root: Path, scenario: str, skill_name: str, audit_module:
                             str(skill / "SKILL.md"), "校验Skill名称与描述"))
         schema = _read_json(skill / "references/evidence.schema.json")
         Draft202012Validator.check_schema(schema)
-        expected_schema = _read_json(root / "skills/orchestrate-offline-audit/references/contracts/pdf-policy-audit.schema.json")
-        rule_ids = [rule["id"] for rule in entry["audit_points"]]
-        expected_schema["properties"]["checks"].update(minItems=len(rule_ids), maxItems=len(rule_ids))
-        expected_schema["properties"]["checks"]["items"]["properties"]["rule_id"] = {"type": "string", "enum": rule_ids}
+        # Validate generated files against the same public contract builder as
+        # the generator. Hand-rebuilding an older subset lost the new source
+        # evidence and response-size constraints even when all files were synced.
+        runtime = str(root / "skills/orchestrate-offline-audit/scripts")
+        if runtime not in sys.path:
+            sys.path.insert(0, runtime)
+        from audit_core.pdf_evidence import audit_schema
+        expected_schema = audit_schema(scenario)
         checks.append(Check("evidence_schema", schema == expected_schema,
-                            str(skill), "统一证据结构严格限定本类型的PDF审核项与准确项数"))
+                            str(skill), "统一证据结构严格限定本类型的PDF及已确认补充审核项与准确项数"))
         classification = _read_json(root / "skills/orchestrate-offline-audit/references/contracts/pdf-material-classification.schema.json")
         Draft202012Validator.check_schema(classification)
         checks.append(Check("classification_types", set(classification["properties"]["candidate_scenarios"]["items"]["enum"]) == set(catalogue["types"]),

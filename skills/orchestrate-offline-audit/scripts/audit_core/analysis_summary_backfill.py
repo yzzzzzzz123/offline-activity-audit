@@ -129,6 +129,7 @@ def backfill_analysis_summaries(
         manifest = item["manifest"]
         snapshot = item["snapshot"]
         manifest["analysis_summary"] = metadata
+        manifest["analysis_summary_display"] = {"text": item["summary"].strip(), "source": "saved"}
         snapshot["run"]["analysis_summary"] = metadata
         atomic_write_json(item["snapshot_path"], snapshot)
         manifest["snapshot_sha256"] = hashlib.sha256(

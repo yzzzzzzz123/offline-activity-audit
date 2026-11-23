@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import errno
 import stat
-import tempfile
 import unittest
 import warnings
 import zipfile
@@ -11,7 +10,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
-from pypdf.errors import DependencyError, PdfReadError
+import pymupdf
+from pypdf.errors import DependencyError
 
 from audit_core.archive_input import (
     ArchiveClassificationError,
@@ -26,6 +26,8 @@ from audit_core.archive_input import (
 from audit_core.common import AuditError
 from audit_core.legacy_activity_workbook import LegacyWorkbookMaterialError
 from audit_core.material_intake import _scenario_hint, _visual_limitations, prepare_material_diagnosis
+from audit_core.reading_contract import ReadingSecurityError, ReadingSystemError
+from tests.reader_test_support import new_test_dir, remove_test_dir
 
 
 def _image_bytes(color: str = "white") -> bytes:
@@ -42,11 +44,15 @@ def _zip_bytes(files: dict[str, bytes]) -> bytes:
     return output.getvalue()
 
 
+def _legacy_workbook_bytes(label: bytes = b"mock confirmed activity workbook") -> bytes:
+    """A minimal OLE-marked fixture so the legacy adapter branch is reachable."""
+    return bytes.fromhex("d0cf11e0a1b11ae1") + label
+
+
 class MaterialIntakeTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = new_test_dir("material-intake-")
+        self.addCleanup(remove_test_dir, self.root)
         self.inputs = self.root / "input"
         self.inputs.mkdir()
         self.prepared = self.root / "prepared"
@@ -196,12 +202,13 @@ class MaterialIntakeTests(unittest.TestCase):
         files = self.diagnose()["archives"][0]["inventory"]
         self.assertEqual(len(files), 3)
         self.assertTrue(all(item["limitations"] for item in files))
-        self.assertEqual(next(item for item in files if item["suffix"] == ".docx")["kind"], "unsupported")
+        self.assertEqual(next(item for item in files if item["suffix"] == ".docx")["kind"], "word_document")
 
     def test_visual_validation_preserves_environment_and_resource_failures(self) -> None:
+        (self.root / "source.pdf").write_bytes(b"%PDF-1.7")
         for suffix, target in (
             (".jpg", "audit_core.material_intake.Image.open"),
-            (".pdf", "audit_core.material_intake.PdfReader"),
+            (".pdf", "audit_core.material_intake.pymupdf.open"),
         ):
             for error in (
                 PermissionError("access denied"), FileNotFoundError("source disappeared"),
@@ -217,10 +224,11 @@ class MaterialIntakeTests(unittest.TestCase):
                     self.assertIs(caught.exception, error)
 
     def test_visual_format_errors_remain_reportable(self) -> None:
+        (self.root / "source.pdf").write_bytes(b"%PDF-1.7")
         for suffix, target, error in (
             (".jpg", "audit_core.material_intake.Image.open", OSError("image file is truncated")),
             (".jpg", "audit_core.material_intake.Image.open", SyntaxError("bad PNG chunk")),
-            (".pdf", "audit_core.material_intake.PdfReader", PdfReadError("damaged PDF")),
+            (".pdf", "audit_core.material_intake.pymupdf.open", pymupdf.FileDataError("damaged PDF")),
         ):
             with self.subTest(suffix=suffix, error=type(error).__name__), patch(target, side_effect=error):
                 self.assertTrue(_visual_limitations(self.root / ("source" + suffix)))
@@ -254,7 +262,7 @@ class MaterialIntakeTests(unittest.TestCase):
 
     def test_legacy_workbook_material_error_keeps_other_visuals_and_removes_partial_conversion(self) -> None:
         self.bundle({
-            "活动返图.xls": b"mock confirmed activity workbook",
+            "活动返图.xls": _legacy_workbook_bytes(),
             "合同.png": _image_bytes(), "结算单.png": _image_bytes("red"),
         })
         attempted_roots = []
@@ -284,25 +292,47 @@ class MaterialIntakeTests(unittest.TestCase):
         self.assertFalse(attempted_roots[0].exists())
         self.assertFalse(list((self.prepared / "material_diagnostic").rglob("partial*")))
 
-    def test_legacy_workbook_dependency_and_security_errors_abort_and_clean_diagnosis(self) -> None:
-        self.bundle({"活动返图.xls": b"mock confirmed activity workbook", "合同.png": _image_bytes()})
-        for message in ("读取活动返图.xls需要 Windows PowerShell 和 Microsoft Excel", "活动返图工作簿图片路径不安全"):
-            with self.subTest(message=message):
-                failure = AuditError(message)
+    def test_legacy_workbook_dependency_failure_is_file_scoped(self) -> None:
+        self.bundle({"活动返图.xls": _legacy_workbook_bytes(), "合同.png": _image_bytes()})
+        failure = ReadingSystemError(
+            "读取活动返图.xls需要 LibreOffice Writer", code="renderer_missing", retryable=False)
 
-                def broken_execution(_: Path, destination: Path) -> dict:
-                    destination.mkdir(parents=True)
-                    (destination / "partial.xlsx").write_bytes(b"partial converted workbook")
-                    raise failure
+        def broken_execution(_: Path, destination: Path) -> dict:
+            destination.mkdir(parents=True)
+            (destination / "partial.xlsx").write_bytes(b"partial converted workbook")
+            raise failure
 
-                with (
-                    patch("audit_core.material_intake._is_activity_return_workbook", return_value=True),
-                    patch("audit_core.material_intake.extract_activity_return_workbook", side_effect=broken_execution),
-                    self.assertRaises(AuditError) as caught,
-                ):
-                    self.diagnose()
-                self.assertIs(caught.exception, failure)
-                self.assertFalse((self.prepared / "material_diagnostic").exists())
+        with (
+            patch("audit_core.material_intake._is_activity_return_workbook", return_value=True),
+            patch("audit_core.material_intake.extract_activity_return_workbook", side_effect=broken_execution),
+        ):
+            files = self.diagnose()["archives"][0]["inventory"]
+        workbook = next(item for item in files if item["suffix"] == ".xls")
+        image = next(item for item in files if item["suffix"] == ".png")
+        self.assertEqual(workbook["status"], "system_failure")
+        self.assertFalse(workbook["customer_actionable"])
+        self.assertEqual(workbook["error_code"], "renderer_missing")
+        self.assertEqual(image["status"], "adapter_ok")
+        self.assertTrue(image["path"].is_file())
+        self.assertFalse(list((self.prepared / "material_diagnostic").rglob("partial*")))
+
+    def test_legacy_workbook_security_error_aborts_and_cleans_diagnosis(self) -> None:
+        self.bundle({"活动返图.xls": _legacy_workbook_bytes(), "合同.png": _image_bytes()})
+        failure = ReadingSecurityError("活动返图工作簿图片路径不安全")
+
+        def unsafe_execution(_: Path, destination: Path) -> dict:
+            destination.mkdir(parents=True)
+            (destination / "partial.xlsx").write_bytes(b"partial converted workbook")
+            raise failure
+
+        with (
+            patch("audit_core.material_intake._is_activity_return_workbook", return_value=True),
+            patch("audit_core.material_intake.extract_activity_return_workbook", side_effect=unsafe_execution),
+            self.assertRaises(AuditError) as caught,
+        ):
+            self.diagnose()
+        self.assertIs(caught.exception, failure)
+        self.assertFalse((self.prepared / "material_diagnostic").exists())
 
     def test_unsafe_nested_archive_blocks_before_visual_parsing(self) -> None:
         self.bundle({"IMG.png": _image_bytes(), "恶意.zip": _zip_bytes({"../逃逸.jpg": _image_bytes()})})
@@ -390,7 +420,7 @@ class MaterialIntakeTests(unittest.TestCase):
 
     def test_rar_dependency_failure_is_not_recoverable(self) -> None:
         self.bundle({"照片.rar": b"rar"})
-        with patch("audit_core.material_intake.shutil.which", return_value=None):
+        with patch("audit_core.archive_tools.shutil.which", return_value=None):
             with self.assertRaisesRegex(ArchiveInputError, "系统未提供") as caught:
                 self.diagnose()
         self.assertNotIsInstance(caught.exception, MaterialInputError)

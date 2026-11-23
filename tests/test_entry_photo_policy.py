@@ -1,4 +1,5 @@
-"""Pass all current-case photos to the store-aware address comparison."""
+"""Keep every current-case photo addressable for the store-aware comparison."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -7,6 +8,7 @@ from unittest.mock import patch
 
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_materials import PdfEvidenceProvider
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.pdf_policy import ENTRY_ADDRESS_DUPLICATE_CLARIFICATION
 from audit_core.scenario_registry import SKILL_BY_SCENARIO
 from audit_core.template_references import template_comparison
@@ -14,7 +16,7 @@ from tests.pdf_test_support import flags_for, unknown_checks
 
 
 class EntryPhotoPolicyTests(unittest.TestCase):
-    def test_all_current_shelf_pages_are_available_across_reading_batches(self):
+    def test_all_current_shelf_pages_remain_addressable_without_preload(self):
         # More than the six-page transcription batch; keep case images separate
         # from the designated agreement reference images and unrelated pages.
         with tempfile.TemporaryDirectory() as temporary:
@@ -31,22 +33,26 @@ class EntryPhotoPolicyTests(unittest.TestCase):
                                   {"id": "shelf_photos", "state": "present", "source_ids": [u["unit_id"] for u in units]}]}
             original = deepcopy(case)
             response = unknown_checks("entry_fee", flags)
-            provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+            response['entry_coverage']['photos'] = [{'unit_id': u['unit_id'], 'store_name': None} for u in units]
+            provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
             def model(*args, **kwargs):
                 return ({"requests": [], "limitations": ["合成资料未列具体商品标识"]}
                         if "requests" in args[2]["properties"] else response)
             with patch.object(provider, "_call", side_effect=model) as call:
                 provider.audit(case, root)
             prompt = render_prompt(call.call_args.args[3])
-            references = template_comparison(SKILL_BY_SCENARIO["entry_fee"], "entry_fee")[1]
-            self.assertEqual(call.call_args.kwargs["images"], [agreement["image"], *[u["image"] for u in units], *references])
-            self.assertNotIn(unrelated["image"], call.call_args.kwargs["images"])
+            references = template_comparison(SKILL_BY_SCENARIO["entry_fee"], "entry_fee")[0]
+            # Reading already extracted each page's facts; the audit request
+            # carries no image bytes and only lists originals by filename.
+            self.assertEqual(call.call_args.kwargs["images"], [])
             self.assertIn(ENTRY_ADDRESS_DUPLICATE_CLARIFICATION, prompt)
-            for unit in units:
+            for unit in [agreement, *units, unrelated]:
                 self.assertIn(f'"unit_id": "{unit["unit_id"]}", "image": "{unit["image"].name}"', prompt)
+            for reference in references:
+                self.assertIn(reference["image"], prompt)
             self.assertEqual(case, original)
 
-    def test_mixed_agreement_photo_page_is_attached_once(self):
+    def test_mixed_agreement_photo_page_is_listed_once(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             flags = flags_for("entry_fee")
@@ -55,18 +61,22 @@ class EntryPhotoPolicyTests(unittest.TestCase):
                     "units": [unit], "documents": [{"unit_id": "mixed", "facts": ["本次协议附上架照片"]}],
                     "materials": [{"id": mid, "state": "present", "source_ids": ["mixed"]}
                                   for mid in ("entry_agreement", "shelf_photos")]}
-            provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+            provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
             def model(*args, **kwargs):
                 return ({"requests": [], "limitations": ["合成资料未列具体商品标识"]}
-                        if "requests" in args[2]["properties"] else unknown_checks("entry_fee", flags))
+                        if "requests" in args[2]["properties"] else {**unknown_checks("entry_fee", flags),
+                            'entry_coverage': {'total_stores': None, 'scope_complete': False, 'scope_source_ids': [],
+                                'stores': [], 'photos': [{'unit_id': 'mixed', 'store_name': None}], 'limitations': []}})
             with patch.object(provider, "_call", side_effect=model) as call:
                 provider.audit(case, root)
-            self.assertEqual(call.call_args.kwargs["images"].count(unit["image"]), 1)
+            self.assertEqual(call.call_args.kwargs["images"], [])
+            self.assertEqual(render_prompt(call.call_args.args[3]).count(
+                f'"image": "{unit["image"].name}"'), 1)
 
     def test_auditing_another_case_cannot_reuse_previous_case_photos(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+            provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
             flags = flags_for("entry_fee")
             cases = []
             for archive_id in ("a001", "a002"):
@@ -75,12 +85,18 @@ class EntryPhotoPolicyTests(unittest.TestCase):
                               "units": [{"unit_id": uid, "image": root / f"{uid}.png"}],
                               "documents": [{"unit_id": uid, "facts": ["申报甲店，水印地址为示例路18号"]}],
                               "materials": [{"id": "shelf_photos", "state": "present", "source_ids": [uid]}]})
-            with patch.object(provider, "_call", return_value=unknown_checks("entry_fee", flags)) as call:
+            def response(*args, **kwargs):
+                uid = 'a001-photo' if 'a001' in str(args[0]) else 'a002-photo'
+                value = unknown_checks('entry_fee', flags)
+                value['entry_coverage']['photos'] = [{'unit_id': uid, 'store_name': None}]
+                return value
+            with patch.object(provider, "_call", side_effect=response) as call:
                 for case in cases:
                     provider.audit(case, root)
             for index, case in enumerate(cases):
                 other_image = cases[1-index]["units"][0]["image"]
-                self.assertIn(case["units"][0]["image"], call.call_args_list[index].kwargs["images"])
+                self.assertIn(f'"image": "{case["units"][0]["image"].name}"',
+                              render_prompt(call.call_args_list[index].args[3]))
                 self.assertNotIn(other_image, call.call_args_list[index].kwargs["images"])
                 self.assertNotIn(other_image.name, render_prompt(call.call_args_list[index].args[3]))
 

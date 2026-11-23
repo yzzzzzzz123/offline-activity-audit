@@ -1,4 +1,5 @@
 """Business-supplied venue fees control the display agreement requirement."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -13,7 +14,7 @@ from audit_core.oss_intake import (
     FORMAL_RUNNER, OSSIntakeConflictError, OSSIntakeRequestError, OSSIntakeService,
     OSSIntakeStore, normalize_submission, public_job, run_formal_audit_subprocess,
 )
-from audit_core.pdf_evidence import classification_decision
+from audit_core.pdf_evidence import classification_decision, classification_schema, validate
 from audit_core.pdf_materials import PdfEvidenceProvider
 from audit_core.scenario_registry import SCENARIO_LABELS
 from audit_core.workbench_runtime import run_persistent_audit
@@ -25,7 +26,26 @@ from tests.test_oss_intake import (
 
 
 class LargeVenueFeeTests(unittest.TestCase):
+    def test_supplied_false_constrains_agreement_state_in_both_material_lists(self):
+        value = classification("promotional_display", ["u"], flags=flags_for("promotional_display", atrium=False))
+        match = next(m for m in value["material_matches"] if m["scenario"] == "promotional_display")
+        value.update(candidate_scenarios=["promotional_display"], material_matches=[match],
+                     flags=match["flags"], materials=deepcopy(match["materials"]))
+        schema = classification_schema("promotional_display", large_venue_fee=False)
+        validate(value, schema)
+        for target in (value["materials"], match["materials"]):
+            agreement = next(m for m in target if m["id"] == "atrium_agreement")
+            for state in ("missing", "unclear", "present"):
+                with self.subTest(state=state):
+                    agreement["state"] = state
+                    with self.assertRaises(AuditError):
+                        validate(value, schema)
+            agreement["state"] = "not_applicable"
+
     def setUp(self):
+        from audit_core.model_settings import ModelSelection
+        model=mock.patch('audit_core.model_settings.ModelSettingsStore.snapshot',return_value=ModelSelection(api_key='sk_test_fixture_only'))
+        model.start();self.addCleanup(model.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -175,7 +195,7 @@ class LargeVenueFeeTests(unittest.TestCase):
 
     def test_real_provider_prompt_and_schema_use_supplied_boolean(self):
         for value in (True, False):
-            provider = PdfEvidenceProvider(None, None)
+            provider = PdfEvidenceProvider(None, None, stage_summary_reviewer=isolated_stage_summary)
             root = self.root / str(value)
             root.mkdir()
             case = {"kind": "pdf_material_classification", "archive_id": "A001",

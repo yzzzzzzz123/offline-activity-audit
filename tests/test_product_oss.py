@@ -20,6 +20,7 @@ from audit_core import product_image_runtime as runtime
 from audit_core.product_database import catalog_from_rows, product_catalog_scope
 from audit_core.product_images import attach_product_reference_images
 from audit_core.codex_runner import _copy_product_reference_images, _select_product_rag_candidates
+from tests.product_test_support import isolate_product_image_cache
 
 
 ROW = {"product_code": "CP-TEST-001", "barcode_69": "6970356167341", "product_name": "测试商品"}
@@ -146,6 +147,9 @@ class ProductOSSBoundaryTests(unittest.TestCase):
 
 
 class ProductImageRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        isolate_product_image_cache(self)
+
     def test_database_candidate_selected_before_any_manifest_or_image_is_loaded(self):
         picture, value, catalog = fixture()
         manifest = oss.manifest_key(ROW["product_code"])

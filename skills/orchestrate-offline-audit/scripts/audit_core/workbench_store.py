@@ -9,16 +9,19 @@ import json
 import os
 import re
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
-
-from .common import AuditError, BizTypeRecognitionError
+from .common import (AuditError, BizTypeRecognitionError,
+                     BIZ_TYPE_FAILURE_MESSAGE, china_timezone, sha256_file)
+from .customer_language import SYSTEM_FAILURE_MESSAGE
+from .summary_layout import group_summary_issues, issue_lines
 from .codex_runner import DEFAULT_REASONING_EFFORT
 from .orchestrator import normalize_producer_model, output_date_from_run_id
-from .pass_check_log import attach_pass_check_log, load_workspace_results
+from .pass_check_log import attach_pass_check_log, load_workspace_results, load_workspace_material_packets
+from .model_metrics import summarize_model_usage
 
 
 DEFAULT_WORKTREES_ROOT = PROJECT_ROOT / "worktrees"
@@ -28,13 +31,14 @@ MAIN_FLOW_TASKS: tuple[tuple[str, str, str], ...] = (
     ("intake", "材料分流", "识别场景与资料角色"),
     ("analysis", "AI 识别", "提取材料中的可见事实"),
     ("evidence", "证据校验", "核对 Schema 与来源边界"),
-    ("decision", "核销决策", "执行确定性业务规则"),
+    ("decision", "核销判断", "汇总模型判断与程序辅助结果"),
+    ("logic_review", "总结逻辑自校验", "核对总结；矛盾项定向复核，其他结果保留"),
     ("verification", "结果封存", "验证页面投影与技术档案"),
 )
 
 
 def main_flow_task_list() -> list[dict[str, Any]]:
-    """Return the canonical six-stage main-flow checklist in display order."""
+    """Return the canonical main-flow checklist in display order."""
 
     return [
         {
@@ -48,7 +52,7 @@ def main_flow_task_list() -> list[dict[str, Any]]:
 
 
 WORKSPACE_ID_PATTERN = re.compile(r'(?![. ])(?!CON(?:\.|$)|PRN(?:\.|$)|AUX(?:\.|$)|NUL(?:\.|$)|(?:COM|LPT)[1-9](?:\.|$))[^<>:"/\\|?*%\x00-\x1f\x7f]{1,120}(?<![. ])', re.IGNORECASE)
-WORKSPACE_TIMEZONE = ZoneInfo("Asia/Shanghai")
+WORKSPACE_TIMEZONE = china_timezone()
 
 
 def utc_now() -> str:
@@ -65,23 +69,47 @@ def _json_text(value: Any, *, pretty: bool = True) -> str:
     ) + "\n"
 
 
+def _replace_temporary(temporary: Path, path: Path) -> None:
+    # Windows readers/scanners may briefly hold the destination. Preserve the
+    # old file and retry only those sharing errors, with the existing bound.
+    delays = (0.02, 0.04, 0.08, 0.16, 0.32)
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in (5, 32, 33) or attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     try:
         temporary.write_text(text, encoding="utf-8", newline="\n")
-        os.replace(temporary, path)
+        _replace_temporary(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
 
 def atomic_write_json(path: Path, value: Any) -> None:
-    atomic_write_text(path, _json_text(value))
+    # Stream the same complete JSON into an isolated file. Do not materialize
+    # a second full snapshot string while the live view/trace is still held.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open('w', encoding='utf-8', newline='\n') as stream:
+            json.dump(value, stream, ensure_ascii=False, indent=2, sort_keys=False, default=str)
+            stream.write('\n')
+        _replace_temporary(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _workspace_model_label(value: str) -> str:
     raw = str(value or "").strip().lower()
-    if re.fullmatch(r"qwen/qwen[a-z0-9._-]+", raw):
+    if re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,39}/[a-z0-9][a-z0-9._-]{0,79}", raw):
         raw = raw.replace("/", "-")
     compact = re.sub(r"[-_\s]+", "", raw)
     if not compact or re.fullmatch(r"[a-z0-9][a-z0-9.]{0,39}", compact) is None:
@@ -174,19 +202,97 @@ def sanitize_case(value: Any) -> Any:
     return value
 
 
+def _summary_problem_reason(value: str) -> str:
+    """Drop only standalone, fact-free compliance phrases from a known issue.
+
+    This never decides pass/fail from words. Ambiguous phrases, numbers, dates
+    and object descriptions remain unless the whole clause is safely redundant.
+    """
+    parts = [part.strip() for part in re.split(r"[；;。\n，]", value) if part.strip()]
+    problem = re.compile(r"无法|不能|未能|不清|不明确|待确认|不确定|遮挡|缺少|未提供|未提交|不足|不一致|不符|超出|未完整|未显示")
+    if not any(problem.search(part) for part in parts):
+        return value
+    # A single rule may describe one unreadable price photo and then list the
+    # other photos' passed checks. Remove only these complete, fact-free
+    # compliance clauses; do not infer a decision or drop another problem.
+    photo_compliance = re.compile(
+        r"(?:其余|其他)照片(?:的)?水印(?:均)?(?:含|包含)(?:拍摄时间|拍摄日期|日期)"
+        r"(?:和|及|、)门店地址(?:、|，|,)(?:活动)?价格(?:均)?(?:可读|清晰)"
+        r"|(?:其余|其他)照片(?:的)?(?:水印)?(?:拍摄时间|拍摄日期|日期)"
+        r"(?:、|和|及)门店地址(?:、|和|及)(?:活动)?价格(?:均)?(?:可读|清晰)"
+    )
+    clauses = [part.strip() for part in re.split(r"[；;。\n]", value) if part.strip()]
+    photo_kept = [part for part in clauses if not photo_compliance.fullmatch(part)]
+    removed_photo_compliance = len(photo_kept) < len(clauses)
+    if removed_photo_compliance:
+        value = "；".join(photo_kept) + "。"
+        parts = [part.strip() for part in re.split(r"[；;。\n，]", value) if part.strip()]
+    compliant = re.compile(
+        r"(?:水印)?日期(?:处于|在)(?:本次)?(?:合同)?(?:约定的)?(?:活动|执行)?(?:周期|期间|日期范围)内"
+        r"|(?:与)?合同(?:约定的)?(?:期间|门店|地址|要求)(?:及门店)?(?:一致|相符)"
+        r"|(?:未见|未发现|没有)其他品牌(?:物料)?"
+        r"|(?:其余|其他)(?:项目|检查项|部分)(?:均)?(?:符合要求|通过)"
+    )
+    kept = [part for part in parts if not compliant.fullmatch(part)]
+    return "；".join(kept) + "。" if kept and len(kept) < len(parts) else value
+
+
 def render_analysis_summary_markdown(
     view_payload: dict[str, Any],
     manifest: dict[str, Any],
 ) -> str:
     """Report business and material problems for human review, including gate issues."""
+    if manifest.get("status") == "failed":
+        code = (manifest.get("failure") or {}).get("code")
+        if code in {"biz_type_unrecognized", "plan_type_unrecognized"}:
+            return BIZ_TYPE_FAILURE_MESSAGE
+        if code != "classification_failed":
+            return SYSTEM_FAILURE_MESSAGE
+
     def escape(value: Any) -> str:
         text = " ".join(str(value or "").split()).replace("\\", "\\\\")
         for character in ("`", "*", "[", "]", "<", ">", "#", "_"):
             text = text.replace(character, "\\" + character)
         return text
 
+    def row_problems(row: dict[str, Any]) -> list[dict[str, Any]]:
+        items = row.get("summary_items")
+        if not isinstance(items, list):
+            # Old sealed snapshots do not retain per-check statuses. Use their
+            # saved issue reasons, never the complete findings or passed photos.
+            reasons = list(row.get("error_reasons") or []) if row.get("status") == "issue" else []
+            values = row.get("values") or []
+            location = str(values[0]).strip() if row.get("photo_unit_id") and values else ""
+            return [{"reason": reason, "location": location} for reason in reasons]
+        problems = []
+        values = row.get("values") or []
+        location = str(values[0]).strip() if row.get("photo_unit_id") and values else ""
+        for item in items:
+            if not isinstance(item, dict) or item.get("status") not in {"fail", "unknown"}:
+                continue
+            category = str(item.get("check_category") or "该项")
+            # effect is static rule metadata (often defaulting to missing_material),
+            # not a material-state decision. Preserve the actual missing-material
+            # explanation or observed violation without inventing either meaning.
+            for line in issue_lines(str(item.get("reason") or "").strip()) or [""]:
+                reason = _summary_problem_reason(line)
+                if item.get("status") == "unknown":
+                    if not re.search(r"无法|不能|未能|不清|不明确|待确认|不确定", reason):
+                        reason = f"暂时不能确认{category}" + (f"：{reason}" if reason else "。")
+                elif not reason:
+                    reason = f"{category}的具体错误原因未记录。"
+                if reason:
+                    problems.append({"reason": reason, "location": location,
+                                     "source_file": next(iter(row.get("business_source_files") or []), "")
+                                         if row.get("photo_unit_id") else "",
+                                     "rule_id": item.get("rule_id"), "status": item["status"],
+                                     "scope": "" if row.get("photo_unit_id") else
+                                         tuple(item.get("source_ids") or [])})
+        return problems
+
     projected = attach_error_reasons(view_payload)
-    groups: dict[str, dict[str, list[str]]] = {}
+    groups: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    seen: set[tuple] = set()
     classification_rejected = bool(
         projected.get("classification_rejection") or manifest.get("classification_rejection")
         or (manifest.get("failure") or {}).get("code") == "classification_failed"
@@ -196,30 +302,42 @@ def render_analysis_summary_markdown(
             continue
         if sheet.get("projection_kind") == "classification_rejection":
             classification_rejected = True
-        reasons = [reason for row in sheet.get("rows") or [] if isinstance(row, dict)
-                   and row.get("status") == "issue" for reason in row.get("error_reasons") or []]
-        if not reasons:
-            continue
+        rows = [row for row in sheet.get("rows") or [] if isinstance(row, dict)]
         name = ("核销资料问题" if sheet.get("projection_kind") == "classification_rejection" and not sheet.get("scenario") else
                 str(sheet.get("audit_type_label") or sheet.get("name") or sheet.get("scenario") or "核销结果"))
         archive = str(sheet.get("source_archive") or "")
-        group = groups.setdefault(name, {}).setdefault(archive, [])
-        for reason in reasons:
-            if reason not in group:
-                group.append(reason)
+        for row in rows:
+            for issue in row_problems(row):
+                # Keep source identities intact; only the final human summary
+                # groups identical issues, never the per-photo audit records.
+                identity = str(row.get("photo_unit_id") or "")
+                if not identity and isinstance(row.get("summary_items"), list):
+                    identity = json.dumps([item.get("source_ids") for item in row["summary_items"]
+                                           if isinstance(item, dict)], ensure_ascii=False)
+                key = (name, archive, identity, issue.get("rule_id"), issue.get("status"), issue["reason"])
+                if key not in seen:
+                    groups.setdefault(name, {}).setdefault(archive, []).append(issue)
+                    seen.add(key)
     if not groups:
         return ("具体资料问题未记录，请人工核对。" if classification_rejected else
                 "具体错误原因未记录。" if int(manifest.get("error_count") or 0) else "未发现错误。")
     sections = []
+    problem_number = 0
     multiple_archives = len({str(sheet.get("source_archive") or "")
                             for sheet in projected.get("sheets") or [] if isinstance(sheet, dict)}) > 1
     for name, archives in groups.items():
         parts = [f"## {escape(name)}"]
-        for index, (archive, reasons) in enumerate(archives.items(), 1):
+        for index, (archive, issues) in enumerate(archives.items(), 1):
+            reasons = group_summary_issues(issues)
             if multiple_archives:
                 # Name each bundle once; never repeat it before every problem.
                 parts.append(f"### {escape(archive or f'第{index}份资料')}")
-            parts.append("\n".join(f"- {escape(reason)}" for reason in reasons))
+            if reasons:
+                parts.append("\n".join(
+                    f"{number}. {escape(reason)}"
+                    for number, reason in enumerate(reasons, problem_number + 1)
+                ))
+            problem_number += len(reasons)
         sections.append("\n\n".join(parts))
     return "\n\n".join(sections)
 
@@ -228,11 +346,84 @@ def project_run_status(manifest: dict[str, Any], view: dict[str, Any] | None = N
     """Display completed material checks without rewriting historical records."""
     if (manifest.get("failure") or {}).get("code") == "classification_failed":
         return {**manifest, "status": "completed", "failure": None}
+    if manifest.get("status") in {"running", "failed"} and not manifest.get("scenarios"):
+        from .scenario_registry import scenario_for_biz_type
+        selected = scenario_for_biz_type(manifest.get("bizType"))
+        if selected and selected == manifest.get("selected_scenario"):
+            return {**manifest, "scenarios": [selected], "scenario_count": 1}
     return dict(manifest)
 
 
 class WorkbenchRunStore:
     """Append-only audit trace and atomic UI snapshot for one persisted run."""
+
+    @classmethod
+    def _open_existing(cls, workspace: Path, *, run_id: str, expected_status: str):
+        """Open append-only state without replacing a previous event or result."""
+        self = cls.__new__(cls)
+        self.workspace = workspace.resolve()
+        self.workspace_id = self.workspace.name
+        if WORKSPACE_ID_PATTERN.fullmatch(self.workspace_id) is None:
+            raise AuditError('续跑目录名称不安全')
+        self.analysis_root = self.workspace/'analysis'
+        self.dom_root = self.workspace/'dom/checkpoints'
+        self.logs_root = self.workspace/'logs'
+        self.events_path = self.logs_root/'events.jsonl'
+        self.run_log_path = self.logs_root/'run.log'
+        self.snapshot_path = self.workspace/'snapshot.json'
+        self.manifest_path = self.workspace/'manifest.json'
+        self.analysis_summary_path = self.workspace/ANALYSIS_SUMMARY_FILENAME
+        self.manifest = json.loads(self.manifest_path.read_text(encoding='utf-8'))
+        if self.manifest.get('run_id') != run_id or self.manifest.get('status') != expected_status:
+            raise AuditError('仅允许同一run的失败续跑或显式指定快照的已完成记录重新核验')
+        snapshot=(json.loads(self.snapshot_path.read_text(encoding='utf-8'))
+                  if self.snapshot_path.is_file() else {})
+        if not snapshot and expected_status != 'running':
+            raise AuditError('终态断点缺少快照，禁止猜测恢复')
+        self._lock=threading.RLock()
+        events=[json.loads(line) for line in self.events_path.read_text(encoding='utf-8').splitlines() if line.strip()]
+        self._event_seq=max((e.get('seq',0) for e in events),default=0)
+        self._checkpoints=list(snapshot.get('dom_checkpoints') or [])
+        self._checkpoint_seq=max((int(p.stem.split('-')[0]) for p in self.dom_root.glob('*.json')),default=0)
+        self._analysis_files=list(snapshot.get('analysis_files') or [])
+        self._view_payload=None
+        self._verification=None
+        return self
+
+    @classmethod
+    def fail_interrupted(cls, workspace: Path, *, run_id: str, reason: str,
+                         code: str | None = None):
+        """Seal an explicitly stopped runner after its owner verified it exited."""
+        self = cls._open_existing(workspace, run_id=run_id, expected_status='running')
+        self.fail(AuditError(reason))
+        if code:
+            self.manifest.setdefault('failure', {})['code'] = str(code)
+            self._write_snapshot()
+            self._write_manifest()
+        return self
+
+    @classmethod
+    def resume_failed(cls, workspace: Path, *, run_id: str, revalidation_snapshot_sha256: str | None = None):
+        """Reopen one explicitly authorized failed record, preserving its ledger."""
+        revalidation = revalidation_snapshot_sha256 is not None
+        self = cls._open_existing(workspace, run_id=run_id,
+                                  expected_status='completed' if revalidation else 'failed')
+        if revalidation and (hashlib.sha256(self.snapshot_path.read_bytes()).hexdigest() != revalidation_snapshot_sha256
+                             or self.manifest.get('snapshot_sha256') != revalidation_snapshot_sha256):
+            raise AuditError('重新核验的已完成快照指纹不一致')
+        self.manifest.setdefault('resume_history',[]).append({'resumed_at':utc_now(),
+            'previous_failure':self.manifest.get('failure'),'previous_completed_at':self.manifest.get('completed_at'),
+            'previous_audit_timing':self.manifest.get('audit_timing'),
+            'previous_token_usage':self.manifest.get('token_usage'),
+            **({'kind':'completed_revalidation','previous_snapshot_sha256':revalidation_snapshot_sha256}
+               if revalidation else {})})
+        self.manifest.update(status='running',failure=None,completed_at=None)
+        self.manifest.pop('audit_timing', None)
+        self._write_manifest()
+        self.append_event('run.revalidation_started' if revalidation else 'run.resumed',
+            '显式重新核验已完成记录的候选版本，保留原完成版本与全部用量' if revalidation
+            else '在原记录继续未完成核销，保留此前失败记录和全部用量',stage='resume')
+        return self
 
     def __init__(
         self,
@@ -309,6 +500,7 @@ class WorkbenchRunStore:
         )
 
     def _write_manifest(self) -> None:
+        self.manifest["token_usage"] = summarize_model_usage(self.analysis_root)
         self.manifest["updated_at"] = utc_now()
         atomic_write_json(self.manifest_path, self.manifest)
 
@@ -403,8 +595,24 @@ class WorkbenchRunStore:
             return record
 
     def observe(self, event_type: str, payload: dict[str, Any]) -> None:
+        if event_type == "execution.step":
+            self.append_event(event_type, payload["label"], stage="analysis", details=payload,
+                              level="error" if payload.get("status") == "failed" else "info")
+            self.write_checkpoint("execution", payload["label"], payload)
+            try:
+                self._write_snapshot()
+            except MemoryError:
+                # The append-only step, event and checkpoint are already on
+                # disk. A transient intermediate UI refresh is not a failed
+                # evidence check. Later refreshes retry; final sealing below
+                # remains mandatory and does not pass through this handler.
+                self.manifest['snapshot_refresh_warning'] = 'intermediate_memory_pressure'
+                return
+            self._write_manifest()
+            return
         if event_type == "material_classification.started":
             self.manifest["largeVenueFee"] = payload.get("large_venue_fee")
+            self.manifest["cvsOtcChannel"] = payload.get("cvs_otc_channel") is True
             policy = payload.get("classification_policy") or "material_content"
             event = self.append_event(event_type, "开始根据业务类型选择核销Skill" if policy == "biz_type" else "开始按资料内容识别八类核销", stage="analysis")
             if not self.manifest.get("analysis_started_at"):
@@ -416,6 +624,8 @@ class WorkbenchRunStore:
             self.write_analysis("pdf-policy/biz-type.json", payload, label="业务类型与核销Skill对应结果")
             self.manifest["bizType"] = payload["biz_type"]
             self.manifest["selected_scenario"] = payload["scenario"]
+            self.manifest["scenarios"] = [payload["scenario"]]
+            self.manifest["scenario_count"] = 1
             self._write_manifest()
             self.append_event(event_type, "已完成业务类型识别", stage="analysis")
             return
@@ -586,6 +796,22 @@ class WorkbenchRunStore:
             )
             return
 
+        if event_type in {"logic_review.started", "logic_review.rework", "logic_review.completed"}:
+            review = payload.get('review') or {}
+            review_label = {'passed': '总结逻辑自校验已通过',
+                            'not_passed': '总结逻辑自校验有未解决事项',
+                            'unavailable': '总结逻辑自校验未完成',
+                            'external_evidence_provider': '本次未执行模型总结自校验'}.get(
+                                review.get('status'), '总结逻辑自校验已结束')
+            labels = {"logic_review.started": "开始总结逻辑自校验",
+                      "logic_review.rework": "总结发现矛盾，定向复核相关审核项",
+                      "logic_review.completed": review_label}
+            self.append_event(event_type, labels[event_type], stage="logic_review", details=payload)
+            if event_type == "logic_review.completed":
+                self.write_analysis("final-logic-review.json", payload.get('review') or {}, label="最终逻辑自校验结果")
+                self.write_checkpoint("logic_review", labels[event_type], payload.get('review') or {})
+            return
+
         if event_type == "report.verified":
             self._verification = sanitize_case(payload.get("verification") or {})
             self.write_analysis(
@@ -606,6 +832,7 @@ class WorkbenchRunStore:
         view_payload: dict[str, Any],
         scenarios: list[str],
         verification: dict[str, Any],
+        analysis_summary: str | None = None,
     ) -> None:
         with self._lock:
             rejection = view_payload.get("classification_rejection")
@@ -617,6 +844,7 @@ class WorkbenchRunStore:
             self._view_payload = attach_error_reasons(attach_pass_check_log(
                 view_payload,
                 load_workspace_results(self.workspace),
+                material_packets=load_workspace_material_packets(self.workspace),
             ))
             error_count = sum(
                 int((sheet.get("audit_counts") or {}).get("error_count") or 0)
@@ -634,18 +862,9 @@ class WorkbenchRunStore:
                     "run_failure_policy": "execution_errors_only",
                 }
             )
-            summary = render_analysis_summary_markdown(
-                self._view_payload,
-                self.manifest,
-            )
-            atomic_write_text(self.analysis_summary_path, summary)
-            self.manifest["analysis_summary"] = {
-                "path": ANALYSIS_SUMMARY_FILENAME,
-                "size": self.analysis_summary_path.stat().st_size,
-                "sha256": hashlib.sha256(
-                    self.analysis_summary_path.read_bytes()
-                ).hexdigest(),
-            }
+            self._write_analysis_summary(analysis_summary)
+            from .run_timing import finish_timing
+            self.manifest['audit_timing'] = finish_timing(self.manifest)
             self._verification = verification
             self.write_checkpoint(
                 "ready",
@@ -681,6 +900,11 @@ class WorkbenchRunStore:
                     "failure": failure,
                 }
             )
+            # A failed execution must never expose a partial result as a pass.
+            from .run_timing import finish_timing
+            self.manifest['audit_timing'] = finish_timing(self.manifest)
+            # Persist the exact safe callback text before sealing the snapshot.
+            self._write_analysis_summary()
             self.write_checkpoint("failed", "运行失败", failure)
             self.append_event(
                 "run.failed",
@@ -692,7 +916,23 @@ class WorkbenchRunStore:
             self._write_snapshot()
             self._write_manifest()
 
+    def _write_analysis_summary(self, reviewed_summary: str | None = None) -> None:
+        summary = (reviewed_summary if reviewed_summary is not None else
+                   render_analysis_summary_markdown(self._view_payload or {}, self.manifest))
+        if not isinstance(summary, str) or not summary.strip():
+            raise AuditError('AI总结核验后未提供完整文稿，不能封存空总结。')
+        atomic_write_text(self.analysis_summary_path, summary)
+        self.manifest["analysis_summary"] = {
+            "path": ANALYSIS_SUMMARY_FILENAME,
+            "size": self.analysis_summary_path.stat().st_size,
+            "sha256": hashlib.sha256(self.analysis_summary_path.read_bytes()).hexdigest(),
+        }
+        # Let already-running workbench servers expose new summaries without
+        # interrupting their intake workers for a Python module reload.
+        self.manifest["analysis_summary_display"] = {"text": summary.strip(), "source": "saved"}
+
     def _write_snapshot(self) -> None:
+        self.manifest["token_usage"] = summarize_model_usage(self.analysis_root)
         snapshot = {
             "schema_version": "1.0",
             "run": self.manifest,
@@ -703,8 +943,10 @@ class WorkbenchRunStore:
             ),
             "dom_checkpoints": list(self._checkpoints),
         }
+        from .execution_trace import enrich_technical_snapshot
+        enrich_technical_snapshot(snapshot, self.workspace)
         atomic_write_json(self.snapshot_path, snapshot)
-        digest = hashlib.sha256(self.snapshot_path.read_bytes()).hexdigest()
+        digest = sha256_file(self.snapshot_path)
         self.manifest["snapshot_sha256"] = digest
 
 

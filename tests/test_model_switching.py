@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from tests.pdf_test_support import isolated_stage_summary
 import asyncio
+import http.client
 import json
 import os
+import socket
 import subprocess
 import tempfile
 import threading
@@ -19,9 +22,10 @@ from PIL import Image
 from langchain_core.messages import HumanMessage
 
 from audit_core.common import AuditError
+from audit_core.http_rejection import discard_rejected_body
 from audit_core.model_settings import (ModelSelection, ModelSettingsStore, ModelSettingsError,
                                       ModelSettingsConflict, SNAPSHOT_ENV, qwen_selection,
-                                      api_selection, DEFAULT_PPIO_MODEL, selection_from_environment)
+                                      api_selection, DEFAULT_PPIO_MODEL, DEFAULT_QWEN_MODEL, selection_from_environment)
 from audit_core.qwen_model import QwenChatModel, QwenRequestError, complete_json
 from audit_core.pdf_materials import PdfEvidenceProvider
 from audit_core.workbench_server import WorkbenchCatalog, WorkbenchHTTPServer, Handler
@@ -34,10 +38,13 @@ class ModelSwitchingTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.selection = qwen_selection({"api_key": "test-secret-not-real"})
+        self.ppio = api_selection({"provider": "ppio", "api_key": "sk_test-not-real"})
 
     def test_default_and_snapshot_survive_switch_and_restart_without_secret_disclosure(self):
         store = ModelSettingsStore(self.root)
-        self.assertEqual(store.snapshot().provider, "gpt")
+        self.assertEqual(store.public()["provider"], "ppio")
+        with patch.dict(os.environ, {"PPIO_API_KEY": ""}), self.assertRaises(ModelSettingsError):
+            store.snapshot()
         self.assertFalse(store.path.exists())
         store.save(self.selection, expected_revision=0)
         old_run = store.snapshot()
@@ -46,12 +53,26 @@ class ModelSwitchingTests(unittest.TestCase):
         self.assertNotIn(self.selection.api_key, repr(old_run))
         if os.name == "nt":
             self.assertNotIn(self.selection.api_key, store.path.read_text())
-        store.save(ModelSelection(), expected_revision=1)
-        self.assertEqual(store.snapshot().provider, "gpt")
+        store.save(self.ppio, expected_revision=1)
+        self.assertEqual(store.snapshot(), self.ppio)
         self.assertEqual(old_run.provider, "qwen")
-        self.assertEqual(store.candidate({"api_key": ""}), old_run)
+        self.assertEqual(store.candidate({"provider": "qwen", "api_key": ""}), old_run)
         with self.assertRaises(ModelSettingsConflict):
             store.save(old_run, expected_revision=1)
+
+    def test_multiple_api_models_are_switchable_but_gpt_cannot_be_reactivated(self):
+        store = ModelSettingsStore(self.root)
+        ppio = api_selection({"provider": "ppio", "api_key": "sk_test", "model": "qwen/qwen3.5-397b-a17b"})
+        bailian = qwen_selection({"api_key": "test", "model": "qwen3-vl-plus"})
+        store.save(ppio, expected_revision=0)
+        frozen = store.snapshot()
+        store.save(bailian, expected_revision=1)
+        self.assertEqual(store.snapshot(), bailian)
+        self.assertEqual(frozen, ppio)
+        self.assertEqual(store.candidate({"provider": "ppio"}), ppio)
+        with self.assertRaises(ModelSettingsError):
+            store.save(ModelSelection(provider="gpt"), expected_revision=2)
+        self.assertEqual(store.snapshot(), bailian)
 
     def test_credentials_can_only_be_sent_to_bailian(self):
         for url in ("https://evil.test/compatible-mode/v1", "http://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -79,7 +100,7 @@ class ModelSwitchingTests(unittest.TestCase):
         self.assertNotIn("sk_ppio-test-secret", json.dumps(store.public()))
         if os.name == "nt":
             self.assertNotIn("sk_ppio-test-secret", store.path.read_text())
-        store.save(ModelSelection(), expected_revision=2)
+        store.save(self.selection, expected_revision=2)
         self.assertEqual(store.candidate({"provider": "ppio"}), ppio)
         self.assertEqual(store.candidate({"provider": "qwen"}), self.selection)
         with patch.dict(os.environ, {SNAPSHOT_ENV: ppio.subprocess_value()}):
@@ -182,7 +203,7 @@ class ModelSwitchingTests(unittest.TestCase):
         def handler(request):
             payload = json.loads(request.content)
             self.assertEqual(request.url.host, "dashscope.aliyuncs.com")
-            self.assertEqual(payload["model"], "qwen3-vl-plus")
+            self.assertEqual(payload["model"], DEFAULT_QWEN_MODEL)
             self.assertFalse(payload["enable_thinking"])
             self.assertEqual(payload["response_format"], {"type": "json_object"})
             self.assertNotIn("tools", payload)
@@ -232,7 +253,7 @@ class ModelSwitchingTests(unittest.TestCase):
         def audit(*args, **kwargs):
             provider = kwargs["evidence_provider"]
             self.assertEqual(provider.connection, self.selection)
-            settings.save(ModelSelection(), expected_revision=1)
+            settings.save(self.ppio, expected_revision=1)
             self.assertEqual(provider.connection, self.selection)
             raise AuditError("模拟执行中断")
         with patch.dict(os.environ, {SNAPSHOT_ENV: ""}), patch("audit_core.workbench_runtime.run_audit", side_effect=audit):
@@ -242,7 +263,7 @@ class ModelSwitchingTests(unittest.TestCase):
         manifests = list(worktrees.glob("*/manifest.json"))
         self.assertEqual(len(manifests), 1)
         manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
-        self.assertEqual(manifest["audit_model"], "qwen3-vl-plus")
+        self.assertEqual(manifest["audit_model"], DEFAULT_QWEN_MODEL)
         self.assertEqual(manifest["reasoning_effort"], "none")
         for path in manifests[0].parent.rglob("*"):
             if path.is_file():
@@ -251,7 +272,7 @@ class ModelSwitchingTests(unittest.TestCase):
     def test_only_attached_images_are_encoded_and_no_codex_is_launched(self):
         photo = self.root / "page.png"
         Image.new("RGB", (10, 10), "white").save(photo)
-        provider = PdfEvidenceProvider(self.selection.model, "none", connection=self.selection)
+        provider = PdfEvidenceProvider(self.selection.model, "none", connection=self.selection, stage_summary_reviewer=isolated_stage_summary)
         skill = self.root / "skill"
         (skill / "references").mkdir(parents=True)
         (skill / "SKILL.md").write_text("only-approved-skill", encoding="utf-8")
@@ -272,7 +293,7 @@ class ModelSwitchingTests(unittest.TestCase):
         remote.assert_not_called()
 
     def test_qwen_invalid_schema_is_not_accepted_or_repaired(self):
-        provider = PdfEvidenceProvider(self.selection.model, "none", connection=self.selection)
+        provider = PdfEvidenceProvider(self.selection.model, "none", connection=self.selection, stage_summary_reviewer=isolated_stage_summary)
         schema = {"type": "object", "required": ["real_source"], "properties": {"real_source": {"type": "string"}}}
         with patch("audit_core.qwen_model.complete_json", return_value=('{"invented":true}', {})), patch("audit_core.qwen_model.time.sleep"):
             with self.assertRaises(AuditError):
@@ -283,9 +304,9 @@ class ModelSwitchingTests(unittest.TestCase):
         store = ModelSettingsStore(self.root)
         store.save(self.selection, expected_revision=0)
         def run(command, **kwargs):
-            self.assertEqual(command[command.index("--model") + 1], "qwen3-vl-plus")
+            self.assertEqual(command[command.index("--model") + 1], DEFAULT_QWEN_MODEL)
             snapshot = json.loads(kwargs["env"][SNAPSHOT_ENV])
-            store.save(ModelSelection(), expected_revision=1)
+            store.save(self.ppio, expected_revision=1)
             self.assertEqual(snapshot["provider"], "qwen")
             self.assertNotIn(self.selection.api_key, " ".join(command))
             result = Path(command[command.index("--result-json") + 1])
@@ -321,26 +342,76 @@ class ModelSettingsAPITests(unittest.TestCase):
         with self.opener.open(request, timeout=5) as response:
             return json.load(response)
 
-    def test_test_does_not_activate_and_failed_activation_preserves_current_model(self):
-        payload = {"action": "test", "revision": 0, "api_key": "test-secret"}
-        self.assertEqual(self.request()["provider"], "gpt")
-        with patch("audit_core.qwen_model.probe_qwen", return_value={"response": {"number": "5274", "color": "blue"}}):
+    def test_test_only_probes_candidate_and_preserves_saved_configuration(self):
+        current = api_selection({"provider": "ppio", "api_key": "sk_saved-fixture"})
+        self.server.model_settings.save(current, expected_revision=0)
+        before = self.server.model_settings.path.read_bytes()
+        payload = {"action": "test", "revision": 1, "provider": "qwen", "api_key": "test-secret"}
+        with patch("audit_core.qwen_model.probe_qwen", return_value={"response": {"number": "5274", "color": "blue"}}) as probe:
             result = self.request(payload)
-            self.assertEqual(result["settings"]["provider"], "gpt")
-            self.assertFalse(self.server.model_settings.path.exists())
-            payload["action"] = "activate"
-            result = self.request(payload)
-            self.assertEqual(result["settings"]["provider"], "qwen")
-        self.assertNotIn("test-secret", json.dumps(self.request()))
-        payload.update(revision=1, api_key="bad-key")
+            probe.assert_called_once()
+            self.assertEqual(probe.call_args.args[0].provider, "qwen")
+            self.assertEqual(result["settings"]["provider"], "ppio")
+            self.assertEqual(result["settings"]["revision"], 1)
+            self.assertIn("test", result)
+        self.assertEqual(self.server.model_settings.path.read_bytes(), before)
         with patch("audit_core.qwen_model.probe_qwen", side_effect=QwenRequestError("测试失败", "auth")):
             with self.assertRaises(urllib.error.HTTPError) as error:
                 self.request(payload)
             self.assertEqual(error.exception.code, 502)
             error.exception.close()
-        self.assertEqual(self.server.model_settings.snapshot().api_key, "test-secret")
-        self.request({"action": "gpt", "revision": 1})
-        self.assertEqual(self.request()["provider"], "gpt")
+        self.assertEqual(self.server.model_settings.path.read_bytes(), before)
+        self.assertEqual(self.server.model_settings.snapshot(), current)
+
+    def test_activation_only_saves_and_never_calls_provider(self):
+        payload = {"action": "activate", "revision": 0, "provider": "qwen", "api_key": "test-secret"}
+        self.server.model_settings.availability.record(self.server.model_settings.candidate(payload), passed=True)
+        with patch("audit_core.qwen_model.probe_qwen", side_effect=AssertionError("Switch must not test")) as probe:
+            result = self.request(payload)
+            self.assertEqual(result["settings"]["provider"], "qwen")
+            self.assertEqual(result["settings"]["revision"], 1)
+            self.assertNotIn("test", result)
+            self.assertEqual(self.server.model_settings.snapshot().api_key, "test-secret")
+            self.assertNotIn("test-secret", json.dumps(result))
+            self.assertNotIn("test-secret", json.dumps(self.request()))
+            probe.assert_not_called()
+
+    def test_invalid_or_conflicting_activation_preserves_current_model_without_probe(self):
+        current = qwen_selection({"api_key": "saved-secret"})
+        self.server.model_settings.save(current, expected_revision=0)
+        before = self.server.model_settings.path.read_bytes()
+        invalid = [
+            ({"action": "activate", "revision": 1, "provider": "qwen", "base_url": "https://example.com/v1"}, 400),
+            ({"action": "activate", "revision": 0, "provider": "qwen"}, 409),
+            ({"action": "gpt", "revision": 1}, 400),
+        ]
+        with patch("audit_core.qwen_model.probe_qwen") as probe:
+            for payload, expected in invalid:
+                with self.subTest(payload=payload):
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        self.request(payload)
+                    self.assertEqual(error.exception.code, expected)
+                    error.exception.close()
+                    self.assertEqual(self.server.model_settings.path.read_bytes(), before)
+            probe.assert_not_called()
+        self.assertEqual(self.server.model_settings.snapshot(), current)
+
+    def test_activation_does_not_wait_for_test_lock(self):
+        self.server.model_settings.availability.record(qwen_selection({"api_key": "test-secret"}), passed=True)
+        self.server.model_probe_lock.acquire()
+        try:
+            with patch("audit_core.qwen_model.probe_qwen") as probe:
+                payload = {"action": "activate", "revision": 0, "provider": "qwen", "api_key": "test-secret"}
+                result = self.request(payload)
+                self.assertEqual(result["settings"]["provider"], "qwen")
+                self.assertEqual(result["settings"]["revision"], 1)
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    self.request({**payload, "action": "test", "revision": 1})
+                self.assertEqual(error.exception.code, 409)
+                error.exception.close()
+                probe.assert_not_called()
+        finally:
+            self.server.model_probe_lock.release()
 
     def test_cross_origin_missing_token_and_empty_key_do_not_call_provider(self):
         with patch("audit_core.qwen_model.probe_qwen") as remote:
@@ -356,23 +427,86 @@ class ModelSettingsAPITests(unittest.TestCase):
                 error.exception.close()
             remote.assert_not_called()
 
+    def test_unauthorized_split_body_returns_403_without_provider_or_settings_writes(self):
+        current = api_selection({"provider": "ppio", "api_key": "sk_saved-fixture"})
+        self.server.model_settings.save(current, expected_revision=0)
+        before = {path.relative_to(self.root): path.read_bytes() if path.is_file() else None
+                  for path in self.root.rglob("*")}
+        body = json.dumps({"action": "test", "revision": 1, "provider": "qwen",
+                           "api_key": "isolated-not-real"}).encode()
+        with patch("audit_core.qwen_model.probe_qwen") as probe, \
+                patch.object(self.server.model_settings, "save") as save, \
+                patch("audit_core.model_availability.refresh_available_models") as refresh:
+            for origin, token in (("https://other.example", True), (self.base, False)):
+                with self.subTest(origin=origin, token=token):
+                    started, finished = threading.Event(), threading.Event()
+
+                    def tracked(handler):
+                        started.set()
+                        discard_rejected_body(handler)
+                        finished.set()
+
+                    with patch("audit_core.workbench_server.discard_rejected_body", tracked):
+                        with socket.create_connection(self.server.server_address, timeout=3) as connection:
+                            headers = (f"POST /api/model-settings HTTP/1.1\r\n"
+                                       f"Host: 127.0.0.1:{self.server.server_port}\r\nOrigin: {origin}\r\n"
+                                       f"Content-Length: {len(body)}\r\nContent-Type: application/json\r\n"
+                                       "Connection: close\r\n")
+                            if token:
+                                headers += f"X-Offline-Audit-Model-Token: {self.server.model_settings_token}\r\n"
+                            connection.sendall((headers + "\r\n").encode("ascii"))
+                            self.assertTrue(started.wait(2))
+                            self.assertFalse(finished.wait(0.025), "403 must consume the declared small body")
+                            connection.sendall(body[:5])
+                            self.assertFalse(finished.wait(0.025), "partial body must not be treated as complete")
+                            connection.sendall(body[5:])
+                            response = http.client.HTTPResponse(connection)
+                            response.begin()
+                            self.assertEqual(response.status, 403)
+                            self.assertEqual(json.loads(response.read()),
+                                             {"error": "请从当前工作台配置模型。", "status": 403})
+                            self.assertTrue(finished.wait(1))
+            probe.assert_not_called()
+            save.assert_not_called()
+            refresh.assert_not_called()
+        self.assertEqual(before, {path.relative_to(self.root): path.read_bytes() if path.is_file() else None
+                                  for path in self.root.rglob("*")})
+        self.assertEqual(self.server.model_settings.snapshot(), current)
+
+    def test_parsed_model_error_does_not_discard_body_again(self):
+        with patch("audit_core.workbench_server.discard_rejected_body") as discard, \
+                patch("audit_core.qwen_model.probe_qwen") as probe:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request({"action": "unknown", "revision": 0})
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+            discard.assert_not_called()
+            probe.assert_not_called()
+
     def test_ppio_activation_is_explicit_and_bailian_does_not_reuse_its_key(self):
         payload = {"action": "test", "revision": 0, "provider": "ppio", "api_key": "sk_ppio-api-fixture"}
         with patch("audit_core.qwen_model.probe_qwen", return_value={"provider": "ppio", "response": {"number": "5274", "color": "blue"}}) as probe:
             result = self.request(payload)
             self.assertEqual(probe.call_args.args[0].provider, "ppio")
-            self.assertEqual(result["settings"]["provider"], "gpt")
-            result = self.request({**payload, "action": "activate"})
             self.assertEqual(result["settings"]["provider"], "ppio")
-            self.assertIn("PPIO", result["message"])
+            result = self.request({**payload, "action": "activate"})
+            probe.assert_called_once()
+            self.assertNotIn("test", result)
+            self.assertEqual(result["settings"]["provider"], "ppio")
+            self.assertIn("qwen3.8-max", result["message"])
+            self.assertNotIn("PPIO", result["message"])
+            self.assertNotIn("百炼", result["message"])
             with patch.dict(os.environ, {"DASHSCOPE_API_KEY": ""}):
                 with self.assertRaises(urllib.error.HTTPError) as error:
                     self.request({"action": "activate", "revision": 1, "provider": "qwen"})
                 self.assertEqual(error.exception.code, 400)
                 error.exception.close()
             self.assertEqual(self.request()["provider"], "ppio")
-            self.request({"action": "gpt", "revision": 1})
-            self.assertEqual(self.request()["provider"], "gpt")
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request({"action": "gpt", "revision": 1})
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+            self.assertEqual(self.request()["provider"], "ppio")
             self.assertTrue(self.request()["profiles"]["ppio"]["has_api_key"])
 
 

@@ -1,4 +1,5 @@
-"""Confirmed application values come from the submitted promotion contract."""
+"""Workbook application/approval values must be independent of dealer claims."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -9,6 +10,7 @@ from audit_core.common import AuditError
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_evidence import audit_decision
 from audit_core.pdf_materials import PdfEvidenceProvider
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.pdf_policy import (
     PERSONNEL_CONTRACT_CLARIFICATION,
     PERSONNEL_CONTRACT_COMPARISON_RULES,
@@ -16,15 +18,15 @@ from audit_core.pdf_policy import (
     SKU_CONTRACT_SCENARIOS,
     catalogue,
     material_catalogue,
-    requirements,
+    requirements, rules, APPLICATION_COMPARISON_RULES,
 )
 from tests.pdf_test_support import flags_for, unknown_checks
 
 
 COMPARISONS = {
-    "application_quantity_price": ("s", "结算数量=20", "20", "合同本次约定数量=20", "20", "eq"),
-    "reward_unit_price": ("s", "结算奖励单价=2", "2", "合同本次约定奖励单价=2", "2", "eq"),
-    "claim_ceiling": ("s", "本次核销金额=800", "800", "合同明确本次申请金额=1000", "1000", "le"),
+    "application_quantity_price": ("s", "结算数量=20", "20", "系统申请数量=20", "20", "eq"),
+    "reward_unit_price": ("s", "结算奖励单价=2", "2", "系统申请奖励单价=2", "2", "eq"),
+    "claim_ceiling": ("s", "本次核销金额=800", "800", "系统批复金额合计=800", "800", "eq"),
 }
 
 
@@ -36,9 +38,11 @@ def contract_fixture(scenario="personnel_incentive"):
         {"unit_id": "p", "facts": ["本次红包金额=1000"]},
         {"unit_id": "c", "facts": ["合同本次约定数量=20", "合同本次约定奖励单价=2",
                                     "合同明确本次申请金额=1000", "跨全年合同总额=50000"]},
+        {"unit_id": "a", "facts": ["系统申请数量=20", "系统申请奖励单价=2"]},
+        {"unit_id": "v", "facts": ["系统批复金额合计=800"]},
     ]
     materials = [{"id": material_id, "state": "present", "source_ids": [uid], "reason": "已读到该资料实际内容"}
-                 for material_id, uid in (("settlement", "s"), ("promotion_contract", "c"))]
+                 for material_id, uid in (("settlement", "s"), ("promotion_contract", "c"), ("activity_application", "a"), ("approved_claim", "v"))]
     if scenario == "personnel_incentive":
         materials.append({"id": "payment", "state": "present", "source_ids": ["p"], "reason": "已读到支付截图"})
     return flags, documents, materials, unknown_checks(scenario, flags)
@@ -47,12 +51,13 @@ def contract_fixture(scenario="personnel_incentive"):
 def set_contract_comparison(evidence, rule_id):
     left_id, left_quote, left_value, right_quote, right_value, operator = COMPARISONS[rule_id]
     check = next(c for c in evidence["checks"] if c["rule_id"] == rule_id)
-    check.update(status="pass", reason="本次申报与促销合同中的明确约定相符", source_ids=[left_id, "c"], comparisons=[{
+    reference_id = "v" if rule_id == "claim_ceiling" else "a"
+    check.update(status="pass", reason="本次申报与独立系统申请/批复相符", source_ids=[left_id, reference_id], comparisons=[{
         "label": rule_id,
         "value_kind": {"application_quantity_price": "quantity", "reward_unit_price": "unit_price",
                        "claim_ceiling": "amount"}[rule_id],
         "left": {"unit_id": left_id, "quote": left_quote, "number": left_value},
-        "right": [{"unit_id": "c", "quote": right_quote, "number": right_value}],
+        "right": [{"unit_id": reference_id, "quote": right_quote, "number": right_value}],
         "operation": "value", "operator": operator,
     }])
     return check
@@ -60,7 +65,8 @@ def set_contract_comparison(evidence, rule_id):
 
 class PersonnelContractSourceTests(unittest.TestCase):
     def test_all_three_personnel_comparisons_accept_values_from_actual_contract(self):
-        self.assertEqual(PERSONNEL_CONTRACT_COMPARISON_RULES, frozenset(COMPARISONS))
+        self.assertFalse(PERSONNEL_CONTRACT_COMPARISON_RULES)
+        self.assertTrue(all(("personnel_incentive", r) in APPLICATION_COMPARISON_RULES for r in COMPARISONS))
         for rule_id in COMPARISONS:
             with self.subTest(rule_id=rule_id):
                 flags, documents, materials, evidence = contract_fixture()
@@ -68,7 +74,7 @@ class PersonnelContractSourceTests(unittest.TestCase):
                 result = audit_decision("personnel_incentive", flags, evidence, documents, materials)
                 actual = next(c for c in result["checks"] if c["rule_id"] == rule_id)
                 self.assertEqual(actual["status"], "pass")
-                self.assertEqual(actual["calculations"][0]["right"][0]["unit_id"], "c")
+                self.assertEqual(actual["calculations"][0]["right"][0]["unit_id"], "v" if rule_id == "claim_ceiling" else "a")
                 self.assertEqual(original["status"], "pass")
 
     def test_settlement_cannot_prove_its_own_application_values(self):
@@ -105,50 +111,37 @@ class PersonnelContractSourceTests(unittest.TestCase):
                         self.assertEqual(check["status"], "unknown")
                         self.assertEqual(check["calculations"], [])
 
-    def test_missing_or_unclear_contract_cannot_support_a_definite_numeric_finding(self):
+    def test_missing_or_unclear_approval_cannot_support_a_definite_numeric_finding(self):
         for state in ("missing", "unclear"):
             for status in ("pass", "unknown"):
-                with self.subTest(contract_state=state, check_status=status):
+                with self.subTest(state=state, status=status):
                     flags, documents, materials, evidence = contract_fixture()
-                    contract = next(m for m in materials if m["id"] == "promotion_contract")
-                    contract.update(state=state, source_ids=[] if state == "missing" else ["c"])
-                    check = set_contract_comparison(evidence, "claim_ceiling")
-                    check["status"] = status
-                    with self.assertRaises(AuditError):
-                        audit_decision("personnel_incentive", flags, evidence, documents, materials)
+                    next(m for m in materials if m["id"] == "approved_claim").update(state=state)
+                    set_contract_comparison(evidence, "claim_ceiling")["status"] = status
+                    result=audit_decision("personnel_incentive", flags, evidence, documents, materials)
+                    actual=next(c for c in result['checks'] if c['rule_id']=='claim_ceiling')
+                    self.assertEqual(actual['status'],'not_applicable')
+                    self.assertEqual(actual['comparisons'],[])
 
-    def test_one_page_can_contain_contract_and_settlement_with_independent_quotes(self):
+    def test_shared_settlement_page_cannot_certify_an_independent_application(self):
         flags, documents, materials, evidence = contract_fixture()
         check = set_contract_comparison(evidence, "reward_unit_price")
-        check["source_ids"] = ["shared-page"]
-        comparison = check["comparisons"][0]
-        comparison["left"]["unit_id"] = "shared-page"
-        comparison["right"][0]["unit_id"] = "shared-page"
-        for material in materials:
-            if material["id"] in {"settlement", "promotion_contract"}:
-                material["source_ids"] = ["shared-page"]
-        documents = [{"unit_id": "shared-page", "facts": [comparison["left"]["quote"], comparison["right"][0]["quote"]]},
-                     {"unit_id": "p", "facts": ["本次红包金额=1000"]}]
-        result = audit_decision("personnel_incentive", flags, evidence, documents, materials)
-        self.assertEqual(next(c for c in result["checks"] if c["rule_id"] == "reward_unit_price")["status"], "pass")
-        comparison["right"][0] = deepcopy(comparison["left"])
+        term = check["comparisons"][0]["right"][0]
+        documents[0]["facts"].append(term["quote"])
+        term["unit_id"] = "s"
+        next(m for m in materials if m["id"] == "activity_application")["source_ids"] = ["s"]
+        check["source_ids"] = ["s"]
         with self.assertRaises(AuditError):
             audit_decision("personnel_incentive", flags, evidence, documents, materials)
-        shared_quote = "结算奖励单价=3，合同本次约定奖励单价=2"
-        documents[0]["facts"].append(shared_quote)
-        comparison["left"].update(quote=shared_quote, number="3")
-        comparison["right"][0].update(quote=shared_quote, number="2")
-        result = audit_decision("personnel_incentive", flags, evidence, documents, materials)
-        actual = next(c for c in result["checks"] if c["rule_id"] == "reward_unit_price")
-        self.assertEqual(actual["status"], "fail")
-        self.assertEqual(actual["calculations"][0]["left_value"], "3")
-        self.assertEqual(actual["calculations"][0]["right_value"], "2")
 
     def test_other_types_now_require_brand_contract_for_approved_quantity_values(self):
         rule_id = "application_quantity_price"
         for scenario in SKU_CONTRACT_SCENARIOS:
             with self.subTest(scenario=scenario):
                 flags, documents, materials, evidence = contract_fixture(scenario)
+                if rule_id not in {r.id for r in rules(scenario)}:continue
+                if scenario == "price_difference_support":
+                    continue  # This rule compares unit price, covered by the unit-price matrix.
                 check = set_contract_comparison(evidence, rule_id)
                 result = audit_decision(scenario, flags, evidence, documents, materials)
                 self.assertEqual(next(c for c in result["checks"] if c["rule_id"] == rule_id)["status"], "pass")
@@ -161,7 +154,7 @@ class PersonnelContractSourceTests(unittest.TestCase):
                     audit_decision(scenario, flags, evidence, documents, materials)
 
     def test_contract_confirmation_is_published_without_adding_an_application_material(self):
-        expected = {"pos", "pos_excel", "payment", "staff_photos", "settlement", "promotion_contract"}
+        expected = {"pos", "pos_excel", "payment", "staff_photos", "training_photos", "settlement", "promotion_contract", "activity_application", "approved_claim"}
         self.assertEqual({r.id for r in requirements("personnel_incentive")}, expected)
         for policy in (catalogue(), material_catalogue()):
             with self.subTest(catalogue_keys=list(policy)):
@@ -170,7 +163,7 @@ class PersonnelContractSourceTests(unittest.TestCase):
 
     def test_actual_personnel_audit_prompt_includes_confirmed_contract_source(self):
         flags, documents, materials, response = contract_fixture()
-        provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+        provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
         captured = []
 
         def fake_call(root, used_skill, schema, prompt, **kwargs):
@@ -191,6 +184,7 @@ class SkuContractSourceTests(unittest.TestCase):
         for scenario in SKU_CONTRACT_SCENARIOS:
             for rule_id, too_high in (("claim_ceiling", "1200"), ("reward_unit_price", "3")):
                 with self.subTest(scenario=scenario, rule_id=rule_id):
+                    if rule_id not in {r.id for r in rules(scenario)}:continue
                     flags, documents, materials, evidence = contract_fixture(scenario)
                     check = set_contract_comparison(evidence, rule_id)
                     result = audit_decision(scenario, flags, evidence, documents, materials)
@@ -203,13 +197,14 @@ class SkuContractSourceTests(unittest.TestCase):
                     actual = next(c for c in result["checks"] if c["rule_id"] == rule_id)
                     self.assertEqual(actual["status"], "fail")
                     self.assertEqual(actual["calculations"][0]["left_value"], too_high)
-                    self.assertEqual(actual["calculations"][0]["right"][0]["unit_id"], "c")
+                    self.assertEqual(actual["calculations"][0]["right"][0]["unit_id"], "v" if rule_id == "claim_ceiling" else "a")
 
     def test_settlement_and_pos_cannot_replace_the_contract_reference(self):
         for scenario in SKU_CONTRACT_SCENARIOS:
             for rule_id in ("claim_ceiling", "reward_unit_price"):
                 for source, label in (("s", "结算单填的申请值"), ("pos", "POS销售值")):
                     with self.subTest(scenario=scenario, rule_id=rule_id, source=source):
+                        if rule_id not in {r.id for r in rules(scenario)}:continue
                         flags, documents, materials, evidence = contract_fixture(scenario)
                         check = set_contract_comparison(evidence, rule_id)
                         term = check["comparisons"][0]["right"][0]
@@ -240,10 +235,11 @@ class SkuContractSourceTests(unittest.TestCase):
                             self.assertEqual(check["status"], "unknown")
                             self.assertEqual(check["calculations"], [])
                     if state != "present":
-                        documents[2]["facts"].append(COMPARISONS["claim_ceiling"][3])
+                        next(m for m in materials if m["id"] == "approved_claim").update(state=state)
+                        if "claim_ceiling" not in {r.id for r in rules(scenario)}:continue
                         set_contract_comparison(evidence, "claim_ceiling")
-                        with self.assertRaises(AuditError):
-                            audit_decision(scenario, flags, evidence, documents, materials)
+                        result=audit_decision(scenario, flags, evidence, documents, materials)
+                        self.assertEqual(next(c for c in result['checks'] if c['rule_id']=='claim_ceiling')['status'],'not_applicable')
 
     def test_sales_quantity_still_compares_settlement_to_pos(self):
         for scenario in SKU_CONTRACT_SCENARIOS:
@@ -251,9 +247,11 @@ class SkuContractSourceTests(unittest.TestCase):
                 flags, documents, materials, evidence = contract_fixture(scenario)
                 documents.append({"unit_id": "pos", "facts": ["POS商品甲销量=20"]})
                 materials.append({"id": "pos_excel", "state": "present", "source_ids": ["pos"]})
+                if "settlement_pos_quantity" not in {r.id for r in rules(scenario)}:continue
                 check = next(c for c in evidence["checks"] if c["rule_id"] == "settlement_pos_quantity")
                 check.update(status="pass", reason="商品甲在结算单与销售明细中均为20件", source_ids=["s", "pos"],
-                             comparisons=[{"label": "商品甲结算销量与销售明细销量", "value_kind": "quantity", "operation": "value", "operator": "eq",
+                             comparisons=[{"label": "商品甲结算销量与销售明细销量", "value_kind": "quantity", "operation": "value",
+                                           "operator": "eq",
                                            "left": {"unit_id": "s", "quote": "结算数量=20", "number": "20"},
                                            "right": [{"unit_id": "pos", "quote": "POS商品甲销量=20", "number": "20"}]}])
                 result = audit_decision(scenario, flags, evidence, documents, materials)
@@ -267,9 +265,9 @@ class SkuContractSourceTests(unittest.TestCase):
         }
         for scenario in SKU_CONTRACT_SCENARIOS:
             with self.subTest(scenario=scenario):
-                self.assertEqual({r.id for r in requirements(scenario)}, expected[scenario])
+                self.assertEqual({r.id for r in requirements(scenario) if r.when != "optional"}, expected[scenario])
                 flags, documents, materials, response = contract_fixture(scenario)
-                provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+                provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
                 captured = []
 
                 def fake_call(root, used_skill, schema, prompt, **kwargs):

@@ -72,6 +72,26 @@ class MaterialIssueFileTests(unittest.TestCase):
         extra = next(row for row in rows if row["error_reason"].startswith("多交了"))
         self.assertEqual(extra["business_source_files"], [packet["units"][5]["source_file"]])
 
+    def test_extra_spreadsheet_name_is_printed_once_while_all_chunk_evidence_remains(self):
+        packet = material_packet()
+        source = packet["units"][5]["source_file"]
+        chunks = [{"unit_id": f"a001-f0099-table-{i:04d}", "source_file": source,
+                   "locator": f"销售表第{i}段"} for i in range(1, 31)]
+        packet["units"].extend(chunks)
+        packet["documents"].extend({"unit_id": u["unit_id"], "facts": ["受控测试原始行"]} for u in chunks)
+        classification = packet["classification"]
+        classification["source_ids"].extend(u["unit_id"] for u in chunks)
+        match = classification["material_matches"][0]
+        match["extra_materials"] = [{"description": "其他活动销售表", "reason": "不是本次活动数据",
+                                    "source_ids": [u["unit_id"] for u in chunks]}]
+        packet["route"]["reasons"] = [i["reason"] for i in classification_issues(classification, "personnel_incentive")]
+        original = deepcopy(packet)
+        extra = next(r for r in material_view([packet])["sheets"][0]["rows"] if r["error_reason"].startswith("多交了"))
+        self.assertEqual(extra["error_reason"].count(source), 1)
+        self.assertEqual(extra["business_source_files"], [source])
+        self.assertEqual(len(extra["card_evidence"]["sources"]), len(packet["units"]))
+        self.assertEqual(packet, original)
+
     def test_historical_projection_is_immutable_idempotent_and_separates_archives(self):
         packets = [material_packet(), material_packet("a002", "另一个资料包.zip")]
         packets[1]["units"][2]["source_file"] = "另一份销售表.xlsx"

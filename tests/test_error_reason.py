@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
@@ -177,7 +178,7 @@ class ErrorReasonTests(unittest.TestCase):
                 f"商品编码：不匹配（合同编码 C{index} 未登记）；条形码：精确匹配；名称：模糊匹配；处理方式：修正"]}
             for index in range(1, 16)]}
         summary = render_analysis_summary_markdown({"sheets": [sheet]}, {})
-        self.assertEqual(summary.count("\n- "), 15)
+        self.assertEqual(re.findall(r"(?m)^(\d+)\. ", summary), [str(index) for index in range(1, 16)])
         for index in range(1, 16):
             self.assertIn(f"附件第{index}行", summary)
             self.assertIn(f"C{index} 未登记", summary)
@@ -302,7 +303,7 @@ class ErrorReasonTests(unittest.TestCase):
         summary = render_analysis_summary_markdown({"sheets": [sheet]}, {})
         self.assertIn("商品甲：销售.xlsx数量10、结算单.jpg数量8", summary)
         self.assertIn("商品乙：销售.xlsx数量10、结算单.jpg数量8", summary)
-        self.assertEqual(summary.count("\n- "), 2)
+        self.assertEqual(re.findall(r"(?m)^(\d+)\. ", summary), ["1", "2"])
         row = {"status": "issue", "heading": "问题：数量不一致", "values": ["结算单.jpg：数量不一致"]}
         self.assertEqual(project_error_reasons(sheet, row), ["结算单.jpg：数量不一致。"])
 
@@ -373,8 +374,8 @@ class ErrorReasonTests(unittest.TestCase):
                    "diagnostic_issues": [{"code": "missing_material", "observed": "已盘点本包全部材料，未发现已签合同。", "source_files": []}],
                    "rows": [{"status": "issue"}]} for name in ("甲维护费用.zip", "乙维护费用.zip")]
         summary = render_analysis_summary_markdown({"sheets": sheets}, {})
-        self.assertIn("### 甲维护费用.zip\n\n- 未发现已签合同", summary)
-        self.assertIn("### 乙维护费用.zip\n\n- 未发现已签合同", summary)
+        self.assertIn("### 甲维护费用.zip\n\n1. 未发现已签合同", summary)
+        self.assertIn("### 乙维护费用.zip\n\n2. 未发现已签合同", summary)
         self.assertNotIn(".zip：", summary)
         self.assertEqual(summary.count("未发现已签合同"), 2)
         row = {"status": "issue"}

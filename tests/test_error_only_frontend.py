@@ -11,7 +11,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSET = ROOT / "skills/orchestrate-offline-audit/assets/legacy/error-only.js"
+ASSET = ROOT / "skills/orchestrate-offline-audit/assets/offline-activity-audit.html"
 NODE = shutil.which("node")
 SCENARIOS = (
     "personnel_incentive", "promotional_display", "poster_material",
@@ -78,10 +78,14 @@ class Markup(HTMLParser):
         self.stack[-1].children.append(value)
 
 
+def renderer_script() -> str:
+    return ASSET.read_text(encoding="utf-8").split('<script id="error-only-preview-script">', 1)[1].split("</script>", 1)[0].strip()
+
+
 def render(view: dict, *, script: str | None = None) -> list[dict]:
     completed = subprocess.run(
         [NODE, "-e", HARNESS],
-        input=json.dumps({"view": view, "script": script or ASSET.read_text(encoding="utf-8")}, ensure_ascii=False),
+        input=json.dumps({"view": view, "script": script or renderer_script()}, ensure_ascii=False),
         encoding="utf-8", capture_output=True, check=True, timeout=15,
     )
     return json.loads(completed.stdout)["projections"]
@@ -151,7 +155,7 @@ class ErrorOnlyFrontendTests(unittest.TestCase):
         view = attach_pass_check_log(build_classification_rejection_view(result), {})
         completed = subprocess.run(
             [NODE, "-e", HARNESS], input=json.dumps({
-                "view": view, "script": ASSET.read_text(encoding="utf-8"), "fullPage": True,
+                "view": view, "script": renderer_script(), "fullPage": True,
             }, ensure_ascii=False), encoding="utf-8", capture_output=True, check=True, timeout=15,
         )
         rendered = json.loads(completed.stdout)
@@ -348,10 +352,11 @@ class ErrorOnlyFrontendTests(unittest.TestCase):
         self.assertNotIn("<script>", html)
         self.assertNotIn("<img>", html)
 
-    def test_root_and_asset_share_exact_renderer_and_keep_other_controls(self) -> None:
+    def test_canonical_html_renderer_keeps_other_controls(self) -> None:
         root = (ROOT / 'skills/orchestrate-offline-audit/assets/offline-activity-audit.html').read_text(encoding="utf-8")
         script = root.split('<script id="error-only-preview-script">', 1)[1].split("</script>", 1)[0].strip()
-        self.assertEqual(script, ASSET.read_text(encoding="utf-8").strip())
+        self.assertEqual(root.count('<script id="error-only-preview-script">'), 1)
+        self.assertEqual(script, renderer_script())
         result = render({"sheets": [{"scenario": "maintenance_fee", "rows": [row("maintenance_fee")]}]}, script=script)
         self.assertEqual(result[0]["count"], 1)
         for control in ("eoErrorCategory", "eoErrorType", "eoPassList", "buildPassGroupHtml", "return evidenceHtml(item.evidence, item.source_files || [])"):

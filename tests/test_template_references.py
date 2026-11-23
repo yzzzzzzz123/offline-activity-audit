@@ -1,4 +1,5 @@
 """Designated sample provenance, runtime comparison, and evidence isolation."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 import hashlib
 import json
@@ -15,6 +16,7 @@ from audit_core.extraction_chain import render_prompt
 from audit_core.paths import PROJECT_ROOT
 from audit_core.pdf_evidence import audit_decision
 from audit_core.pdf_materials import PdfEvidenceProvider
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.scenario_registry import SKILL_BY_SCENARIO
 from audit_core.template_references import TEMPLATE_CHECKS, template_comparison
 from tests.pdf_test_support import flags_for, unknown_checks
@@ -133,7 +135,7 @@ class TemplateAssetTests(unittest.TestCase):
 
 
 class TemplateRuntimeTests(unittest.TestCase):
-    def test_runtime_attaches_current_files_and_references_without_mutating_evidence(self):
+    def test_runtime_exposes_template_references_without_preloading_images(self):
         for scenario, skill in SKILL_BY_SCENARIO.items():
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -154,14 +156,19 @@ class TemplateRuntimeTests(unittest.TestCase):
                     kwargs["validator"](response)
                     return response
 
-                provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+                provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
                 with patch.object(provider, "_call", side_effect=fake_call):
                     provider.audit(case, root)
                 self.assertEqual(case, original)
                 self.assertEqual(calls[0][0], skill)
                 self.assertIn((skill / "references/template-reference.md").read_text(encoding="utf-8"), calls[0][1])
-                reference_images = template_comparison(skill, scenario)[1]
-                self.assertEqual(calls[0][2], [current_image] + reference_images if scenario in TEMPLATE_CHECKS else [])
+                # The business audit reads source-bound facts and asks for a
+                # specific original (case or template page) by filename only
+                # when it still needs one; nothing is preloaded with the call.
+                references, _ = template_comparison(skill, scenario)
+                self.assertEqual(calls[0][2], [])
+                for reference in references:
+                    self.assertIn(reference["image"], calls[0][1])
 
     def test_reference_id_cannot_replace_a_current_source_in_visual_or_numeric_checks(self):
         scenario = "poster_material"
@@ -179,14 +186,14 @@ class TemplateRuntimeTests(unittest.TestCase):
             audit_decision(case["scenario"], case["flags"], evidence, case["documents"], case["materials"])
 
     def test_fixed_gates_receive_role_guides_without_adding_sample_documents(self):
-        provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+        provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
         for scenario, skill in SKILL_BY_SCENARIO.items():
             with self.subTest(scenario=scenario):
                 docs = [{"unit_id": "actual", "facts": ["来自本次资料"]}]
                 original = deepcopy(docs)
                 prompt = render_prompt(provider._gate_prompt(scenario, docs))
                 self.assertEqual(docs, original)
-                self.assertIn("参考样张不计本包来源，不补齐门禁", prompt)
+                self.assertIn("不计本包来源，不补齐本次上传资料", prompt)
                 self.assertIn((skill / "references/template-reference.md").read_text(encoding="utf-8"), prompt)
 
 

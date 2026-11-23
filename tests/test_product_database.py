@@ -57,12 +57,13 @@ class ProductDatabaseTests(unittest.TestCase):
             with self.assertRaisesRegex(AuditError, "数据库不可用"):
                 load_product_rag()
 
-    def test_reader_uses_tls_viewer_and_rejects_truncated_response(self):
+    def test_legacy_source_reader_uses_tls_viewer_and_rejects_truncated_response(self):
+        from audit_core import legacy_product_database as legacy
         body = (json.dumps({"row_count": 1}) + "\n" + json.dumps(ROWS[0]) + "\n").encode()
         result = subprocess.CompletedProcess([], 0, stdout=body, stderr=b"")
-        with patch.object(db.shutil, "which", return_value="docker"), \
-             patch.object(Path, "is_file", return_value=True), patch.object(db.subprocess, "run", return_value=result) as run:
-            self.assertEqual(db._read_database_rows(), ROWS)
+        with patch.object(legacy.shutil, "which", return_value="docker"), \
+             patch.object(Path, "is_file", return_value=True), patch.object(legacy.subprocess, "run", return_value=result) as run:
+            self.assertEqual(legacy._read_database_rows(), ROWS)
             args = run.call_args.args[0]
             self.assertIn("--user=product_viewer", args[-1])
             self.assertIn("--ssl-mode=REQUIRED", args[-1])
@@ -70,7 +71,7 @@ class ProductDatabaseTests(unittest.TestCase):
             self.assertIn(b"READ ONLY", run.call_args.kwargs["input"])
             result.stdout = b'{"row_count":2}\n' + body.split(b"\n", 1)[1]
             with self.assertRaises(AuditError):
-                db._read_database_rows()
+                legacy._read_database_rows()
 
     def test_contract_codes_cannot_use_old_image_library_aliases(self):
         catalog = db.catalog_from_rows(ROWS)

@@ -75,9 +75,14 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
         self.assertEqual([c["kind"] for c in provider.calls], ["pdf_material_classification"])
         workspace = Path(receipt["worktree"])
         self.assertFalse((workspace / "analysis/results/poster_material.json").exists())
-        for text in ("发票或收据", "结算单", "促销合同"):
+        for text in ("发票、收据或打款截图", "结算单", "促销合同"):
             self.assertIn(text, result["archives"][0]["reason"])
-        self.assertEqual(snapshot["view"]["pass_check_log"]["total"], 0)
+        checks = snapshot["view"]["pass_check_log"]
+        self.assertEqual(checks["business_total"], 0)
+        self.assertGreater(checks["material_total"], 0)
+        self.assertEqual(checks["total"], checks["material_total"])
+        self.assertFalse({"invoice", "settlement", "promotion_contract"}.intersection(
+            item["control_id"] for group in checks["groups"] for item in group["items"]))
 
     def test_personnel_audit_can_access_payment_images_until_analysis_finishes(self):
         self.bundle(files={"图一.png": image_bytes(), "图二.png": image_bytes("blue")})
@@ -267,17 +272,23 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
         self.assertFalse((Path(receipt["worktree"]) / "analysis/classification-rejection").exists())
 
     def test_pdf_zero_wording_produces_specific_issue_without_rejecting_payment(self):
-        self.bundle()
+        self.bundle(files={"结算.png": image_bytes("white"), "申请.png": image_bytes("blue")})
 
         def mutate(case, value):
             if case["kind"] == "pdf_material_classification":
-                value["documents"][0]["facts"].extend(["结算奖励单价=3", "合同奖励单价=2"])
+                value["documents"][0]["facts"].extend(["结算奖励单价=3"])
+                value["documents"][1]["facts"].append("系统申请奖励单价=2")
+                for match in value["classification"]["material_matches"]:
+                    for material in match["materials"]:
+                        if material["id"]=="activity_application":material["state"]="present"
+                        material["source_ids"] = [value["documents"][1 if material["id"]=="activity_application" else 0]["unit_id"]] if material["state"]=="present" else []
             else:
                 uid = case["documents"][0]["unit_id"]
                 check = next(c for c in value["checks"] if c["rule_id"] == "reward_unit_price")
-                check.update(status="pass", reason="模型误判一致", source_ids=[uid], comparisons=[{
+                app = case["documents"][1]["unit_id"]
+                check.update(status="pass", reason="模型误判一致", source_ids=[uid,app], comparisons=[{
                     "label": "商品甲奖励单价", "value_kind": "unit_price", "left": {"unit_id": uid, "quote": "结算奖励单价=3", "number": "3"},
-                    "right": [{"unit_id": uid, "quote": "合同奖励单价=2", "number": "2"}],
+                    "right": [{"unit_id": app, "quote": "系统申请奖励单价=2", "number": "2"}],
                     "operator": "eq", "operation": "value"}])
 
         receipt = self.run_audit(PolicyProvider(("personnel_incentive",), mutate=mutate), biz_type="人员激励")
@@ -288,7 +299,7 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
         self.assertEqual(result["archives"][0]["summary"]["conclusion"], "issues_found")
         summary = Path(receipt["analysis_summary"]).read_text(encoding="utf-8")
         self.assertIn("商品甲奖励单价", summary)
-        self.assertIn("申报单价须与合同约定单价一致，相差1", summary)
+        self.assertIn("申报单价须与系统申请单价一致，相差1", summary)
         snapshot = json.loads(Path(receipt["snapshot"]).read_text(encoding="utf-8"))
         for forbidden in ("核销失败", "0核销", "不能报销", "不予核销", "zero_reimbursement", "approved_amount"):
             self.assertNotIn(forbidden, summary)
@@ -334,7 +345,8 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
         self.assertEqual(manifest["status"], "failed")
         self.assertNotEqual(manifest["failure"].get("code"), "classification_failed")
         self.assertFalse((workspace / "analysis/classification-rejection").exists())
-        self.assertFalse((workspace / "ai-analysis-summary.md").exists())
+        from audit_core.customer_language import SYSTEM_FAILURE_MESSAGE
+        self.assertEqual((workspace / "ai-analysis-summary.md").read_text(encoding="utf-8"), SYSTEM_FAILURE_MESSAGE)
         self.assertTrue((workspace / "offline-activity-audit.html").exists())
 
     def test_unsafe_archive_and_nested_archive_fail_before_any_model(self):
@@ -390,7 +402,8 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
 
         service = OSSIntakeService(
             worktrees_root=self.worktrees, input_root=self.root / "input",
-            config=OSSIntakeConfig(allowed_hosts=(OSS_HOST,), callback_url="https://business.example/api/v1/ai/analyze/callback", callback_required=callback_required),
+            config=OSSIntakeConfig(allowed_hosts=(OSS_HOST,), callback_url="https://business.example/api/v1/ai/analyze/callback",
+                                   callback_required=callback_required, offpeak_only=False),
             downloader=downloader, runner=runner, url_validator=lambda value, _config: value,
             callback_sender=callback_sender,
         )
@@ -398,7 +411,7 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
             service.close()
             # close() queues shutdown asynchronously. Wait for this fixture's
             # workers before TemporaryDirectory removes their receipt files.
-            for worker in (service._download_worker, service._audit_worker):
+            for worker in (service._download_worker, *service._audit_workers):
                 worker.join(timeout=5)
                 self.assertFalse(worker.is_alive(), "测试后台线程未退出，不能开始删除临时资料")
         self.addCleanup(close_fixture_service)
@@ -437,7 +450,7 @@ class MaterialDiagnosticWorkflowTests(unittest.TestCase):
         self.assertIsNone(job["result"]["failure"])
         self.assertEqual([c["kind"] for c in provider.calls], ["pdf_material_classification"])
         self.assertGreater(job["result"]["error_count"], 0)
-        self.assertIn("缺少发票或收据", callbacks[0]["result"])
+        self.assertIn("缺少发票、收据或打款截图", callbacks[0]["result"])
         self.assertNotIn("核销失败", callbacks[0]["result"])
 
     def test_oss_gate_issues_complete_but_callback_transport_failure_stays_failed(self):

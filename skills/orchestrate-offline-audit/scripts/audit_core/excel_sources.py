@@ -7,7 +7,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
-from openpyxl import load_workbook
+from .workbook_reading import sequential_workbook as load_workbook
 from PIL import ExifTags, Image
 from pypdf import PdfReader
 
@@ -48,6 +48,10 @@ MAINTENANCE_POS_HEADERS = {
 }
 
 
+class _SalesHeaderNotFound(AuditError):
+    """This sheet is not this reader's sales layout; other sheets still count."""
+
+
 def _header_map(
     ws: Any,
     candidates: dict[str, set[str]],
@@ -73,7 +77,7 @@ def _header_map(
                 required_fields |= {"customer", "product_code", "barcode"}
         if required_fields.issubset(mapping):
             return row, mapping
-    raise AuditError(f"Could not find required Excel headers in sheet {ws.title!r}")
+    raise _SalesHeaderNotFound(f"Could not find required Excel headers in sheet {ws.title!r}")
 
 
 def _number(value: Any) -> float | None:
@@ -104,30 +108,135 @@ def _money_pair_status(left: Any, right: Any) -> str:
     return "exact" if difference <= Decimal("0.01") else "mismatch"
 
 
-def read_personnel_sales(path: str | Path) -> dict[str, Any]:
+def _read_sales_sheets(path, reader):
+    """Read each matching worksheet independently, then combine actual details.
+
+    Printed totals are checked against their own sheet, never against the sum
+    of other sheets. Non-sales tabs are retained in the coverage receipt.
+    """
     source = Path(path).resolve()
-    workbook = load_workbook(source, read_only=True, data_only=False)
-    worksheet = workbook[workbook.sheetnames[0]]
+    formula = load_workbook(source, read_only=True, data_only=False, keep_links=False)
+    cached = None
+    try:
+        cached = load_workbook(source, read_only=True, data_only=True, keep_links=False)
+        results, inventory = [], []
+        for sheet in formula.worksheets:
+            try:
+                result = reader(source, _books=(formula, cached), _sheet_name=sheet.title)
+            except _SalesHeaderNotFound:
+                inventory.append({'sheet': sheet.title, 'state': sheet.sheet_state, 'sales_header_matched': False})
+                continue
+            for record in result['records']:
+                record['sheet'] = sheet.title
+                record['excel_locator'] = f"{sheet.title}!R{record['excel_row']}"
+            for record in result.get('printed_total_rows', []):
+                record['sheet'] = sheet.title
+            results.append(result)
+            inventory.append({'sheet': sheet.title, 'state': sheet.sheet_state, 'sales_header_matched': True,
+                              'detail_row_count': len(result['records'])})
+        if not results:
+            raise AuditError('全部工作表均未找到本类可读取的销售明细表头')
+        if len(results) == 1:
+            return {**results[0], 'sheet_inventory': inventory}
+        result = {**results[0], 'sheet': '、'.join(r['sheet'] for r in results), 'header_row': None,
+                  'sheet_inventory': inventory, 'sheet_results': results,
+                  'records': [record for r in results for record in r['records']]}
+        for key in ('detail_row_count', 'sku_count', 'total_quantity', 'total_sales_amount', 'retail_amount',
+                    'calculated_total_quantity', 'calculated_total_amount', 'printed_total_quantity', 'printed_total_amount'):
+            if key in result:
+                values = [r.get(key) for r in results]
+                result[key] = (float(sum(Decimal(str(v)) for v in values)) if all(v is not None for v in values) else None)
+                if result[key] is not None and float(result[key]).is_integer():
+                    result[key] = int(result[key])
+        for key in ('period_values', 'customers', 'store_values'):
+            if key in result:
+                result[key] = sorted({value for r in results for value in r[key]})
+        for key in ('formula_cells', 'external_formula_cells'):
+            if key in result:
+                result[key] = [f"{r['sheet']}!{value}" for r in results for value in r[key]]
+        if 'printed_total_rows' in result:
+            result['printed_total_rows'] = [row for r in results for row in r['printed_total_rows']]
+        if 'printed_total_row' in result:
+            result['printed_total_row'] = None  # multiple real totals; see per-sheet records
+        for key in ('printed_quantity_status', 'printed_amount_status', 'line_amount_status', 'internal_status'):
+            if key in result:
+                statuses = {r[key] for r in results}
+                result[key] = next((s for s in ('fail', 'mismatch', 'unverifiable', 'pass', 'exact') if s in statuses))
+        if 'internal_basis' in result:
+            result['internal_basis'] = '；'.join(f"{r['sheet']}：{r['internal_basis']}" for r in results)
+            for key in ('line_amount_problem_rows', 'internal_problem_rows'):
+                result[key] = [f"{r['sheet']}!R{row}" for r in results for row in r[key]]
+        if 'skus' in result:
+            # Personnel tool's legacy aggregate API, now carrying exact sheet
+            # provenance as well. Do not silently deduplicate identical rows.
+            skus, stores = {}, {}
+            for record in result['records']:
+                sku = skus.setdefault(record['barcode'], {'barcode': record['barcode'],
+                    'product_name': record['product_name'], 'quantity': 0.0, 'excel_rows': [],
+                    'source_rows': [], 'store_quantities': defaultdict(float)})
+                sku.setdefault('product_names', [])
+                if record['product_name'] not in sku['product_names']:
+                    sku['product_names'].append(record['product_name'])
+                sku['quantity'] += float(record['quantity'])
+                sku['excel_rows'].append(record['excel_row'])
+                sku['source_rows'].append(record['excel_locator'])
+                sku['store_quantities'][record['store_name']] += float(record['quantity'])
+                store = stores.setdefault(record['store_name'], {'store_name': record['store_name'],
+                    'quantity': 0.0, 'excel_rows': [], 'source_rows': []})
+                store['quantity'] += float(record['quantity'])
+                store['excel_rows'].append(record['excel_row'])
+                store['source_rows'].append(record['excel_locator'])
+            for sku in skus.values():
+                sku['quantity'] = _json_quantity(sku['quantity'])
+                sku['store_quantities'] = [{'store_name': name, 'quantity': _json_quantity(value)}
+                                          for name, value in sorted(sku['store_quantities'].items())]
+            for store in stores.values():
+                store['quantity'] = _json_quantity(store['quantity'])
+            result.update(skus=list(skus.values()), stores=list(stores.values()),
+                          sku_count=len(skus), store_count=len(stores))
+        return result
+    finally:
+        formula.close()
+        if cached is not None:
+            cached.close()
+
+
+def read_personnel_sales(path: str | Path) -> dict[str, Any]:
+    return _read_sales_sheets(path, _read_personnel_sales_sheet)
+
+
+def read_display_sales(path: str | Path) -> dict[str, Any]:
+    return _read_sales_sheets(path, _read_display_sales_sheet)
+
+
+def read_maintenance_pos(path: str | Path) -> dict[str, Any]:
+    return _read_sales_sheets(path, _read_maintenance_pos_sheet)
+
+
+def _read_personnel_sales_sheet(path: str | Path, *, _books, _sheet_name) -> dict[str, Any]:
+    source = Path(path).resolve()
+    workbook = _books[0]
+    worksheet = workbook[_sheet_name]
     header_row, columns = _header_map(worksheet, PERSONNEL_HEADERS)
     records: list[dict[str, Any]] = []
     for row in range(header_row + 1, worksheet.max_row + 1):
         store = worksheet.cell(row, columns["store"]).value
         barcode = barcode_text(worksheet.cell(row, columns["barcode"]).value)
         product = worksheet.cell(row, columns["product"]).value
-        quantity = _number(worksheet.cell(row, columns["quantity"]).value)
+        quantity = _number(_books[1][_sheet_name].cell(row, columns["quantity"]).value)
         if not store or not barcode or not product or quantity is None:
             continue
         if normalize_text(store) in {"合计", "总计"}:
             continue
         record = {
             "excel_row": row,
-            "period_text": str(worksheet.cell(row, columns.get("period", 0)).value or ""),
+            "period_text": str((worksheet.cell(row, columns["period"]).value if "period" in columns else None) or ""),
             "store_name": str(store).strip(),
             "barcode": barcode,
             "product_name": str(product).strip(),
             "quantity": _json_quantity(quantity),
             "unit_price": (
-                _number(worksheet.cell(row, columns["unit_price"]).value)
+                _number(_books[1][_sheet_name].cell(row, columns["unit_price"]).value)
                 if "unit_price" in columns
                 else None
             ),
@@ -196,16 +305,15 @@ def read_personnel_sales(path: str | Path) -> dict[str, Any]:
         "skus": skus,
         "stores": stores,
     }
-    workbook.close()
     return result
 
 
-def read_display_sales(path: str | Path) -> dict[str, Any]:
+def _read_display_sales_sheet(path: str | Path, *, _books, _sheet_name) -> dict[str, Any]:
     source = Path(path).resolve()
-    formula_book = load_workbook(source, read_only=True, data_only=False)
-    value_book = load_workbook(source, read_only=True, data_only=True)
-    formula_ws = formula_book[formula_book.sheetnames[0]]
-    value_ws = value_book[value_book.sheetnames[0]]
+    formula_book = _books[0]
+    value_book = _books[1]
+    formula_ws = formula_book[_sheet_name]
+    value_ws = value_book[_sheet_name]
     header_row, columns = _header_map(formula_ws, DISPLAY_HEADERS)
     records: list[dict[str, Any]] = []
     external_formula_cells: list[str] = []
@@ -388,140 +496,134 @@ def read_display_sales(path: str | Path) -> dict[str, Any]:
         "records": records,
         "store_level_available": False,
     }
-    formula_book.close()
-    value_book.close()
     return result
 
 
-def read_maintenance_pos(path: str | Path) -> dict[str, Any]:
+def _read_maintenance_pos_sheet(path: str | Path, *, _books, _sheet_name) -> dict[str, Any]:
     """Read one POS workbook without exposing it to the visual extraction stage."""
 
     source = Path(path).resolve()
-    formula_book = load_workbook(source, read_only=True, data_only=False)
-    value_book = load_workbook(source, read_only=True, data_only=True)
-    try:
-        formula_ws = formula_book[formula_book.sheetnames[0]]
-        value_ws = value_book[value_book.sheetnames[0]]
-        header_row, columns = _header_map(
-            formula_ws,
-            MAINTENANCE_POS_HEADERS,
-            required={"product", "quantity", "amount"},
-        )
-        records: list[dict[str, Any]] = []
-        printed_totals: list[dict[str, Any]] = []
-        external_formula_cells: list[str] = []
-        formula_cells: list[str] = []
-        for row in range(header_row + 1, formula_ws.max_row + 1):
-            formula_values = [
-                formula_ws.cell(row, col).value
-                for col in range(1, formula_ws.max_column + 1)
-            ]
-            for col, value in enumerate(formula_values, 1):
-                if isinstance(value, str) and value.startswith("="):
-                    coordinate = formula_ws.cell(row, col).coordinate
-                    formula_cells.append(coordinate)
-                    if "[" in value:
-                        external_formula_cells.append(coordinate)
-            normalized_cells = {
-                normalize_text(value)
-                for value in formula_values
-                if value is not None
-            }
-            if normalized_cells & {"合计", "总计"}:
-                printed_totals.append(
-                    {
-                        "excel_row": row,
-                        "quantity": _number(value_ws.cell(row, columns["quantity"]).value),
-                        "sales_amount": _number(value_ws.cell(row, columns["amount"]).value),
-                    }
-                )
-                continue
-
-            product = formula_ws.cell(row, columns["product"]).value
-            quantity = _number(value_ws.cell(row, columns["quantity"]).value)
-            amount = _number(value_ws.cell(row, columns["amount"]).value)
-            if not product or quantity is None or amount is None:
-                continue
-            unit_price = (
-                _number(value_ws.cell(row, columns["unit_price"]).value)
-                if "unit_price" in columns
-                else None
-            )
-            calculated_amount = quantity * unit_price if unit_price is not None else None
-            period_value = (
-                formula_ws.cell(row, columns["period"]).value
-                if "period" in columns
-                else None
-            )
-            store_value = (
-                formula_ws.cell(row, columns["store"]).value
-                if "store" in columns
-                else None
-            )
-            product_code_value = (
-                formula_ws.cell(row, columns["product_code"]).value
-                if "product_code" in columns
-                else None
-            )
-            barcode_value = (
-                formula_ws.cell(row, columns["barcode"]).value
-                if "barcode" in columns
-                else None
-            )
-            records.append(
+    formula_book = _books[0]
+    value_book = _books[1]
+    formula_ws = formula_book[_sheet_name]
+    value_ws = value_book[_sheet_name]
+    header_row, columns = _header_map(
+        formula_ws,
+        MAINTENANCE_POS_HEADERS,
+        required={"product", "quantity", "amount"},
+    )
+    records: list[dict[str, Any]] = []
+    printed_totals: list[dict[str, Any]] = []
+    external_formula_cells: list[str] = []
+    formula_cells: list[str] = []
+    for row in range(header_row + 1, formula_ws.max_row + 1):
+        formula_values = [
+            formula_ws.cell(row, col).value
+            for col in range(1, formula_ws.max_column + 1)
+        ]
+        for col, value in enumerate(formula_values, 1):
+            if isinstance(value, str) and value.startswith("="):
+                coordinate = formula_ws.cell(row, col).coordinate
+                formula_cells.append(coordinate)
+                if "[" in value:
+                    external_formula_cells.append(coordinate)
+        normalized_cells = {
+            normalize_text(value)
+            for value in formula_values
+            if value is not None
+        }
+        if normalized_cells & {"合计", "总计"}:
+            printed_totals.append(
                 {
                     "excel_row": row,
-                    "period_text": str(period_value or "").strip(),
-                    "store_name": str(store_value or "").strip(),
-                    "product_code": str(product_code_value or "").strip(),
-                    "barcode": barcode_text(barcode_value),
-                    "product_name": str(product).strip(),
-                    "quantity": _json_quantity(quantity),
-                    "unit_price": unit_price,
-                    "sales_amount": amount,
-                    "calculated_sales_amount": calculated_amount,
-                    "line_amount_status": _money_pair_status(calculated_amount, amount),
+                    "quantity": _number(value_ws.cell(row, columns["quantity"]).value),
+                    "sales_amount": _number(value_ws.cell(row, columns["amount"]).value),
                 }
             )
-        if not records:
-            raise AuditError(f"POS电子表没有可读取的商品、数量和销售金额明细：{source.name}")
+            continue
 
-        total_quantity = sum(float(item["quantity"]) for item in records)
-        total_sales_amount = sum(float(item["sales_amount"]) for item in records)
-        printed_total = printed_totals[0] if len(printed_totals) == 1 else None
-        printed_quantity_status = (
-            _money_pair_status(printed_total.get("quantity"), total_quantity)
-            if printed_total is not None
-            else "unverifiable"
+        product = formula_ws.cell(row, columns["product"]).value
+        quantity = _number(value_ws.cell(row, columns["quantity"]).value)
+        amount = _number(value_ws.cell(row, columns["amount"]).value)
+        if not product or quantity is None or amount is None:
+            continue
+        unit_price = (
+            _number(value_ws.cell(row, columns["unit_price"]).value)
+            if "unit_price" in columns
+            else None
         )
-        printed_amount_status = (
-            _money_pair_status(printed_total.get("sales_amount"), total_sales_amount)
-            if printed_total is not None
-            else "unverifiable"
+        calculated_amount = quantity * unit_price if unit_price is not None else None
+        period_value = (
+            formula_ws.cell(row, columns["period"]).value
+            if "period" in columns
+            else None
         )
-        return {
-            "source_file": source.name,
-            "sheet": formula_ws.title,
-            "header_row": header_row,
-            "detail_row_count": len(records),
-            "total_quantity": _json_quantity(total_quantity),
-            "total_sales_amount": _json_quantity(total_sales_amount),
-            "printed_total_rows": printed_totals,
-            "printed_quantity_status": printed_quantity_status,
-            "printed_amount_status": printed_amount_status,
-            "period_values": sorted(
-                {item["period_text"] for item in records if item["period_text"]}
-            ),
-            "store_values": sorted(
-                {item["store_name"] for item in records if item["store_name"]}
-            ),
-            "formula_cells": sorted(set(formula_cells)),
-            "external_formula_cells": sorted(set(external_formula_cells)),
-            "records": records,
-        }
-    finally:
-        formula_book.close()
-        value_book.close()
+        store_value = (
+            formula_ws.cell(row, columns["store"]).value
+            if "store" in columns
+            else None
+        )
+        product_code_value = (
+            formula_ws.cell(row, columns["product_code"]).value
+            if "product_code" in columns
+            else None
+        )
+        barcode_value = (
+            formula_ws.cell(row, columns["barcode"]).value
+            if "barcode" in columns
+            else None
+        )
+        records.append(
+            {
+                "excel_row": row,
+                "period_text": str(period_value or "").strip(),
+                "store_name": str(store_value or "").strip(),
+                "product_code": str(product_code_value or "").strip(),
+                "barcode": barcode_text(barcode_value),
+                "product_name": str(product).strip(),
+                "quantity": _json_quantity(quantity),
+                "unit_price": unit_price,
+                "sales_amount": amount,
+                "calculated_sales_amount": calculated_amount,
+                "line_amount_status": _money_pair_status(calculated_amount, amount),
+            }
+        )
+    if not records:
+        raise AuditError(f"POS电子表没有可读取的商品、数量和销售金额明细：{source.name}")
+
+    total_quantity = sum(float(item["quantity"]) for item in records)
+    total_sales_amount = sum(float(item["sales_amount"]) for item in records)
+    printed_total = printed_totals[0] if len(printed_totals) == 1 else None
+    printed_quantity_status = (
+        _money_pair_status(printed_total.get("quantity"), total_quantity)
+        if printed_total is not None
+        else "unverifiable"
+    )
+    printed_amount_status = (
+        _money_pair_status(printed_total.get("sales_amount"), total_sales_amount)
+        if printed_total is not None
+        else "unverifiable"
+    )
+    return {
+        "source_file": source.name,
+        "sheet": formula_ws.title,
+        "header_row": header_row,
+        "detail_row_count": len(records),
+        "total_quantity": _json_quantity(total_quantity),
+        "total_sales_amount": _json_quantity(total_sales_amount),
+        "printed_total_rows": printed_totals,
+        "printed_quantity_status": printed_quantity_status,
+        "printed_amount_status": printed_amount_status,
+        "period_values": sorted(
+            {item["period_text"] for item in records if item["period_text"]}
+        ),
+        "store_values": sorted(
+            {item["store_name"] for item in records if item["store_name"]}
+        ),
+        "formula_cells": sorted(set(formula_cells)),
+        "external_formula_cells": sorted(set(external_formula_cells)),
+        "records": records,
+    }
 
 
 def read_pos_target_summary(path: str | Path) -> dict[str, Any]:
@@ -541,7 +643,7 @@ def read_pos_target_summary(path: str | Path) -> dict[str, Any]:
             formula_ws = formula_book[sheet_name]
             value_ws = value_book[sheet_name]
             scan_rows = min(int(formula_ws.max_row), 50)
-            scan_columns = min(int(formula_ws.max_column), 30)
+            scan_columns = int(formula_ws.max_column)
             for row in range(1, scan_rows + 1):
                 columns: dict[str, int] = {}
                 for column in range(1, scan_columns + 1):
@@ -563,7 +665,7 @@ def read_pos_target_summary(path: str | Path) -> dict[str, Any]:
         printed_totals: list[dict[str, Any]] = []
         formula_cells: list[str] = []
         external_formula_cells: list[str] = []
-        last_row = min(int(formula_ws.max_row), header_row + 10_000)
+        last_row = int(formula_ws.max_row)
         for row in range(header_row + 1, last_row + 1):
             raw_values = [
                 formula_ws.cell(row, column).value
@@ -650,7 +752,7 @@ def read_self_procured_pos_summary(path: str | Path) -> dict[str, Any]:
             value_ws = value_book[sheet_name]
             for row in range(1, min(int(formula_ws.max_row), 50) + 1):
                 columns: dict[str, int] = {}
-                for column in range(1, min(int(formula_ws.max_column), 30) + 1):
+                for column in range(1, int(formula_ws.max_column) + 1):
                     cell_text = normalize_text(formula_ws.cell(row, column).value)
                     for field, candidates in normalized_aliases.items():
                         if cell_text in candidates:
@@ -669,7 +771,7 @@ def read_self_procured_pos_summary(path: str | Path) -> dict[str, Any]:
         printed_totals: list[dict[str, Any]] = []
         formula_cells: list[str] = []
         external_formula_cells: list[str] = []
-        for row in range(header_row + 1, min(int(formula_ws.max_row), header_row + 10_000) + 1):
+        for row in range(header_row + 1, int(formula_ws.max_row) + 1):
             raw_values = [
                 formula_ws.cell(row, column).value
                 for column in range(1, int(formula_ws.max_column) + 1)

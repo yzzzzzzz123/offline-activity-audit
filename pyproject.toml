@@ -13,13 +13,19 @@ dependencies = [
   "jsonschema>=4.20,<5",
   "langchain-core>=1.0,<2",
   "langsmith>=0.3.45,<1",
-  "mcp>=1.29,<2",
   "openpyxl>=3.1,<4",
   "Pillow>=10,<13",
   "pypdf>=5,<7",
   "PyMuPDF>=1.26,<2",
+  "PyMySQL>=1.1,<2",
+  "pywin32>=306; platform_system == 'Windows'",
+  "requests>=2.32,<3",
+  "tzdata>=2024.1",
   "xlrd>=2,<3"
 ]
+
+[project.optional-dependencies]
+legacy-maps = ["mcp>=1.29,<2"]
 
 [tool.setuptools]
 packages = ["audit_core"]

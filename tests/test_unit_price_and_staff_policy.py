@@ -1,4 +1,5 @@
-"""Exact contract unit prices and store-by-day temporary-staff photos."""
+"""Exact contract unit prices and optional temporary-staff evidence."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -10,7 +11,8 @@ from audit_core.customer_language import customer_reason, numeric_problem
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_evidence import audit_decision
 from audit_core.pdf_materials import PdfEvidenceProvider
-from audit_core.pdf_policy import STAFF_PHOTO_CLARIFICATION, UNIT_PRICE_CLARIFICATION
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
+from audit_core.pdf_policy import STAFF_PHOTO_CLARIFICATION, UNIT_PRICE_CLARIFICATION, rules
 from audit_core.pdf_workflow import build_view
 from tests.pdf_test_support import flags_for, unknown_checks
 from tests.test_brand_amount_policy import decide, numeric_case
@@ -18,21 +20,8 @@ from tests.test_brand_amount_policy import decide, numeric_case
 
 PRICE_RULES = [(scenario, rule_id)
                for scenario in ("personnel_incentive", "giveaway_promotion", "price_difference_support", "pos_target_incentive")
-               for rule_id in ("reward_unit_price", "application_quantity_price")]
+               for rule_id in ("reward_unit_price", "application_quantity_price") if rule_id in {r.id for r in rules(scenario)}]
 PRICE_RULES.append(("promotional_display", "display_quantity_price"))
-
-
-def staff_case(temporary_staff=True):
-    flags = flags_for("personnel_incentive", temporary_staff=temporary_staff)
-    evidence = unknown_checks("personnel_incentive", flags)
-    check = next(c for c in evidence["checks"] if c["rule_id"] == "staff_daily_photos")
-    documents = [{"unit_id": "contract", "facts": ["合同安排甲店和乙店各在2026-09-01、2026-09-02做临促"]},
-                 {"unit_id": "photos", "facts": ["甲店1日、2日及乙店1日、2日分别有对应水印照片，包含临促人员及产品"]}]
-    materials = [{"id": "promotion_contract", "state": "present", "source_ids": ["contract"], "reason": "合同原件可见"},
-                 {"id": "staff_photos", "state": "present", "source_ids": ["photos"], "reason": "临促照片已收到"}]
-    case = {"scenario": "personnel_incentive", "archive_id": "a001", "flags": flags,
-            "documents": documents, "materials": materials}
-    return case, evidence, check
 
 
 class UnitPriceEqualityTests(unittest.TestCase):
@@ -106,7 +95,7 @@ class UnitPriceEqualityTests(unittest.TestCase):
                 actual = decide(case, evidence, "reward_unit_price")
                 reason = numeric_problem(actual, units)
                 if price != "2":
-                    for text in ("结算单.xlsx", "促销合同.pdf", price, "合同约定单价一致", "相差"):
+                    for text in ("结算单.xlsx", "促销合同.pdf", price, "系统申请单价一致", "相差"):
                         self.assertIn(text, reason)
                     self.assertNotIn("核销金额", reason)
                 else:
@@ -117,7 +106,8 @@ class UnitPriceEqualityTests(unittest.TestCase):
                 result = audit_decision(scenario, flags, unknown_checks(scenario, flags), [])
                 actual = next(c for c in result["checks"] if c["rule_id"] == rule_id)
                 reason = customer_reason(actual, [])
-                self.assertIn("单价是否与合同约定相同", reason)
+                self.assertIn("系统活动申请", reason)
+                self.assertNotIn("未取得", reason)
                 self.assertNotIn("单价是否超过合同约定", reason)
 
     def test_actual_price_prompts_require_equal_unit_price_and_only_allow_final_amount_rounding(self):
@@ -125,79 +115,17 @@ class UnitPriceEqualityTests(unittest.TestCase):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
                 flags = flags_for(scenario)
                 response = unknown_checks(scenario, flags)
-                provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+                provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
                 with patch.object(provider, "_call", return_value=response) as call:
                     provider.audit({"scenario": scenario, "archive_id": "a001", "flags": flags,
                                     "documents": [], "materials": []}, Path(temporary))
                 prompt = render_prompt(call.call_args.args[3])
                 self.assertIn(UNIT_PRICE_CLARIFICATION, prompt)
-                self.assertIn("申报单价使用unit_price/eq", prompt)
-                self.assertIn("只有最终结算金额可以抹零或四舍五入", prompt)
+                self.assertIn("单价", prompt)
+                self.assertIn("不要求改到任何程序检查通过", prompt)
+                self.assertIn("原值", prompt)
+                self.assertIn("不替你判定适用", prompt)
                 self.assertNotIn("申报单价使用unit_price/le", prompt)
-
-
-class TemporaryStaffPhotoTests(unittest.TestCase):
-    def test_staff_pass_requires_both_contract_schedule_and_actual_photos(self):
-        for sources, passes in ((["contract", "photos"], True), (["contract"], False), (["photos"], False)):
-            with self.subTest(sources=sources):
-                case, evidence, check = staff_case()
-                check.update(status="pass", source_ids=sources, reason="甲乙两店9月1日和2日均有符合要求的临促照片")
-                if passes:
-                    self.assertEqual(decide(case, evidence, "staff_daily_photos")["status"], "pass")
-                else:
-                    with self.assertRaises(AuditError):
-                        decide(case, evidence, "staff_daily_photos")
-
-    def test_missing_store_day_and_visible_content_problems_keep_the_specific_customer_reason(self):
-        for reason in ("甲店9月2日的临促照片缺少，乙店同日照片不能代替甲店。",
-                       "甲店9月2日照片没有水印。", "甲店9月2日照片有产品，但没有临促人员。",
-                       "甲店9月2日照片有临促人员，但没有产品。"):
-            with self.subTest(reason=reason):
-                case, evidence, check = staff_case()
-                case["documents"][1]["facts"] = [reason]
-                check.update(status="fail", source_ids=["contract", "photos"], reason=reason)
-                result = audit_decision(case["scenario"], case["flags"], evidence, case["documents"], case["materials"])
-                actual = next(c for c in result["checks"] if c["rule_id"] == "staff_daily_photos")
-                self.assertEqual(actual["status"], "fail")
-                self.assertEqual(actual["reason"], reason)
-                self.assertEqual(case["materials"][1]["state"], "present")
-                packet = {"archive_id": "a001", "source_archive": "本次临促资料.zip", "documents": case["documents"],
-                          "units": [{"unit_id": "contract", "source_file": "促销合同.pdf", "locator": "第1页"},
-                                    {"unit_id": "photos", "source_file": "临促照片.pdf", "locator": "第1页"}], "result": result}
-                rows = build_view([packet], None)["sheets"][0]["rows"]
-                actual_row = next(row for row in rows if row["rule_id"] == "staff_daily_photos")
-                self.assertIn("甲店9月2日", actual_row["error_reason"])
-
-    def test_unclear_store_or_date_is_unknown_and_cannot_become_missing_material(self):
-        case, evidence, check = staff_case()
-        reason = "照片水印日期模糊，暂时无法确认甲店9月2日是否已覆盖。"
-        case["documents"][1]["facts"] = [reason]
-        check.update(status="unknown", source_ids=["contract", "photos"], reason=reason)
-        actual = decide(case, evidence, "staff_daily_photos")
-        self.assertEqual(actual["status"], "unknown")
-        self.assertEqual(actual["reason"], reason)
-
-    def test_non_staff_and_unclear_staff_branches_remain_distinct(self):
-        for temporary_staff, expected in ((False, "not_applicable"), (None, "unknown")):
-            with self.subTest(temporary_staff=temporary_staff):
-                case, evidence, check = staff_case(temporary_staff)
-                case["materials"] = []
-                actual = decide(case, evidence, "staff_daily_photos")
-                self.assertEqual(actual["status"], expected)
-                check.update(status="pass", source_ids=["contract", "photos"])
-                with self.assertRaises(AuditError):
-                    decide(case, evidence, "staff_daily_photos")
-
-    def test_actual_staff_prompt_checks_each_store_day_and_watermark_people_products(self):
-        case, evidence, _ = staff_case()
-        provider = PdfEvidenceProvider("gpt-6-astra", "medium")
-        with tempfile.TemporaryDirectory() as temporary, patch.object(provider, "_call", return_value=evidence) as call:
-            provider.audit(case, Path(temporary))
-        prompt = render_prompt(call.call_args.args[3])
-        self.assertIn(STAFF_PHOTO_CLARIFICATION, prompt)
-        self.assertIn("不能只看整场日期齐全或照片总数足够就通过", prompt)
-        self.assertNotIn("不从资料栏另加水印组成、人员或产品画面检查", prompt)
-        self.assertNotIn("临促只按审核第3项逐日核对照片，不扩出画面或水印字段要求", prompt)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "deployment": "canban-dingding-K3",
+  "bucket": "xiaokuo-dingding-xianxiahexiao",
+  "endpoint": "https://oss-cn-shenzhen-internal.aliyuncs.com",
+  "prefix": "offline-verify/audit-artifacts/canban/",
+  "enabled": true,
+  "cleanup_enabled": false
+}

@@ -1,4 +1,5 @@
 """Common POS field identity checks use real query results, never OSS photos."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -8,9 +9,10 @@ from unittest.mock import Mock, patch
 from audit_core.common import AuditError
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_materials import PdfEvidenceProvider, _cell
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.pdf_policy import MATERIALS, applicability, rules
 from audit_core.pos_product_identity import (
-    prepare_pos_identities, validate_extraction, validate_pos_identity_reporting, verify_identity,
+    prepare_pos_identities, project_pos_identity_reporting, validate_extraction, validate_pos_identity_reporting, verify_identity,
 )
 from audit_core.product_database import catalog_from_rows
 from tests.pdf_test_support import flags_for, unknown_checks
@@ -58,6 +60,55 @@ def case_for(scenario="pos_target_incentive", data=None):
 
 
 class PosIdentityTests(unittest.TestCase):
+    def test_grouped_missing_barcodes_keep_every_verified_name_without_mutating_model_observation(self):
+        value = unknown_checks("personnel_incentive", flags_for("personnel_incentive", uses_pos=True))
+        check = next(c for c in value["checks"] if c["rule_id"] == "pos_product_identity")
+        check.update(status="unknown", reason="奖励明细中的10个商品未填写69码。", source_ids=[])
+        verified = {"applicable": True, "limitations": [], "rows": [
+            {"unit_id": "excel", "status": "unknown", "reason_code": "missing_barcode",
+             "submitted": {"product_name": f"合成商品{number}", "barcode_69": None},
+             "reason": "Excel销售明细缺少可核对的69码。"} for number in range(10)]}
+        original = deepcopy(value)
+        projected = project_pos_identity_reporting(value, verified)
+        validate_pos_identity_reporting(projected, verified)
+        self.assertEqual(value, original)
+        actual = next(c for c in projected["checks"] if c["rule_id"] == "pos_product_identity")
+        self.assertEqual(actual["status"], "unknown")
+        self.assertEqual(actual["comparisons"], [])
+        self.assertEqual(actual["source_ids"], ["excel"])
+        self.assertTrue(all(f"合成商品{number}" in actual["reason"] for number in range(10)))
+        self.assertIs(project_pos_identity_reporting(projected, verified), projected)
+
+    def test_projection_never_turns_wrong_pass_or_unknown_status_into_a_valid_judgment(self):
+        for row_status, check_status in (("unknown", "pass"), ("fail", "pass"), ("fail", "unknown")):
+            value = unknown_checks("personnel_incentive", flags_for("personnel_incentive", uses_pos=True))
+            check = next(c for c in value["checks"] if c["rule_id"] == "pos_product_identity")
+            check.update(status=check_status, source_ids=[], reason="合并的商品说明。")
+            verified = {"applicable": True, "limitations": [], "rows": [{
+                "unit_id": "excel", "status": row_status, "reason_code": "product_name_mismatch",
+                "submitted": {"product_name": "合成商品", "barcode_69": "6900000000000"},
+                "reason": "商品名称与所填69码对应的库内商品不一致。"}]}
+            projected = project_pos_identity_reporting(value, verified)
+            self.assertEqual(next(c for c in projected["checks"] if c["rule_id"] == "pos_product_identity")["status"], check_status)
+            with self.assertRaises(AuditError):
+                validate_pos_identity_reporting(projected, verified)
+
+    def test_projection_deduplicates_identical_descriptions_but_keeps_all_source_units(self):
+        value = unknown_checks("personnel_incentive", flags_for("personnel_incentive", uses_pos=True))
+        check = next(c for c in value["checks"] if c["rule_id"] == "pos_product_identity")
+        check.update(status="unknown", source_ids=[], reason="库内未找到对应商品。")
+        row = {"status": "unknown", "reason_code": "catalog_product_missing",
+               "submitted": {"product_name": "合成外部商品", "barcode_69": "6900000000000"},
+               "reason": "库内无参考商品。"}
+        verified = {"applicable": True, "limitations": [],
+                    "rows": [{"unit_id": unit, **deepcopy(row)} for unit in ["excel-1", "excel-2"]]}
+        projected = project_pos_identity_reporting(value, verified)
+        validate_pos_identity_reporting(projected, verified)
+        actual = next(c for c in projected["checks"] if c["rule_id"] == "pos_product_identity")
+        self.assertEqual(actual["source_ids"], ["excel-1", "excel-2"])
+        self.assertEqual(actual["reason"].count("合成外部商品"), 1)
+        self.assertIn("库内无参考商品", actual["reason"])
+
     def test_numeric_excel_barcode_does_not_gain_a_suffix_but_literal_text_is_preserved(self):
         self.assertEqual(_cell(6970356168997.0), "6970356168997")
         self.assertEqual(_cell("6970356168997.0"), "6970356168997.0")
@@ -73,12 +124,14 @@ class PosIdentityTests(unittest.TestCase):
             result = verify_identity(row(code=code, name="参半蜜桃喷雾20ml"), catalog(), match)
             self.assertEqual(result["status"], "pass")
             self.assertEqual(result["reference"]["product_code"], "CP-A-001")
-        self.assertEqual(match.call_count, 2)
+        match.assert_not_called()
 
-    def test_conflicting_name_is_checked_even_with_exact_product_code(self):
-        result = verify_identity(row(name="小箭头洗发水500ml"), catalog(), Mock(return_value=[]))
-        self.assertEqual(result["status"], "fail")
-        self.assertEqual(result["reason_code"], "product_name_mismatch")
+    def test_dealer_name_difference_does_not_override_exact_barcode(self):
+        matcher = Mock(side_effect=AssertionError('POS身份不再调用名称语义模型'))
+        result = verify_identity(row(name="小箭头洗发水500ml"), catalog(), matcher)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["reference"]["product_code"], "CP-A-001")
+        matcher.assert_not_called()
 
     def test_extra_product_code_cannot_override_name_and_barcode_selection(self):
         result = verify_identity(row(code="CP-A-001", name="小箭头柔顺洗发水500ml", barcode="6970356167341"), catalog(), Mock())
@@ -98,31 +151,31 @@ class PosIdentityTests(unittest.TestCase):
         for barcode in ("6970356168997.0", "06970356168997", "697035616899"):
             with self.subTest(barcode=barcode):
                 result = verify_identity(row(barcode=barcode), catalog(), Mock())
-                self.assertEqual(result["status"], "fail")
-                self.assertEqual(result["reason_code"], "barcode_mismatch")
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason_code"], "catalog_product_missing")
 
     def test_missing_catalog_is_not_misreported_as_a_bad_customer_product(self):
         result = verify_identity(row(code="CP-NONE", name="库中没有的商品", barcode="6900000000000"), catalog(), Mock(return_value=[]))
         self.assertEqual(result["status"], "unknown")
         self.assertEqual(result["reason"], "库内无参考商品。")
 
-    def test_unique_name_finds_bad_barcode_instead_of_claiming_no_reference(self):
+    def test_name_cannot_replace_an_unmatched_original_barcode(self):
         result = verify_identity(row(code=None, barcode="6900000000000"), catalog(), Mock())
-        self.assertEqual(result["status"], "fail")
-        self.assertEqual(result["reason_code"], "barcode_mismatch")
-        self.assertNotIn("库内无参考商品", result["reason"])
-        result = verify_identity(row(kind="unclear"), catalog(), Mock())
-        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["status"], "unknown")
+        self.assertEqual(result["reason_code"], "catalog_product_missing")
+        self.assertIn("库内无参考商品", result["reason"])
+        self.assertEqual(verify_identity(row(kind="unclear"), catalog(), Mock())["status"], "pass")
 
-    def test_same_barcode_needs_unique_name_and_no_closest_candidate_guess(self):
+    def test_same_barcode_keeps_all_internal_records_and_never_picks_a_code(self):
         data = catalog()
         data["products"][1]["barcode_69"] = data["products"][0]["barcode_69"]
-        result = verify_identity(row(code=None, name="日化产品"), data, Mock(return_value=["CP-A-001", "CP-A-002"]))
-        self.assertEqual(result["reason_code"], "multiple_products")
-        with_extra_code = verify_identity(row(code="CP-A-001", name="日化产品"), data, Mock(return_value=["CP-A-001", "CP-A-002"]))
-        self.assertEqual(with_extra_code, result, "额外编码不能用于把多个候选强行缩成一个")
-        with self.assertRaises(AuditError):
-            verify_identity(row(code=None, name="日化产品"), data, Mock(return_value=["OUTSIDE"]))
+        matcher = Mock(side_effect=AssertionError('不按名称挑选内部编码'))
+        result = verify_identity(row(code=None, name="日化产品"), data, matcher)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(len(result["references"]), 2)
+        self.assertNotIn("reference", result)
+        self.assertEqual(verify_identity(row(code="CP-A-001", name="日化产品"), data, matcher), result)
+        matcher.assert_not_called()
 
     def test_required_name_or_barcode_is_not_filled_from_catalog_or_extra_code(self):
         result = verify_identity(row(name=None), catalog(), Mock())
@@ -207,7 +260,7 @@ class PosIdentityTests(unittest.TestCase):
         check.update(status="pass", reason="6900000000000条码不一致。")
         with self.assertRaises(AuditError):
             validate_pos_identity_reporting(value, verified)
-        check["status"] = "fail"
+        check.update(status="unknown", reason="6900000000000：库内无参考商品。")
         validate_pos_identity_reporting(value, verified)
 
     def test_unreadable_pos_cannot_silently_pass_identity_check(self):
@@ -238,7 +291,7 @@ class PosIdentityTests(unittest.TestCase):
 
     def test_common_rule_ids_and_conditions_cover_all_eight_types(self):
         for scenario in MATERIALS:
-            common = [r for r in rules(scenario) if r.id.startswith("pos_")]
+            common = [r for r in rules(scenario) if r.id in {"pos_fields", "pos_arithmetic", "pos_product_identity"}]
             self.assertEqual({r.id for r in common}, {"pos_fields", "pos_arithmetic", "pos_product_identity"})
             for uses_pos in (False, True):
                 self.assertTrue(all(applicability(r.when, scenario, flags_for(scenario, uses_pos=uses_pos)) is uses_pos for r in common))
@@ -248,7 +301,7 @@ class PosIdentityTests(unittest.TestCase):
         case = case_for(data=data)
         evidence = unknown_checks(case["scenario"], case["flags"])
         check = next(c for c in evidence["checks"] if c["rule_id"] == "pos_product_identity")
-        check.update(status="fail", reason="69码6900000000000与该名称对应的商品库6970356168997不一致。", source_ids=["excel"])
+        check.update(status="unknown", reason="69码6900000000000：库内无参考商品。", source_ids=["excel"])
         seen = []
 
         def call(root, skill, schema, prompt, **kwargs):
@@ -257,13 +310,13 @@ class PosIdentityTests(unittest.TestCase):
             else:
                 text = render_prompt(prompt)
                 seen.append(text)
-                self.assertIn('"reason_code": "barcode_mismatch"', text)
-                self.assertIn("名称允许简称和模糊匹配", text)
+                self.assertIn('"reason_code": "catalog_product_missing"', text)
+                self.assertIn("准确69码", text)
                 value = evidence
             kwargs["validator"](value)
             return value
 
-        provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+        provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
         with tempfile.TemporaryDirectory() as temporary, patch.object(provider, "_call", side_effect=call), \
              patch(MODULE + ".load_product_catalog", return_value=catalog()):
             result = provider.audit(case, Path(temporary))

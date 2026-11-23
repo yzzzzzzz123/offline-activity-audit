@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from .execution_trace import run_command
+
 import shutil
+import re
 import stat
 import subprocess
 import zipfile
@@ -8,11 +11,12 @@ from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .archive_tools import rar_tool
 from .common import AuditError, normalize_text, sha256_file
 from .legacy_activity_workbook import LegacyWorkbookMaterialError, extract_activity_return_workbook
 
 
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".jfif"}
 EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
 VISUAL_DOCUMENT_SUFFIXES = IMAGE_SUFFIXES | {".pdf"}
 MAX_ARCHIVE_FILES = 2_000
@@ -88,7 +92,7 @@ def _open_zip(path: Path) -> zipfile.ZipFile:
 
 
 def _zip_member_parts(info: zipfile.ZipInfo) -> tuple[str, ...]:
-    raw = info.filename.replace("\\", "/")
+    raw = info.orig_filename.replace("\\", "/")
     if "\x00" in raw:
         raise ArchiveInputError("ZIP 成员名包含 NUL 字节")
     pure = PurePosixPath(raw)
@@ -100,6 +104,7 @@ def _zip_member_parts(info: zipfile.ZipInfo) -> tuple[str, ...]:
     invalid = set('<>:"|?*')
     if any(any(char in invalid for char in part) for part in parts):
         raise ArchiveInputError(f"ZIP 文件名不受 Windows 支持：{info.filename!r}")
+    _validate_windows_names(parts, archive_label='ZIP')
     if stat.S_ISLNK(info.external_attr >> 16):
         raise ArchiveInputError(f"ZIP 不接受符号链接：{info.filename!r}")
     if info.flag_bits & 0x1:
@@ -120,7 +125,18 @@ def _archive_member_parts(raw_name: str, *, archive_label: str) -> tuple[str, ..
     invalid = set('<>:"|?*')
     if any(any(char in invalid for char in part) for part in parts):
         raise ArchiveInputError(f"{archive_label} 文件名不受 Windows 支持：{raw_name!r}")
+    _validate_windows_names(parts, archive_label=archive_label)
     return parts
+
+
+def _validate_windows_names(parts, *, archive_label):
+    # Win32 may silently resolve these names to devices or strip a suffix.
+    # Reject before touching disk, consistently on both Windows and Linux.
+    for part in parts:
+        if (any(ord(char) < 32 for char in part) or part.endswith((' ', '.'))
+                or re.fullmatch(r'(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])',
+                                part.split('.')[0].rstrip(' '), re.I)):
+            raise ArchiveInputError(f'{archive_label} 文件名含控制字符、设备名或会被系统改写的结尾：{part!r}')
 
 
 def _archive_shape(path: Path) -> dict[str, Any]:
@@ -528,15 +544,16 @@ def _decode_archive_listing(raw: bytes) -> str:
 def _extract_rar_archive(archive_path: Path, target_root: Path) -> dict[str, Any]:
     """Extract one RAR through bsdtar after strict pre- and post-validation."""
 
-    tar = shutil.which("tar")
+    tar = rar_tool()
     if tar is None:
         raise ArchiveInputError(
-            f"无法读取现场照片 RAR：系统未提供 bsdtar/tar（{archive_path.name}）"
+            "无法读取现场照片 RAR：系统未提供可读取 RAR 的 bsdtar/libarchive；"
+            f"GNU tar 不代表支持 RAR（{archive_path.name}）"
         )
     if target_root.exists() or target_root.is_symlink():
         raise ArchiveInputError(f"临时解压目录已存在：{target_root}")
 
-    list_result = subprocess.run(
+    list_result = run_command(
         [tar, "-tf", str(archive_path)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -558,7 +575,7 @@ def _extract_rar_archive(archive_path: Path, target_root: Path) -> dict[str, Any
             raise ArchiveInputError(f"RAR 路径重复或大小写冲突：{name!r}")
         seen_names.add(key)
 
-    verbose_result = subprocess.run(
+    verbose_result = run_command(
         [tar, "-tvf", str(archive_path)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -577,7 +594,7 @@ def _extract_rar_archive(archive_path: Path, target_root: Path) -> dict[str, Any
     target_root.mkdir(parents=True)
     target_resolved = target_root.resolve()
     try:
-        extract_result = subprocess.run(
+        extract_result = run_command(
             [tar, "-xf", str(archive_path), "-C", str(target_root)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

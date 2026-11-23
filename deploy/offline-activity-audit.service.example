@@ -1,0 +1,30 @@
+[Unit]
+Description=Offline activity audit native service (RDS MySQL)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_USER@
+WorkingDirectory=@PROJECT_ROOT@
+ExecStart="@PYTHON@" -B "@PROJECT_ROOT@/deploy/service.py"
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONIOENCODING=utf-8
+Environment=HOME=@PROJECT_ROOT@/worktrees/.service-home
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=@PROJECT_ROOT@/input @PROJECT_ROOT@/worktrees
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

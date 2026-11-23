@@ -149,6 +149,22 @@ class RunDeletionPlan:
     def execute(self) -> dict[str, Any]:
         # Keep the primary record until all auxiliary data can be removed. If an
         # OS file lock interrupts cleanup, the existing record remains retryable.
+        from .cross_claim_photos import remove_run
+        from .image_fact_cache import remove_run_facts
+        run_id = ""
+        if (self.workspace / "manifest.json").is_file():
+            run_id = str(read_json_file(self.workspace / "manifest.json").get("run_id") or "")
+        # Invalidate derived data before removing the last authoritative source.
+        # A later retry is safe; other runs' independently owned facts remain.
+        if run_id:
+            removed = remove_run(self.workspace.parent, run_id)
+            if not removed.get("source_hidden"):
+                raise RunDeletionConflict("照片索引正被占用，请稍后重试删除")
+        owners = {self.workspace_id, run_id} - {""}
+        for owner in owners:
+            cleaned = remove_run_facts(self.workspace.parent, owner)
+            if cleaned.get("deferred"):
+                raise RunDeletionConflict("图片事实缓存正被占用，请稍后重试删除")
         for receipt, source in self.jobs:
             if source.exists():
                 _remove_directory(source)

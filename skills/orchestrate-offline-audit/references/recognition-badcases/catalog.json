@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "revision": "2026-11-16.1",
+  "purpose": "人工核验的识别纠错参考；用于每次原图读取前的文字示例学习，不作为本单证据，不是权重训练。",
+  "examples": [
+    {
+      "id": "watermark-hour-minute-1511",
+      "case_id": "HX202610240012",
+      "approval": "visually_verified",
+      "confirmed_on": "2026-11-16",
+      "field": "拍摄时间",
+      "incorrect_reading": "仅转录大号15，误当后期编号，后续报未见拍摄时间",
+      "confirmed_reading": "15:11",
+      "reading_lesson": "同时读取时分两组数字及分隔排版；大字横跨画面或分隔符很淡时，不把小时和分钟拆为独立编号。日期、时间、门店位置分别记录。",
+      "reader_skills": [
+        "read-audit-image",
+        "read-audit-document"
+      ],
+      "original": "originals/watermark-hour-minute-1511/original-photo-4.png",
+      "original_sha256": "2a4e4a4870dadc1d5507eb2325b72609c002d9e4645c0c0ef1d7d8dcf9fa8c2a",
+      "locator": "原图水印时间区，日期2026.10.9",
+      "verification": "用户指出时间可见，本轮人工逐图核对具体时分。"
+    },
+    {
+      "id": "watermark-hour-minute-1716",
+      "case_id": "HX202610240012",
+      "approval": "visually_verified",
+      "confirmed_on": "2026-11-16",
+      "field": "拍摄时间",
+      "incorrect_reading": "把17和16分别当叠加数字，报未显示拍摄时间",
+      "confirmed_reading": "17:16",
+      "reading_lesson": "结合本图同一水印区两组数字的字号、相邻位置和分隔符读取完整时分，不能因没有秒数报无拍摄时间。",
+      "reader_skills": [
+        "read-audit-image",
+        "read-audit-document"
+      ],
+      "original": "originals/watermark-hour-minute-1716/original-photo-6.png",
+      "original_sha256": "882fd09fec7700200d0286555d085a48c415c006c3326def66c69df66aadd27d",
+      "locator": "原图水印时间区，日期2026.10.10",
+      "verification": "用户指出时间可见，本轮人工逐图核对具体时分。"
+    },
+    {
+      "id": "receipt-overlapping-handwriting",
+      "case_id": "HX202609210063",
+      "approval": "user_confirmed",
+      "confirmed_on": "2026-11-16",
+      "field": "收款收据客户抬头",
+      "incorrect_reading": "深圳市儿三明科技有限公司",
+      "confirmed_reading": "深圳市山三古月科技有限公司",
+      "reading_lesson": "手写抬头的山、古、月笔画与表格线相交；先逐字辨认本行笔画，再读本页正文中重复书写的同一客户名称。客户抬头与收款单位红章分别转录，不能把收款单位章名当客户名。",
+      "reader_skills": [
+        "read-audit-document",
+        "read-audit-image"
+      ],
+      "original": "originals/receipt-overlapping-handwriting/收据.pdf",
+      "original_sha256": "e043b2f8af7ec52c2c07372556bcfcc7493710f6c27a8d3c2a7984c5d55c9f22",
+      "locator": "第1页顶部手写客户名称及正文同名位置",
+      "verification": "用户已核验反馈；本轮另核对原件可见字形。",
+      "preview": "originals/receipt-overlapping-handwriting/收据-page-01.png",
+      "preview_is_derived": true
+    },
+    {
+      "id": "settlement-seal-arc-text",
+      "case_id": "HX202609270009",
+      "approval": "user_confirmed",
+      "confirmed_on": "2026-11-16",
+      "field": "结算单客户名称及落款红章",
+      "incorrect_reading": "张家口捷寄伟业商贸有限公司",
+      "confirmed_reading": "张家口传奇伟业商贸有限公司",
+      "reading_lesson": "落款打印字与红章圆弧文字叠印；分别读取黑色落款和红色弧形字，沿圆弧方向辨认传奇二字，不将叠加笔画拼成捷寄。",
+      "reader_skills": [
+        "read-audit-document",
+        "read-audit-image"
+      ],
+      "original": "originals/settlement-seal-arc-text/结算单.jpg",
+      "original_sha256": "5b58645f18e9ef97de39c10b889fbc6c4bd926959f75a505b6ee02cd487c4aff",
+      "locator": "下方客户名称及右下红色圆章",
+      "verification": "用户已核验反馈；本轮另核对原件可见字形。"
+    },
+    {
+      "id": "pos-rotated-seal-company",
+      "case_id": "HX202611060019",
+      "approval": "user_confirmed",
+      "confirmed_on": "2026-11-16",
+      "field": "POS盖章主体",
+      "incorrect_reading": "湖南……贸易有限公司",
+      "confirmed_reading": "奔象（广州）供应链管理有限公司",
+      "reading_lesson": "页面横置，印章也随页面旋转；先按文字方向理解整页，再沿红章圆弧读取公司核心字样。表格黑线和印刷商品名称不是红色印文，不从商贸等片段猜出另一家完整公司。",
+      "reader_skills": [
+        "read-audit-document",
+        "read-audit-image"
+      ],
+      "original": "originals/pos-rotated-seal-company/永辉8-9销售数据.pdf",
+      "original_sha256": "2147e4059e63bb165ccfbba64927be2efe7800d2c564ef4966e6e80fbb36885f",
+      "locator": "第1页下方叠压表格的红色圆章（原页横置）",
+      "verification": "用户已核验反馈；本轮另核对原件可见字形。",
+      "preview": "originals/pos-rotated-seal-company/永辉8-9销售数据-page-01.png",
+      "preview_is_derived": true
+    },
+    {
+      "id": "watermark-year-2025-not-2026",
+      "case_id": "HX202604110016",
+      "approval": "user_confirmed",
+      "confirmed_on": "2026-11-16",
+      "field": "水印年月日",
+      "incorrect_reading": "2026.12.12 星期五",
+      "confirmed_reading": "2025.12.12 星期五；14:32",
+      "reading_lesson": "底部白色水印的年份末位为5。逐位辨认2025，不因当前年份补成2026。初读日期与同图星期不自洽时，先回看该图年份末位字形；星期仅提示需复核，不能据此直接改日期或认定原图矛盾。",
+      "reader_skills": [
+        "read-audit-image",
+        "read-audit-document"
+      ],
+      "original": "originals/watermark-year-2025-not-2026/1.jpg",
+      "original_sha256": "721ef2ff56f7de608c73daecb6e2f729dc660d6dd5c046b57efe1cfa3f06f561",
+      "locator": "底部水印日期及画面下部大号时分",
+      "verification": "用户已核验反馈；本轮另核对原件可见字形。"
+    }
+  ]
+}

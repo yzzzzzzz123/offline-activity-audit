@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import quote
 from unittest import mock
 
+from audit_core.model_settings import ModelSelection
 from audit_core.analysis_summary_backfill import backfill_analysis_summaries
 from audit_core import workbench_server
 from audit_core.html_report import DATA_CLOSE, DATA_OPEN
@@ -252,7 +253,7 @@ class WorkbenchStoreTests(unittest.TestCase):
 
     def test_main_flow_checklist_stays_aligned_with_skill_contract(self) -> None:
         tasks = main_flow_task_list()
-        self.assertEqual(len(tasks), 6)
+        self.assertEqual(len(tasks), 7)
         skill = (
             Path("skills/orchestrate-offline-audit/SKILL.md")
             .read_text(encoding="utf-8")
@@ -367,13 +368,13 @@ class WorkbenchStoreTests(unittest.TestCase):
         self.assertEqual(
             summary,
             "## 人员激励核销\n\n"
-            "- 结算单申请金额为7350元，转账金额为7353元，申请金额比转账金额少3元。\n"
-            "- 转账截图未完整显示收款人、门店和日期。\n\n"
+            "1. 结算单申请金额为7350元，转账金额为7353元，申请金额比转账金额少3元。\n"
+            "2. 转账截图未完整显示收款人、门店和日期。\n\n"
             "## 堆头核销\n\n"
-            "- 合同第3页第1行：合同商品编码未在商品资料中登记。\n"
-            "- 示例门店二：活动日期无法核验。\n"
-            "- 示例门店二：门店水印缺失或无法核对。\n"
-            "- 示例门店二：陈列标准无法核验。",
+            "3. 合同第3页第1行：合同商品编码未在商品资料中登记。\n"
+            "4. 示例门店二：活动日期无法核验。\n"
+            "5. 示例门店二：门店水印缺失或无法核对。\n"
+            "6. 示例门店二：陈列标准无法核验。",
         )
         self.assertNotIn("场景", summary)
         self.assertNotIn("错误项", summary)
@@ -454,6 +455,10 @@ class WorkbenchStoreTests(unittest.TestCase):
             self.assertEqual(manifest.pop("snapshot_sha256"), hashlib.sha256((workspace / "snapshot.json").read_bytes()).hexdigest())
             snapshot["run"].pop("analysis_summary")
             manifest.pop("analysis_summary")
+            self.assertEqual(manifest.pop("analysis_summary_display"), {
+                "text": (workspace / ANALYSIS_SUMMARY_FILENAME).read_text(encoding="utf-8").strip(),
+                "source": "saved",
+            })
             before_manifest.pop("snapshot_sha256")
             self.assertEqual(snapshot, before_snapshot)
             self.assertEqual(manifest, before_manifest)
@@ -501,7 +506,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             summary = summary_path.read_text(encoding="utf-8")
             self.assertEqual(
                 summary,
-                "## 维护费用核销\n\n- 未提交电子表。",
+                "## 维护费用核销\n\n1. 未提交电子表。",
             )
             self.assertNotIn("置信度", summary)
             self.assertNotIn("重新提交", summary)
@@ -591,6 +596,7 @@ class WorkbenchStoreTests(unittest.TestCase):
                     "analysis",
                     "evidence",
                     "decision",
+                    "logic_review",
                     "verification",
                 ],
             )
@@ -606,7 +612,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             summary = summary_path.read_text(encoding="utf-8")
             self.assertEqual(
                 summary,
-                "## 维护费用核销\n\n- 未提交电子表。",
+                "## 维护费用核销\n\n1. 未提交电子表。",
             )
             self.assertEqual(
                 manifest["analysis_summary"]["sha256"],
@@ -667,7 +673,7 @@ class WorkbenchStoreTests(unittest.TestCase):
                 }
 
             self.assertTrue(ROOT_HTML.is_file())
-            with mock.patch(
+            with mock.patch("audit_core.model_settings.ModelSettingsStore.snapshot", return_value=ModelSelection(api_key="sk_fixture-only")), mock.patch(
                 "audit_core.workbench_runtime.run_audit",
                 side_effect=fake_run_audit,
             ):
@@ -698,8 +704,8 @@ class WorkbenchStoreTests(unittest.TestCase):
                 workspace.name,
                 r"^HX202606040013-核销资料-诚成26年4月【堆头20家】-\d{8}_\d{4}_\d{2}$",
             )
-            self.assertEqual(result["audit_model"], "gpt-6.1-sol")
-            self.assertEqual(result["reasoning_effort"], "high")
+            self.assertEqual(result["audit_model"], "qwen/qwen3.8-max")
+            self.assertEqual(result["reasoning_effort"], "default")
             self.assertEqual(list(root.glob("*.html")), [])
             self.assertEqual(
                 list(root.glob("*/offline-activity-audit.html")),
@@ -759,6 +765,7 @@ class WorkbenchStoreTests(unittest.TestCase):
             root = Path(temporary)
 
             with (
+                mock.patch("audit_core.model_settings.ModelSettingsStore.snapshot", return_value=ModelSelection(api_key="sk_fixture-only")),
                 mock.patch(
                     "audit_core.workbench_runtime.run_audit",
                     side_effect=AuditError("测试运行失败"),
@@ -1862,16 +1869,19 @@ class WorkbenchServerTests(unittest.TestCase):
         primary_context = self._script_payload(primary, "audit-workbench-context")
         self.assertEqual(primary_context["mode"], "system")
         self.assertIsNone(primary_context["selected_run"])
-        self.assertEqual(primary_context["system_version"], "2.16.4")
+        self.assertEqual(primary_context["system_version"], workbench_server.SYSTEM_VERSION)
         self.assertEqual(primary_context["delivery_mode"], "server")
         self.assertEqual(primary_context["main_flow_tasks"], main_flow_task_list())
         self.assertIn("audit-system-extension-script", primary)
-        self.assertIn('content="2.16.4"', primary)
+        self.assertIn(f'<meta name="offline-audit-system-version" content="{workbench_server.SYSTEM_VERSION}">', primary)
         self.assertFalse(primary_context["oss_intake_enabled"])
         self.assertEqual(self._script_payload(primary, "audit-data")["sheets"], [])
-        self.assertLess(
-            len(primary.encode("utf-8")),
-            ROOT_HTML.stat().st_size * 0.75,
+        # Assert the actual business-payload saving, independent of UI code size.
+        template = ROOT_HTML.read_text(encoding="utf-8")
+        sample_payload = template.split(DATA_OPEN, 1)[1].split(DATA_CLOSE, 1)[0]
+        self.assertGreater(
+            ROOT_HTML.stat().st_size - len(primary.encode("utf-8")),
+            len(sample_payload.encode("utf-8")) * 0.9,
         )
         self.assertIn(
             'meta[name="offline-audit-page-mode"]',
@@ -1890,20 +1900,23 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn(
             'role="tablist" aria-label="核销管理中心视图"', primary
         )
-        self.assertEqual(primary.count('role="tab" aria-controls="as-view-'), 3)
-        self.assertIn('id="as-tab-model" data-as-view="model"', primary)
-        self.assertIn('id="as-view-model" role="tabpanel"', primary)
-        self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tab-'), 3)
-        self.assertIn('role="tablist" aria-label="技术档案分类"', primary)
+        self.assertEqual(primary.count('role="tab" aria-controls="as-view-'), 4)
+        self.assertNotIn('id="as-tab-repairs"', primary)
+        self.assertNotIn('id="as-tab-model"', primary)
+        self.assertNotIn('id="as-view-model"', primary)
+        self.assertIn('id="as-tab-schedule" data-as-view="schedule"', primary)
+        self.assertIn('id="as-view-schedule" role="tabpanel"', primary)
+        self.assertNotIn('id="as-current-models"', primary)
+        self.assertIn("const renderSchedule = () => {", primary)
+        self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tab-'), 4)
+        self.assertIn('aria-label="按时间排列的完整执行链路"', primary)
         self.assertIn("const contextTechnicalSnapshot = () => ({", primary)
         self.assertIn(
             "context.mode === 'record' && workspaceId === context.selected_run",
             primary,
         )
-        self.assertIn(
-            'class="as-code" tabindex="0" role="region" aria-label="完整运行日志"',
-            primary,
-        )
+        self.assertIn("kind:'log',path:'log',label:'完整运行日志'", primary)
+        self.assertIn("technicalCodeShell(label)", primary)
         self.assertIn("return resource.value;", primary)
         self.assertIn("const TECHNICAL_PREVIEW_CHARACTERS = 32768;", primary)
         self.assertIn("primaryCatalogEtag: ''", primary)
@@ -1915,8 +1928,10 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn("const recordListWindow = () => {", primary)
         for obsolete in ('id="as-search"', 'id="as-archive-search"', 'id="as-refresh"', 'id="as-archive-refresh"'):
             self.assertNotIn(obsolete, primary)
-        for field in ("date_from", "date_to", "source", "scenario"):
+        for field in ("date_from", "date_to", "query", "scenario"):
             self.assertIn(f'data-as-filter="{field}"', primary)
+        self.assertNotIn('data-as-filter="source"', primary)
+        self.assertNotIn('id="as-hero-count"', primary)
         self.assertIn('id="as-ledger-list" role="list"', primary)
         self.assertIn('id="as-archive-list" role="list"', primary)
         self.assertIn('role="listitem"', primary)
@@ -1936,17 +1951,20 @@ class WorkbenchServerTests(unittest.TestCase):
         )
         self.assertIn("if (!next.unchanged) commitPrimaryState(next);", primary)
         self.assertIn(
-            "const response = await fetch(path, { cache: 'no-cache' });",
+            "const response = await fetch(applicationApiUrl(path), { cache: 'no-cache' });",
             primary,
         )
         self.assertIn("cache: 'no-store'", primary)
         self.assertIn("data-as-code-expand", primary)
         self.assertIn("当前为长内容预览", primary)
-        self.assertEqual(primary.count('role="tab" aria-controls="as-tech-panel-'), 4)
-        self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tech-tab-'), 4)
-        self.assertIn("const latestCompletedZipCount", primary)
-        self.assertIn("最近一次已完成核销的类型数", primary)
-        self.assertGreaterEqual(primary.count("待人工核验"), 2)
+        self.assertNotIn('data-as-tech-tab=', primary)
+        self.assertNotIn('as-resource-grid', primary)
+        self.assertIn("平均 Token 消耗", primary)
+        self.assertIn("平均耗时", primary)
+        self.assertNotIn("最近一次已完成核销的类型数", primary)
+        self.assertIn("核销问题", primary)
+        self.assertNotIn("待人工核验", primary)
+        self.assertNotIn("已人工核验", primary)
         self.assertNotIn('id="as-recent-list"', primary)
         self.assertNotIn('id="as-tab-ledger"', primary)
         self.assertNotIn('id="as-view-ledger"', primary)
@@ -1962,8 +1980,8 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn("data-as-delete-job=", primary)
         self.assertIn("取消并删除这条上传记录？", primary)
         self.assertIn("永久删除这条未完成的上传记录？", primary)
-        self.assertIn('data-as-review=', primary)
-        self.assertIn('/manual-review', primary)
+        self.assertNotIn('data-as-review=', primary)
+        self.assertNotIn('/manual-review', primary)
         self.assertIn("node.setAttribute('role', 'status')", primary)
         self.assertIn("node.setAttribute('aria-live', 'polite')", primary)
         self.assertIn("button.setAttribute('tabindex', selected ? '0' : '-1')", primary)
@@ -1971,7 +1989,7 @@ class WorkbenchServerTests(unittest.TestCase):
             "['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End']",
             primary,
         )
-        self.assertIn("run.status === 'completed' && !run.manual_reviewed", primary)
+        self.assertNotIn("run.manual_reviewed", primary)
         self.assertNotIn('id="as-monitor-list"', primary)
         self.assertNotIn("核销运行链路", primary)
         self.assertNotIn("RUNTIME MONITOR", primary)
@@ -1983,8 +2001,10 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertNotIn('id="as-view-monitor"', primary)
 
         config = self._json("/api/config")
-        self.assertEqual(config["api_version"], "1.56")
-        self.assertEqual(config["audit_policy_source"], "费用核销类型-资料与标准清单-20260918.pdf")
+        self.assertEqual(config["api_version"], "1.67")
+        self.assertTrue(config['execution_repair']['enabled'])
+        self.assertFalse(config['execution_repair']['source_code_write'])
+        self.assertEqual(config["audit_policy_source"], "附件：费用分类及申请核销资料表-2026.11.17.xlsx")
         self.assertEqual(config["scenario_classification_policy"], "biz_type")
         self.assertEqual(config["local_input_type_policy"], "ask_user_before_run")
         self.assertEqual(config["unclassified_archive_policy"], "complete_with_specific_material_issues")
@@ -1997,11 +2017,11 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertEqual(config["customer_language_policy"], "plain_chinese_source_specific")
         self.assertEqual(config["customer_reason_format"], "short_facts_without_archive_or_type_prefix")
         self.assertEqual(config["confidence_badge_display"], "hidden")
-        self.assertEqual(config["result_summary_display"], "hidden")
+        self.assertEqual(config["result_summary_display"], "ai_summary_tab")
         self.assertEqual(config["result_list_heading_display"], "hidden")
         self.assertEqual(config["filter_header_display"], "hidden")
         self.assertEqual(config["result_filters"], ["audit_type", "category"])
-        self.assertEqual(config["system_version"], "2.16.4")
+        self.assertEqual(config["system_version"], workbench_server.SYSTEM_VERSION)
         self.assertEqual(config["material_problem_policy"], "require_exact_material_items_before_audit")
         self.assertEqual(config["refresh_policy"]["overview"]["record_count_statuses"], "all")
         self.assertEqual(config["refresh_policy"]["record_lists"], {
@@ -2123,9 +2143,12 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn('data-pass-confidence-score=', secondary)
         self.assertIn('data-eo-view="passed"', secondary)
         self.assertIn('role="tablist" aria-label="核销结果视图"', secondary)
-        self.assertEqual(secondary.count('role="tab" type="button" data-eo-view='), 2)
+        self.assertIn('data-eo-view="ai-summary"', secondary)
+        self.assertEqual(secondary.count('role="tab" type="button" data-eo-view='), 5)
+        self.assertIn('data-eo-view="materials"', secondary)
+        self.assertIn('data-eo-view="technical"', secondary)
         self.assertEqual(
-            secondary.count('role="tabpanel" aria-labelledby="eo-tab-'), 2
+            secondary.count('role="tabpanel" aria-labelledby="eo-tab-'), 3
         )
         self.assertNotIn("单项通过不等于整单核销通过", secondary)
         self.assertNotIn("核销方式始终展示全部；置信度随核销方式和关键词联动", secondary)

@@ -9,7 +9,7 @@ from tests.test_brand_amount_policy import numeric_case, decide
 from tests.test_brand_contract_source import gift_fixture, decide_gift, operand
 
 
-SALES_SCENARIOS = ("personnel_incentive", "giveaway_promotion", "price_difference_support", "pos_target_incentive")
+SALES_SCENARIOS = ("personnel_incentive", "price_difference_support")
 
 
 def sales_case(scenario, excel, stamped, claimed):
@@ -21,7 +21,8 @@ def sales_case(scenario, excel, stamped, claimed):
     evidence = unknown_checks(scenario, flags)
     check = next(c for c in evidence["checks"] if c["rule_id"] == "settlement_pos_quantity")
     check.update(status="pass", source_ids=["claim", "excel"], reason="本次商品销量核对", comparisons=[{
-        "label": "商品销量", "value_kind": "quantity", "operation": "value", "operator": "eq",
+        "label": "商品销量", "value_kind": "quantity", "operation": "value",
+        "operator": "le" if scenario=='personnel_incentive' else "eq",
         "left": operand("claim", f"本次销量={claimed}", claimed),
         "right": [operand("excel", f"本次销量={excel}", excel)],
     }])
@@ -31,17 +32,21 @@ def sales_case(scenario, excel, stamped, claimed):
 class PosExcelAuthorityTests(unittest.TestCase):
     def test_excel_controls_quantity_even_when_the_stamped_copy_differs(self):
         for scenario in SALES_SCENARIOS:
-            for excel, stamp, expected in (("100", "110", "pass"), ("110", "100", "fail")):
+            for excel, stamp, expected in (("100", "110", "pass"),
+                                            ("110", "100", "fail"),
+                                            ("90", "100", "fail"),
+                                            ("99.99999999", "100", "fail")):
                 with self.subTest(scenario=scenario, excel=excel):
                     case, evidence, _ = sales_case(scenario, excel, stamp, "100")
                     actual = decide(case, evidence, "settlement_pos_quantity")
-                    self.assertEqual(actual["status"], expected)
+                    wanted = 'pass' if scenario=='personnel_incentive' and excel=='110' else expected
+                    self.assertEqual(actual["status"], wanted)
                     self.assertEqual(actual["calculations"][0]["right_value"], excel)
 
     def test_model_cannot_select_the_stamped_quantity_that_matches_the_claim(self):
         for scenario in SALES_SCENARIOS:
             with self.subTest(scenario=scenario):
-                case, evidence, check = sales_case(scenario, "110", "100", "100")
+                case, evidence, check = sales_case(scenario, "90", "100", "100")
                 check["comparisons"][0]["right"] = [operand("stamp", "本次销量=100", "100")]
                 check["source_ids"] = ["claim", "stamp"]
                 with self.assertRaisesRegex(AuditError, "Excel"):

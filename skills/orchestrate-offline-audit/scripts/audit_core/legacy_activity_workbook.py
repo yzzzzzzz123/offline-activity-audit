@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from .execution_trace import run_command
+
 from .paths import PROJECT_ROOT
 
+import os
 import re
 import shutil
 import subprocess
@@ -14,6 +17,7 @@ from openpyxl import load_workbook
 from PIL import Image
 
 from .common import AuditError, sha256_file
+from .reading_contract import ReadingSecurityError, ReadingSystemError
 
 
 CONVERTER = (
@@ -34,13 +38,48 @@ class LegacyWorkbookMaterialError(AuditError):
     """A customer's workbook cannot uniquely bind its activity-photo rows."""
 
 
+def _is_ole_workbook(source: Path) -> bool:
+    with source.open("rb") as stream:
+        return stream.read(8) == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
 def _convert_legacy_workbook(source: Path, target: Path) -> None:
+    # WPS also exports OOXML packages with an .xls extension. Preserve their
+    # original cell-image IDs and relationships rather than rewriting them.
+    # An OLE workbook can contain an ETCellImageData ZIP stream. Its central
+    # directory may be visible in the outer file, but it is not an XLSX.
+    if not _is_ole_workbook(source) and zipfile.is_zipfile(source):
+        shutil.copyfile(source, target)
+        return
+    if os.name != 'nt':
+        import tempfile
+        converter = shutil.which('libreoffice') or shutil.which('soffice')
+        if not converter:
+            raise ReadingSystemError(
+                '旧式活动返图.xls需要 LibreOffice；图片与行号关系无法保留时不会猜测审核。',
+                code='renderer_missing', retryable=False)
+        with tempfile.TemporaryDirectory(prefix='xls-profile-', dir=target.parent) as profile:
+            try:
+                result = run_command([converter, '-env:UserInstallation='+Path(profile).as_uri(),
+                    '--headless', '--convert-to', 'xlsx', '--outdir', str(target.parent), str(source)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180, check=False)
+            except (OSError, subprocess.SubprocessError):
+                raise ReadingSystemError(
+                    '旧式活动返图.xls转换失败；未输出原始工作簿内容。',
+                    code='renderer_failed', retryable=True) from None
+        if result.returncode or not target.is_file():
+            raise ReadingSystemError(
+                '旧式活动返图.xls未能转换为可核验格式；不能以缺失图片关系的表格继续核销。',
+                code='renderer_failed', retryable=True)
+        return
     powershell = shutil.which("powershell") or shutil.which("powershell.exe")
     if powershell is None:
-        raise AuditError("读取活动返图.xls需要 Windows PowerShell 和 Microsoft Excel")
+        raise ReadingSystemError(
+            "读取活动返图.xls需要 Windows PowerShell 和 Microsoft Excel",
+            code='renderer_missing', retryable=False)
     if not CONVERTER.is_file():
         raise AuditError(f"旧式活动返图转换脚本缺失：{CONVERTER}")
-    result = subprocess.run(
+    result = run_command(
         [
             powershell,
             "-NoProfile",
@@ -62,7 +101,9 @@ def _convert_legacy_workbook(source: Path, target: Path) -> None:
     )
     if result.returncode != 0 or not target.is_file():
         detail = (result.stderr or result.stdout).strip()[-2000:]
-        raise AuditError(f"活动返图.xls无法只读转换为可核验格式：{detail}")
+        raise ReadingSystemError(
+            f"活动返图.xls无法只读转换为可核验格式：{detail}",
+            code='renderer_failed', retryable=True)
 
 
 def _cell_image_targets(archive: zipfile.ZipFile) -> dict[str, str]:
@@ -92,7 +133,7 @@ def _cell_image_targets(archive: zipfile.ZipFile) -> dict[str, str]:
             raise LegacyWorkbookMaterialError("活动返图工作簿图片ID或关系缺失")
         pure = PurePosixPath("xl") / PurePosixPath(target)
         if pure.is_absolute() or ".." in pure.parts or not str(pure).startswith("xl/media/"):
-            raise AuditError(f"活动返图工作簿图片路径不安全：{target}")
+            raise ReadingSecurityError(f"活动返图工作簿图片路径不安全：{target}")
         if image_id.casefold() in {key.casefold() for key in targets}:
             raise LegacyWorkbookMaterialError("活动返图工作簿图片ID重复，无法唯一绑定媒体文件")
         targets[image_id] = pure.as_posix()
@@ -178,7 +219,9 @@ def extract_activity_return_workbook(
                     f"活动返图工作簿第{record['excel_row']}行引用的媒体文件未提交"
                 ) from exc
             if info.file_size <= 0 or info.file_size > MAX_IMAGE_BYTES:
-                raise AuditError(f"活动返图图片尺寸异常：{target}={info.file_size}")
+                raise ReadingSystemError(
+                    f"活动返图图片尺寸异常：{target}={info.file_size}",
+                    code='resource_limit', retryable=True)
             suffix = PurePosixPath(target).suffix.lower()
             if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
                 raise AuditError(f"活动返图图片格式不支持：{target}")

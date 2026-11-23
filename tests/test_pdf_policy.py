@@ -1,3 +1,4 @@
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 import io
 import tempfile
@@ -17,7 +18,7 @@ from audit_core.pdf_evidence import (audit_decision, audit_schema, classificatio
                                      validate_documents, AUDIT_SCHEMA, CLASSIFICATION_SCHEMA)
 from audit_core.pdf_materials import PdfEvidenceProvider, prepare_units, _reading_batches, _prompt_documents
 import json
-from audit_core.pdf_policy import MATERIALS, MATERIAL_LABELS, requirements, rules
+from audit_core.pdf_policy import MATERIALS, MATERIAL_LABELS, applicability, requirements, rules
 from audit_core.extraction_chain import render_prompt
 from tests.pdf_test_support import bundle, classification, flags_for, image_bytes, unknown_checks
 
@@ -112,9 +113,9 @@ class PdfPolicyTests(unittest.TestCase):
         ids = ["stamped-pos", "excel", "settlement", "contract"]
         value = classification("pos_target_incentive", ids)
         groups = dict(zip(("pos", "pos_excel", "settlement", "promotion_contract"), ids))
-        self.assertEqual({r.id for r in requirements("pos_target_incentive")}, set(groups))
+        self.assertEqual({r.id for r in requirements("pos_target_incentive") if r.when!="optional"}, set(groups))
         for material in value["materials"]:
-            material["source_ids"] = [groups[material["id"]]]
+            material["source_ids"] = [groups[material["id"]]] if material["id"] in groups else []
         result = classification_decision(value, [{"unit_id": uid} for uid in ids])
         self.assertTrue(result["matched"])
         self.assertEqual(result["scenario"], "pos_target_incentive")
@@ -145,30 +146,12 @@ class PdfPolicyTests(unittest.TestCase):
         value = classification("giveaway_promotion", ["u"], missing=["giveaway_evidence"])
         self.assertFalse(classification_decision(value, documents)["matched"])
 
-    def test_pos_target_numeric_rules_recalculate_without_giveaway_or_payment_checks(self):
-        flags = flags_for("pos_target_incentive")
-        for rule_id, left, right, operator, conclusion in (
-            ("reward_unit_price", "2", "1", "eq", "issues_found"),
-            ("settlement_pos_quantity", "12", "10", "eq", "issues_found"),
-            ("claim_ceiling", "101", "100", "le", "issues_found"),
-        ):
-            with self.subTest(rule=rule_id):
-                documents = [{"unit_id": "s", "facts": [f"结算原值={left}"]},
-                             {"unit_id": "p", "facts": [f"对照原值={right}"]}]
-                evidence = unknown_checks("pos_target_incentive", flags)
-                check = next(c for c in evidence["checks"] if c["rule_id"] == rule_id)
-                check.update(status="pass", reason="模型误判为一致", source_ids=["s", "p"], comparisons=[{
-                    "label": "本次SKU对应数值", "left": {"unit_id": "s", "quote": f"结算原值={left}", "number": left},
-                    "value_kind": {"reward_unit_price": "unit_price", "settlement_pos_quantity": "quantity", "claim_ceiling": "amount"}[rule_id],
-                    "right": [{"unit_id": "p", "quote": f"对照原值={right}", "number": right}],
-                    "operation": "value", "operator": operator}])
-                result = audit_decision("pos_target_incentive", flags, evidence, documents)
-                checks = {c["rule_id"]: c for c in result["checks"]}
-                self.assertEqual(checks[rule_id]["status"], "fail")
-                self.assertEqual(result["summary"]["conclusion"], conclusion)
-                self.assertNotIn("pos_seal", checks)
-                self.assertNotIn("pos_excel_present", checks)
-                self.assertTrue({"giveaway_evidence", "gift_rule_present", "payment_evidence"}.isdisjoint(checks))
+    def test_pos_target_numeric_rules_use_amount_tiers_and_keep_other_type_checks_out(self):
+        ids={r.id for r in rules("pos_target_incentive")}
+        self.assertTrue({"target_reward","pos_sales_amount","pos_seal"}<=ids)
+        self.assertTrue({"reward_unit_price","settlement_pos_quantity","giveaway_evidence","payment_company"}.isdisjoint(ids))
+        # Full source-bound tier recalculation and boundary cases are exercised
+        # by test_fee_workbook_policy, replacing the retired per-SKU target rules.
 
     def test_type_rejection_requires_comparing_all_eight_material_lists_first(self):
         documents = [{"unit_id": "u"}]
@@ -241,7 +224,7 @@ class PdfPolicyTests(unittest.TestCase):
         value = classification("personnel_incentive", ["u"], flags=flags)
         result = classification_decision(value, [{"unit_id": "u"}])
         self.assertTrue(result["matched"])
-        self.assertEqual([m["id"] for m in value["materials"] if m["state"] == "not_applicable"], ["pos", "pos_excel", "staff_photos"])
+        self.assertEqual([m["id"] for m in value["materials"] if m["state"] == "not_applicable"], ["pos", "pos_excel", "staff_photos", "activity_application", "approved_claim"])
         value["flags"]["training"] = False
         with self.assertRaises(AuditError):
             classification_decision(value, [{"unit_id": "u"}])
@@ -252,7 +235,6 @@ class PdfPolicyTests(unittest.TestCase):
 
     def test_inapplicable_conditional_item_cannot_be_silently_absorbed(self):
         for scenario, material_id in (("promotional_display", "atrium_agreement"),
-                                      ("personnel_incentive", "staff_photos"),
                                       ("entry_fee", "entry_system")):
             with self.subTest(scenario=scenario):
                 value = classification(scenario, ["u"])
@@ -274,26 +256,43 @@ class PdfPolicyTests(unittest.TestCase):
         with self.assertRaises(AuditError):
             classification_decision(value, [{"unit_id": "u"}])
 
-    def test_price_proof_is_required_even_when_full_reduction_flag_is_unknown_or_false(self):
+    def test_full_reduction_proof_is_conditional_but_price_proof_remains_required(self):
         for full_reduction in (None, False, True):
             with self.subTest(full_reduction=full_reduction):
                 flags = flags_for("price_difference_support", full_reduction=full_reduction)
                 value = classification("price_difference_support", ["u"], flags=flags,
                                        missing=["full_reduction_evidence"])
-                self.assertFalse(classification_decision(value, [{"unit_id": "u"}])["matched"])
+                route = classification_decision(value, [{"unit_id": "u"}])
+                self.assertEqual(route["matched"], full_reduction is not True)
+                missing_price = classification("price_difference_support", ["u"], flags=flags,
+                                               missing=["price_evidence"])
+                self.assertFalse(classification_decision(missing_price, [{"unit_id": "u"}])["matched"])
                 materials = next(m for m in value["material_matches"] if m["scenario"] == "price_difference_support")["materials"]
                 evidence = unknown_checks("price_difference_support", flags)
                 check = next(c for c in evidence["checks"] if c["rule_id"] == "full_reduction_evidence")
                 check.update(status="pass", reason="误判为已有证明", source_ids=["u"])
+                if full_reduction is not True:
+                    with self.assertRaisesRegex(AuditError, "条件例外"):
+                        audit_decision("price_difference_support", flags, evidence,
+                                       [{"unit_id": "u", "facts": []}], materials)
+                    check.update(status="not_applicable", reason="本次未明确涉及满减返还", source_ids=[])
                 result = audit_decision("price_difference_support", flags, evidence,
                                         [{"unit_id": "u", "facts": []}], materials)
                 actual = next(c for c in result["checks"] if c["rule_id"] == "full_reduction_evidence")
-                self.assertEqual(actual["status"], "fail")
-                self.assertIn("满减返还活动存在证明", actual["reason"])
+                self.assertEqual(actual["status"], "fail" if full_reduction is True else "not_applicable")
+                if full_reduction is True:
+                    self.assertIn("满减返还", actual["reason"])
+                    self.assertIn("活动存在证明", actual["reason"])
                 self.assertEqual(len(result["checks"]), len(rules("price_difference_support")))
-                check.update(status="fail", reason="未提供对应证明", source_ids=[])
-                audit_decision("price_difference_support", flags, evidence,
-                               [{"unit_id": "u", "facts": []}], materials)
+                check.update(status="fail", reason="未提供对应证明", source_ids=[] if full_reduction is True else ["u"])
+                if full_reduction is not True:
+                    with self.assertRaisesRegex(AuditError, "条件例外"):
+                        audit_decision("price_difference_support", flags, evidence,
+                                       [{"unit_id": "u", "facts": []}], materials)
+                else:
+                    rejected = audit_decision("price_difference_support", flags, evidence,
+                                              [{"unit_id": "u", "facts": []}], materials)
+                    self.assertEqual(next(c for c in rejected["checks"] if c["rule_id"] == "full_reduction_evidence")["status"], "fail")
 
     def test_each_required_item_must_be_present_for_all_eight_types(self):
         for scenario in MATERIALS:
@@ -301,13 +300,22 @@ class PdfPolicyTests(unittest.TestCase):
             flags["uses_pos"] = True
             if scenario == "personnel_incentive":
                 flags["temporary_staff"] = True
+            if scenario == "price_difference_support":
+                flags["full_reduction"] = True
             for requirement in requirements(scenario):
+                if applicability(requirement.when, scenario, flags) is not True:
+                    continue
                 with self.subTest(scenario=scenario, material=requirement.id):
                     value = classification(scenario, ["u"], flags=flags, missing=[requirement.id])
-                    route = classification_decision(value, [{"unit_id": "u"}])
+                    if scenario == "personnel_incentive":
+                        selected = next(m for m in value["material_matches"] if m["scenario"] == scenario)
+                        next(m for m in selected["materials"] if m["id"] == "staff_photos")["condition_evidence"] = [
+                            {"unit_id": "u", "quote": "本次安排临促2人", "stance": "affirmed"}]
+                    route = classification_decision(value, [{"unit_id": "u", "facts": ["本次安排临促2人"]}],
+                                                    cvs_otc_channel=scenario == "entry_fee")
                     self.assertFalse(route["matched"])
                     self.assertIsNone(route["scenario"])
-                    self.assertIn(MATERIAL_LABELS[requirement.id], "；".join(route["reasons"]))
+                    self.assertIn("发票、收据或打款截图" if scenario=="poster_material" and requirement.id=="invoice" else MATERIAL_LABELS[requirement.id], "；".join(route["reasons"]))
 
     def test_extra_material_on_an_already_covered_page_blocks_every_type(self):
         extra = {"description": "独立运输单", "reason": "该类PDF资料清单未列此项", "source_ids": ["u"]}
@@ -338,17 +346,17 @@ class PdfPolicyTests(unittest.TestCase):
             classification_decision(value, [{"unit_id": "u"}])
 
     def test_many_pages_and_photos_do_not_add_material_items(self):
-        ids = ["contract-page-1", "contract-page-2", "photo-1", "photo-2", "invoice", "settlement"]
+        ids = ["contract-page-1", "contract-page-2", "photo-1", "photo-2", "invoice", "settlement", "material-list"]
         value = classification("poster_material", ids)
-        groups = {"promotion_contract": ids[:2], "finished_photos": ids[2:4], "invoice": [ids[4]], "settlement": [ids[5]]}
+        groups = {"promotion_contract": ids[:2], "finished_photos": ids[2:4], "invoice": [ids[4]], "settlement": [ids[5]], "material_list":[ids[6]]}
         for material in value["materials"]:
             material["source_ids"] = groups.get(material["id"], [])
         self.assertTrue(classification_decision(value, [{"unit_id": uid} for uid in ids])["matched"])
-        self.assertEqual(sum(m["state"] == "present" for m in value["materials"]), 4)
+        self.assertEqual(sum(m["state"] == "present" for m in value["materials"]), 5)
         self.assertTrue(all(m["state"] == "not_applicable" for m in value["materials"] if m["id"] in {"pos", "pos_excel"}))
 
     def test_unknown_material_condition_prevents_match_even_with_no_missing_items(self):
-        value = classification("entry_fee", ["u"], flags=flags_for("entry_fee", cvs_otc=None))
+        value = classification("promotional_display", ["u"], flags=flags_for("promotional_display", atrium=None))
         route = classification_decision(value, [{"unit_id": "u"}])
         self.assertFalse(route["matched"])
         self.assertIn("尚不能确认的资料或适用情况", "；".join(route["reasons"]))
@@ -364,7 +372,7 @@ class PdfPolicyTests(unittest.TestCase):
     def test_giveaway_mixed_store_proofs_share_one_item_and_keep_content_findings(self):
         scenario = "giveaway_promotion"
         flags = flags_for(scenario, photo_evidence=True)
-        ids = [r.id for r in requirements(scenario) if r.id != "giveaway_evidence"]
+        ids = [r.id for r in requirements(scenario) if r.id != "giveaway_evidence" and r.when!="optional"]
         ids += ["photo-a", "receipt-b"]
         documents = [{"unit_id": uid, "roles": [uid], "facts": ["本次活动资料"], "limitations": []}
                      for uid in ids]
@@ -376,7 +384,7 @@ class PdfPolicyTests(unittest.TestCase):
         value["material_matches"] = [selected]
         for material in value["materials"]:
             material["source_ids"] = (["photo-a", "receipt-b"] if material["id"] == "giveaway_evidence"
-                                      else [material["id"]])
+                                      else [material["id"]] if material["state"]=="present" else [])
         for status, receipt, reason in (
             ("pass", "乙店小票显示购买产品、搭赠产品、购买时间和门店。", "甲店照片与乙店小票分别符合要求，共同覆盖本次两家门店。"),
             ("fail", "乙店小票没有显示搭赠产品。", "乙店小票没有显示赠送的商品。"),
@@ -498,11 +506,26 @@ class PdfPolicyTests(unittest.TestCase):
             schema = audit_schema(scenario)
             validator = jsonschema.Draft202012Validator(schema)
             value = unknown_checks(scenario, flags_for(scenario))
+            if scenario == "giveaway_promotion":
+                value["giveaway_coverage"] = {"scope_complete": False, "scope_source_ids": [],
+                    "stores": [], "evidence": [], "limitations": []}
+            if scenario == "price_difference_support":
+                value.update(price_photo_reviews=[], activity_dates={
+                    "contract": {"source_ids": [], "periods": [], "limitations": []},
+                    "settlement": {"source_ids": [], "periods": [], "limitations": []},
+                    "photos": []})
             validator.validate(value)
+            complete = deepcopy(value)
+            if scenario == "price_difference_support":
+                for field in ("price_photo_reviews", "activity_dates"):
+                    incomplete = deepcopy(complete)
+                    incomplete.pop(field)
+                    with self.assertRaises(jsonschema.ValidationError):
+                        validator.validate(incomplete)
             value["checks"][0]["rule_id"] = "map_distance"
             with self.assertRaises(jsonschema.ValidationError):
                 validator.validate(value)
-            value = unknown_checks(scenario, flags_for(scenario))
+            value = deepcopy(complete)
             value["checks"].pop()
             with self.assertRaises(jsonschema.ValidationError):
                 validator.validate(value)
@@ -533,7 +556,7 @@ class PdfReadingTests(unittest.TestCase):
         for index, name in enumerate(("其他.zip", "进场费.zip")):
             temporary = self.root / str(index)
             temporary.mkdir()
-            provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+            provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
             facts = ["单元格记录：同一活动包含场地和搭建明细；照片与票据按内容分别核对"]
             units = [{"unit_id": "u", "file_id": "f", "source_file": name + "/人员激励.xlsx",
                       "locator": name, "image": None, "native_facts": facts, "limitations": []}]
@@ -597,10 +620,11 @@ class PdfReadingTests(unittest.TestCase):
         fragments = packed["fragments"]
         restored = []
         for document in packed["documents"]:
-            facts = [fact if isinstance(fact, str) else
+            facts = [fact if isinstance(fact, str) else fragments[fact] if isinstance(fact, int) else
                      fragments[fact[0]] + str(fact[1]) + ": " + " | ".join(fragments[i] for i in fact[2])
                      for fact in document["facts"]]
-            restored.append({**document, "facts": facts})
+            restored.append({**packed['document_metadata'][document['metadata']],
+                             'unit_id': document['unit_id'], "facts": facts})
         self.assertEqual(restored, original)
         self.assertEqual(documents, original)
         self.assertLess(len(encoded.encode("utf-8")), 800_000)
@@ -633,9 +657,13 @@ class PdfReadingTests(unittest.TestCase):
         out = io.BytesIO()
         book.save(out)
         book.close()
-        with patch("audit_core.pdf_materials.openpyxl.load_workbook", side_effect=PermissionError("denied")):
-            with self.assertRaises(PermissionError):
-                self.prepare({"表格.xlsx": out.getvalue()})
+        with patch("audit_core.workbook_reading.openpyxl.load_workbook", side_effect=PermissionError("denied")):
+            units = self.prepare({"表格.xlsx": out.getvalue()})
+        self.assertEqual(len(units), 1)
+        self.assertEqual(units[0]["read_status"], "system_failure")
+        self.assertEqual(units[0]["error_code"], "permission_denied")
+        self.assertFalse(units[0]["customer_actionable"])
+        self.assertIn("系统或执行问题", "\n".join(units[0]["limitations"]))
 
     def test_spreadsheet_ignores_inflated_dimensions_and_keeps_sparse_coordinates(self):
         book = openpyxl.Workbook()
@@ -672,8 +700,12 @@ class PdfReadingTests(unittest.TestCase):
         book.save(out)
         book.close()
         with patch("audit_core.pdf_materials.MAX_CELLS", 3):
-            with self.assertRaisesRegex(AuditError, "单元格总量超出安全读取范围"):
-                self.prepare({"销售数据.xlsx": out.getvalue()})
+            units = self.prepare({"销售数据.xlsx": out.getvalue()})
+        self.assertEqual(len(units), 1)
+        self.assertEqual(units[0]["read_status"], "system_failure")
+        self.assertEqual(units[0]["error_code"], "resource_limit")
+        self.assertFalse(units[0]["customer_actionable"])
+        self.assertIn("单元格总量超出安全读取范围", "\n".join(units[0]["limitations"]))
 
 
 if __name__ == "__main__":

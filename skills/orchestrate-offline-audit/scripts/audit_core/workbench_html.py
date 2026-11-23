@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from html import escape as escape_html_attribute
 from pathlib import Path
@@ -9,18 +10,41 @@ from typing import Any
 from .common import AuditError
 from .error_reason import attach_error_reasons
 from .html_report import DATA_CLOSE, DATA_OPEN
-from .pass_check_log import attach_pass_check_log, load_workspace_results
-from .workbench_store import read_event_records, atomic_write_text, main_flow_task_list, project_run_status, read_json_file
+from .pass_check_log import attach_pass_check_log, load_workspace_results, load_workspace_material_packets
+from .workbench_store import ANALYSIS_SUMMARY_FILENAME, read_event_records, atomic_write_text, main_flow_task_list, project_run_status, read_json_file, render_analysis_summary_markdown
 
 
-API_VERSION = "1.56"
-SYSTEM_VERSION = "2.16.4"
+API_VERSION = "1.67"
+SYSTEM_VERSION = "2.19.1"
 STATIC_ARCHIVE_FILENAME = "offline-activity-audit.html"
 WORKBENCH_CONTEXT_ID = "audit-workbench-context"
 STATIC_ARCHIVE_ID = "audit-static-archive"
 PAGE_MODE_META_NAME = "offline-audit-page-mode"
 DELIVERY_MODE_META_NAME = "offline-audit-delivery-mode"
 VIEW_AVAILABLE_META_NAME = "offline-audit-view-available"
+
+
+def load_analysis_summary(
+    workspace: Path,
+    view: dict[str, Any] | None,
+    manifest: dict[str, Any],
+) -> dict[str, str]:
+    """Read the callback's saved summary; project missing legacy text read-only."""
+    if manifest.get("status") not in {"completed", "failed"}:
+        return {"text": "", "source": "pending"}
+    summary_path = workspace / ANALYSIS_SUMMARY_FILENAME
+    try:
+        if summary_path.is_file():
+            if summary_path.resolve().parent != workspace.resolve():
+                return {"text": "", "source": "unavailable"}
+            text = summary_path.read_text(encoding="utf-8").strip()
+            if text:
+                return {"text": text, "source": "saved"}
+    except (OSError, UnicodeError):
+        return {"text": "", "source": "unavailable"}
+    if isinstance(view, dict) and isinstance(view.get("sheets"), list):
+        return {"text": render_analysis_summary_markdown(view, manifest), "source": "legacy_projection"}
+    return {"text": "", "source": "unavailable"}
 
 
 def customer_projection_error_count(manifest: dict[str, Any]) -> int:
@@ -70,7 +94,11 @@ def replace_audit_payload(html: str, payload: dict[str, Any]) -> str:
 
 
 def inject_workbench_context(html: str, context: dict[str, Any]) -> str:
-    closing_head = html.lower().find("</head>")
+    # Case-insensitive search without copying the whole document: the
+    # static-archive renderer runs once per concurrent CLI child, and the
+    # previous html.lower() doubled its peak string memory.
+    closing_head = re.search(r"</head>", html, re.IGNORECASE)
+    closing_head = closing_head.start() if closing_head else -1
     if closing_head < 0:
         raise ValueError("固定页面缺少 head 闭合标签")
     context_payload = dict(context)
@@ -110,6 +138,9 @@ def _static_run_summary(manifest: dict[str, Any], workspace: Path | None = None)
 
     summary = project_run_status(manifest)
     summary.update(record_labels(manifest, workspace))
+    if workspace is not None and (workspace / "analysis" / "model-metrics.jsonl").is_file():
+        from .model_metrics import summarize_model_usage
+        summary["token_usage"] = summarize_model_usage(workspace / "analysis")
     summary["storage_type"] = "worktree"
     summary["main_flow_tasks"] = main_flow_task_list()
     summary["error_count"] = customer_projection_error_count(manifest)
@@ -148,8 +179,11 @@ def render_static_run_archive_html(
     snapshot["view"] = attach_pass_check_log(
         snapshot.get("view"),
         load_workspace_results(workspace_path),
+        material_packets=load_workspace_material_packets(workspace_path),
     )
     snapshot["view"] = attach_error_reasons(snapshot["view"])
+    from .execution_trace import enrich_technical_snapshot
+    enrich_technical_snapshot(snapshot, workspace_path)
     if run.get("status") == "completed" and isinstance(snapshot.get("view"), dict):
         run["error_count"] = projected_view_error_count(snapshot["view"])
     snapshot["recent_events"] = read_event_records(
@@ -212,6 +246,8 @@ def render_static_run_archive_html(
         "dom_checkpoints": snapshot.get("dom_checkpoints") or [],
         "recent_events": snapshot.get("recent_events") or [],
         "verification": snapshot.get("verification"),
+        "execution_trace": snapshot.get("execution_trace") or {},
+        "analysis_summary": manifest.get("analysis_summary_display") or load_analysis_summary(workspace_path, snapshot.get("view"), manifest),
         "static_archive": archive,
     }
 

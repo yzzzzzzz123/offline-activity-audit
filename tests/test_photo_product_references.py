@@ -1,4 +1,5 @@
 """Contract-scoped DB/OSS retrieval, shared photo rules and evidence isolation."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -8,14 +9,16 @@ from unittest.mock import patch
 from audit_core.common import AuditError
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_materials import PdfEvidenceProvider
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.photo_product_references import (
     PHOTO_CHECKS, photo_context, prepare_product_references, resolve_requests, validate_selection,
     validate_reference_reporting,
 )
 from audit_core.product_database import catalog_from_rows, product_catalog_scope
 from audit_core.pdf_policy import ENTRY_SKU_CLARIFICATION, PRODUCT_PHOTO_CLARIFICATION
-from tests.pdf_test_support import flags_for, unknown_checks
-from tests.product_test_support import MemoryOSS, image_objects
+from tests.pdf_test_support import flags_for, unknown_checks, image_bytes
+from tests.test_optional_staff_and_display_photos import review
+from tests.product_test_support import MemoryOSS, image_objects, isolate_product_image_cache
 
 
 MODULE = "audit_core.photo_product_references"
@@ -55,6 +58,20 @@ def case_for(root, scenario="entry_fee"):
 
 
 class ProductSelectionTests(unittest.TestCase):
+    def test_reference_order_is_stable_without_changing_requests_or_resolutions(self):
+        c = catalog()
+        original = deepcopy(c)
+        requests = [request(code='SKU-0002'), request(code='SKU-0000'),
+                    request(code='missing'), request(code='SKU-0001'), request(code='SKU-0002')]
+        selected, resolutions = resolve_requests({'requests': requests}, c)
+        reversed_selected, reversed_resolutions = resolve_requests({'requests': list(reversed(requests))}, c)
+        self.assertEqual(selected, reversed_selected)
+        self.assertEqual([p['product_code'] for p in selected], ['SKU-0000','SKU-0001','SKU-0002'])
+        self.assertEqual([r['request'] for r in resolutions],requests)
+        self.assertEqual([r['request'] for r in reversed_resolutions],list(reversed(requests)))
+        self.assertEqual(resolutions[2]['status'],'unresolved')
+        self.assertEqual(c,original)
+
     def test_direct_code_or_full_name_and_barcode_resolves_unique_code(self):
         c = catalog()
         requests = [request(code="SKU-0001"), request(name="测试商品1规格100g", barcode="6970356167341")]
@@ -134,6 +151,9 @@ class ProductSelectionTests(unittest.TestCase):
 
 
 class ProductRetrievalTests(unittest.TestCase):
+    def setUp(self):
+        isolate_product_image_cache(self)
+
     def test_thousand_product_catalog_reads_only_selected_manifests_and_unique_images(self):
         c = catalog(1200)
         objects = image_objects(c)
@@ -251,21 +271,33 @@ class ProductRetrievalTests(unittest.TestCase):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 case = case_for(root, scenario)
+                for unit in case["units"]:
+                    unit["image"].write_bytes(image_bytes())
+                    unit.update(source_file=unit["image"].name, locator="第1张", limitations=[])
                 c = catalog()
                 client = MemoryOSS(image_objects(c))
                 original = deepcopy(case)
-                output = unknown_checks(scenario, case["flags"])
+                output = unknown_checks(scenario, case["flags"],
+                                        materials=case["materials"], units=case["units"])
+                if scenario == "entry_fee":
+                    shelf_ids = {uid for material in case["materials"] if material["id"] == "shelf_photos"
+                                 for uid in material["source_ids"]}
+                    output["entry_coverage"]["photos"] = [{"unit_id": unit["unit_id"], "store_name": None}
+                        for unit in case["units"] if unit["unit_id"] in shelf_ids and unit.get("image")]
                 calls = []
                 def model(*args, **kwargs):
                     prompt = render_prompt(args[3])
                     calls.append((prompt, kwargs["images"]))
                     if "requests" in args[2]["properties"]:
                         value = {"requests": [request(code="SKU-0001", rule=photo_context(case)[0][0])], "limitations": []}
+                    elif "photo_reviews" in args[2]["properties"] and "checks" not in args[2]["properties"]:
+                        value = {"photo_reviews": [review("photo")]}
+                        value["photo_reviews"][0]["checks"][0]["source_ids"]=["photo","contract"]
                     else:
                         value = output
                     kwargs["validator"](value)
                     return value
-                provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+                provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
                 with patch.object(provider, "_call", side_effect=model), \
                         patch(MODULE + ".load_product_catalog", return_value=c), \
                         patch("audit_core.product_image_runtime.ProductOSS", return_value=client):
@@ -273,8 +305,7 @@ class ProductRetrievalTests(unittest.TestCase):
                 self.assertEqual(len(calls), 2)
                 prompt, images = calls[-1]
                 self.assertIn(PRODUCT_PHOTO_CLARIFICATION, prompt)
-                self.assertIn(root / "photo.png", images)
-                self.assertEqual(sum(p.name.startswith("product-reference-") for p in images), 1)
+                self.assertEqual(images, [])
                 self.assertIn('"product_code": "SKU-0001"', prompt)
                 self.assertNotIn('"product_code": "SKU-0002"', prompt)
                 if scenario == "entry_fee":

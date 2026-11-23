@@ -1,0 +1,275 @@
+{
+  "version": 1,
+  "scenario": "personnel_incentive",
+  "qince_auxiliaries": [],
+  "stages": [
+    {
+      "name": "stamped_formats",
+      "rule_ids": [
+        "stamped_document_pdf"
+      ],
+      "material_roles": [
+        "entry_agreement",
+        "entry_system",
+        "payment",
+        "pos",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": []
+    },
+    {
+      "name": "documents",
+      "rule_ids": [
+        "settlement_seal",
+        "settlement_dealer",
+        "contract_signed",
+        "contract_dealer"
+      ],
+      "material_roles": [
+        "activity_application",
+        "invoice",
+        "payment",
+        "pos",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "advance_dealer"
+      ]
+    },
+    {
+      "name": "documents",
+      "rule_ids": [
+        "payment_statement_seal",
+        "payment_statement_dealer",
+        "pos_seal",
+        "pos_dealer"
+      ],
+      "material_roles": [
+        "activity_application",
+        "invoice",
+        "payment",
+        "pos",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "advance_dealer"
+      ]
+    },
+    {
+      "name": "dates",
+      "rule_ids": [
+        "settlement_activity_dates",
+        "settlement_application_dates",
+        "contract_activity_dates"
+      ],
+      "material_roles": [
+        "activity_application",
+        "price_evidence",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "activity_period"
+      ]
+    },
+    {
+      "name": "budget",
+      "rule_ids": [
+        "contract_budget_amount",
+        "claim_ceiling",
+        "application_claim_ceiling"
+      ],
+      "material_roles": [
+        "activity_application",
+        "approved_claim",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "application_total",
+        "approved_total"
+      ]
+    },
+    {
+      "name": "pos",
+      "rule_ids": [
+        "pos_fields",
+        "pos_arithmetic",
+        "pos_product_identity"
+      ],
+      "material_roles": [
+        "pos_excel"
+      ],
+      "reference_fields": []
+    },
+    {
+      "name": "settlement",
+      "rule_ids": [
+        "reward_unit_price"
+      ],
+      "material_roles": [
+        "activity_application",
+        "gift_rule",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "application_unit_price"
+      ]
+    },
+    {
+      "name": "settlement",
+      "rule_ids": [
+        "application_quantity_price"
+      ],
+      "material_roles": [
+        "activity_application",
+        "gift_rule",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "application_quantity",
+        "application_unit_price"
+      ]
+    },
+    {
+      "name": "settlement",
+      "rule_ids": [
+        "staff_headcount"
+      ],
+      "material_roles": [
+        "activity_application",
+        "gift_rule",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "application_quantity"
+      ]
+    },
+    {
+      "name": "settlement",
+      "rule_ids": [
+        "staff_total_unit_price"
+      ],
+      "material_roles": [
+        "activity_application",
+        "gift_rule",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "application_unit_price"
+      ]
+    },
+    {
+      "name": "settlement",
+      "rule_ids": [
+        "settlement_calculation"
+      ],
+      "material_roles": [
+        "activity_application",
+        "gift_rule",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": []
+    },
+    {
+      "name": "settlement",
+      "rule_ids": [
+        "contract_reward_unit_price"
+      ],
+      "material_roles": [
+        "activity_application",
+        "gift_rule",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "application_unit_price"
+      ]
+    },
+    {
+      "name": "pos_settlement",
+      "rule_ids": [
+        "application_products",
+        "pos_activity_dates"
+      ],
+      "material_roles": [
+        "activity_application",
+        "gift_rule",
+        "pos_excel",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "application_products"
+      ]
+    },
+    {
+      "name": "pos_quantity",
+      "rule_ids": [
+        "settlement_pos_quantity"
+      ],
+      "material_roles": [
+        "pos_excel",
+        "settlement"
+      ],
+      "reference_fields": []
+    },
+    {
+      "name": "payment",
+      "rule_ids": [
+        "payment_company",
+        "payment_claim_amount",
+        "payment_activity_dates"
+      ],
+      "material_roles": [
+        "activity_application",
+        "payment",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": [
+        "activity_period"
+      ]
+    },
+    {
+      "name": "photos",
+      "rule_ids": [
+        "staff_photo_content",
+        "training_photo_content"
+      ],
+      "material_roles": [
+        "activity_application",
+        "atrium_agreement",
+        "display_photos",
+        "finished_photos",
+        "full_reduction_evidence",
+        "gift_finished_photos",
+        "gift_store_photos",
+        "giveaway_evidence",
+        "price_evidence",
+        "promotion_contract",
+        "settlement",
+        "staff_photos",
+        "training_photos"
+      ],
+      "reference_fields": []
+    }
+  ],
+  "max_rules_per_split_stage": 4,
+  "max_text_bytes": null,
+  "max_output_tokens": null,
+  "maximum_rework_calls_per_stage": null,
+  "small_packet_policy": "用途分组仅作模型选择资料和工具的导航，不固定拆分审核或设置上下文及输出上限。",
+  "advance_when": [
+    "同一执行模型结合本单原始资料自主完成判断和自查；工具、引用匹配及证据结构不设业务门禁"
+  ],
+  "business_limitations": "真实缺件、原图不清或来源冲突按原业务规则完成，不伪造通过；技术漏读不得冒充业务缺件。"
+}

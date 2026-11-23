@@ -1,4 +1,4 @@
-"""按核销任务固定 OSS 清单快照；只下载被选中的参考图，退出即清理。"""
+"""每次核销读取 OSS 清单快照；复用已校验参考图，任务副本退出即清理。"""
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -10,9 +10,10 @@ from pathlib import Path
 import shutil
 from threading import RLock
 
-from .common import AuditError, sha256_file
+from .common import AuditError
 from .run_temporary import ManagedTemporaryDirectory, current_temporary_scope
 from .product_oss import ProductOSS, MAX_IMAGE_BYTES, MAX_MANIFEST_BYTES, manifest_key, validate_manifest
+from .product_image_cache import copy_or_download, verify_image
 
 
 @dataclass
@@ -51,6 +52,9 @@ def _manifest(product: dict, state: ImageState) -> tuple[dict, str]:
                 data = client.read(key, limit=MAX_MANIFEST_BYTES)
             value = validate_manifest(data, product)
             state.manifests[identity] = (value, hashlib.sha256(data).hexdigest())
+            from .execution_trace import record_step
+            record_step("oss.manifest", "读取并核验本次商品OSS清单", {"product_code": product["product_code"],
+                        "barcode_69": product["barcode_69"], "object_key": key, "manifest_sha256": hashlib.sha256(data).hexdigest(), "manifest": value})
         return deepcopy(state.manifests[identity])
 
 
@@ -98,6 +102,7 @@ def _download(view: dict, target: Path) -> None:
 
 def copy_oss_image(product: dict, view: dict, target: Path) -> None:
     state = _STATE.get()
+    cache_status = "downloaded_uncached"
     if state is None:
         _download(view, target)
     else:
@@ -106,19 +111,19 @@ def copy_oss_image(product: dict, view: dict, target: Path) -> None:
             if state.temporary is None:
                 state.temporary = ManagedTemporaryDirectory("product-images", scope=state.temporary_scope)
             cached = Path(state.temporary.name) / (view["sha256"] + Path(view["object_key"]).suffix.lower())
+            cache_status = "task_hit"
             if not cached.exists():
                 # 同一路径覆盖期间最多重读一次原清单及图片，仍不一致就失败关闭，绝不拼用新旧视图。
                 try:
-                    _download(view, cached)
+                    cache_status = copy_or_download(view, cached, scope=state.temporary_scope, download=_download)
                 except AuditError:
                     with ProductOSS() as client:
                         data = client.read(view["manifest_key"], limit=MAX_MANIFEST_BYTES)
                     validate_manifest(data, product)
                     if hashlib.sha256(data).hexdigest() != view["manifest_sha256"]:
                         raise AuditError("商品参考图正在更新，清单快照已变化；本次未混用新旧图片，请重新核验") from None
-                    _download(view, cached)
-            if sha256_file(cached) != view["sha256"]:
-                raise AuditError("任务内参考图片缓存 SHA-256 校验失败")
+                    cache_status = copy_or_download(view, cached, scope=state.temporary_scope, download=_download)
+            verify_image(cached, view)
             if target.exists() or target.is_symlink():
                 raise AuditError("模型参考图片目标已存在，未覆盖")
             shutil.copy2(cached, target)
@@ -126,5 +131,11 @@ def copy_oss_image(product: dict, view: dict, target: Path) -> None:
     from .model_metrics import save_model_observations
     name = "oss-reference-" + hashlib.sha256((product["product_code"] + view["view_id"]).encode()).hexdigest()[:24]
     save_model_observations(name, {"source": "oss", "product_code": product["product_code"],
+                                  "cache_status": cache_status,
                                   "barcode_69": product["barcode_69"], "view_id": view["view_id"],
                                   **{k: view[k] for k in ("object_key", "sha256", "size_bytes", "manifest_key", "manifest_sha256")}})
+    from .execution_trace import record_step
+    record_step("oss.image_verified", "商品OSS参考图已准备并核验", {"product_code": product["product_code"], "view_id": view["view_id"],
+        "object_key": view["object_key"], "input_file": target.name, "cache_status": cache_status,
+        "checks": {k: view[k] for k in ("sha256", "size_bytes", "width", "height", "content_type")},
+        "purpose": "供本次商品外观核对；不作为现场执行证明"})

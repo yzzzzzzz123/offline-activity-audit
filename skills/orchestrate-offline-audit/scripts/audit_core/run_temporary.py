@@ -1,6 +1,8 @@
 """任务临时空间：正常退出清理，进程中断后由下次正式运行补清理。"""
 from __future__ import annotations
 
+from .execution_trace import run_command
+
 from .paths import PROJECT_ROOT
 
 from contextlib import contextmanager
@@ -18,7 +20,7 @@ import tempfile
 
 _DEFAULT_SCOPE = PROJECT_ROOT / "worktrees"
 _SCOPE: ContextVar[Path] = ContextVar("audit_temporary_scope", default=_DEFAULT_SCOPE)
-_KINDS = {"render", "product-images"}
+_KINDS = {"render", "product-images", "upload"}
 _OWNER = "owner.json"
 _LEASE = "lease.lock"
 
@@ -42,6 +44,18 @@ def _plain(path: Path, *, directory: bool) -> os.stat_result:
 
 def _temp_root(value: Path | None) -> Path:
     root = Path(value if value is not None else tempfile.gettempdir()).absolute()
+    local_data = os.environ.get('LOCALAPPDATA')
+    if (value is None and os.name == 'nt' and local_data
+            and root == Path(local_data).absolute() / 'Temp'):
+        # Local image workspaces share the project volume, not a potentially
+        # full Windows system disk. Keep the same ownership/lease cleanup.
+        root = Path(PROJECT_ROOT).absolute()
+        for parent in (root, *root.parents):
+            _plain(parent, directory=True)
+        for name in ('.runtime', 'temporary'):
+            root = root / name
+            root.mkdir(exist_ok=True)
+            _plain(root, directory=True)
     # 检查全部祖先后才解析，不能让 junction 将清理目标导向业务目录。
     for parent in (root, *root.parents):
         _plain(parent, directory=True)
@@ -111,7 +125,7 @@ def _process_uses(container: Path) -> bool:
             "{$busy=$true;break}};"
             "if($busy){'busy'}else{'free'}"
         )
-        result = subprocess.run(
+        result = run_command(
             ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
             env=environment, capture_output=True, text=True, timeout=15,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),

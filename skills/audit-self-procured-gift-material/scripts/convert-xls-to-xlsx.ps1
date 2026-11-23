@@ -20,6 +20,9 @@ if (-not (Test-Path -LiteralPath $targetParent -PathType Container)) {
 $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false
 $excel.DisplayAlerts = $false
+$excel.AutomationSecurity = 3
+$excel.EnableEvents = $false
+$excel.AskToUpdateLinks = $false
 $book = $null
 try {
     $book = $excel.Workbooks.Open($source, 0, $true)

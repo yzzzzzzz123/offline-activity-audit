@@ -1,0 +1,110 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "stage",
+    "rule_ids",
+    "field_checks",
+    "rework",
+    "can_advance",
+    "checker_model_calls"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "stage": {
+      "type": "string"
+    },
+    "rule_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "field_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rule_id",
+          "field",
+          "input_state",
+          "result_status",
+          "source_ids",
+          "state"
+        ],
+        "properties": {
+          "rule_id": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "input_state": {
+            "type": "string"
+          },
+          "result_status": {
+            "enum": [
+              "pass",
+              "fail",
+              "unknown",
+              "not_applicable"
+            ]
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "enum": [
+              "checked",
+              "needs_rework",
+              "not_applicable",
+              "limited"
+            ]
+          }
+        }
+      }
+    },
+    "rework": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rule_id",
+          "code",
+          "instruction"
+        ],
+        "properties": {
+          "rule_id": {
+            "type": "string"
+          },
+          "code": {
+            "enum": [
+              "field_not_used",
+              "amount_scope",
+              "language",
+              "tool_request"
+            ]
+          },
+          "instruction": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "can_advance": {
+      "type": "boolean"
+    },
+    "checker_model_calls": {
+      "const": 0
+    }
+  }
+}

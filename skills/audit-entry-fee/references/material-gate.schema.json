@@ -42,6 +42,12 @@
             "null"
           ]
         },
+        "store_incentive": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "atrium": {
           "type": [
             "boolean",
@@ -49,10 +55,7 @@
           ]
         },
         "cvs_otc": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": "boolean"
         },
         "online": {
           "type": [
@@ -83,18 +86,47 @@
             "boolean",
             "null"
           ]
+        },
+        "sales_commission": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "poster_posting": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "batch_payment": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "uses_receipt": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [
         "training",
         "temporary_staff",
+        "store_incentive",
         "atrium",
         "cvs_otc",
         "online",
         "full_reduction",
         "uses_pos",
         "photo_evidence",
-        "red_packet"
+        "red_packet",
+        "sales_commission",
+        "poster_posting",
+        "batch_payment",
+        "uses_receipt"
       ]
     },
     "materials": {
@@ -127,6 +159,37 @@
               "minLength": 1
             },
             "uniqueItems": true
+          },
+          "condition_evidence": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "unit_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "quote": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "stance": {
+                  "type": "string",
+                  "enum": [
+                    "affirmed",
+                    "denied",
+                    "unclear"
+                  ]
+                }
+              },
+              "required": [
+                "unit_id",
+                "quote",
+                "stance"
+              ]
+            }
           }
         },
         "required": [
@@ -212,6 +275,12 @@
                   "null"
                 ]
               },
+              "store_incentive": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
               "atrium": {
                 "type": [
                   "boolean",
@@ -219,10 +288,7 @@
                 ]
               },
               "cvs_otc": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
+                "type": "boolean"
               },
               "online": {
                 "type": [
@@ -253,18 +319,47 @@
                   "boolean",
                   "null"
                 ]
+              },
+              "sales_commission": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "poster_posting": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "batch_payment": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "uses_receipt": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
               }
             },
             "required": [
               "training",
               "temporary_staff",
+              "store_incentive",
               "atrium",
               "cvs_otc",
               "online",
               "full_reduction",
               "uses_pos",
               "photo_evidence",
-              "red_packet"
+              "red_packet",
+              "sales_commission",
+              "poster_posting",
+              "batch_payment",
+              "uses_receipt"
             ]
           },
           "materials": {
@@ -297,6 +392,37 @@
                     "minLength": 1
                   },
                   "uniqueItems": true
+                },
+                "condition_evidence": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "unit_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "stance": {
+                        "type": "string",
+                        "enum": [
+                          "affirmed",
+                          "denied",
+                          "unclear"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "unit_id",
+                      "quote",
+                      "stance"
+                    ]
+                  }
                 }
               },
               "required": [
@@ -342,10 +468,7 @@
           "scenario",
           "supported",
           "reason",
-          "source_ids",
-          "flags",
-          "materials",
-          "extra_materials"
+          "source_ids"
         ]
       }
     }
@@ -354,9 +477,6 @@
     "candidate_scenarios",
     "reason",
     "source_ids",
-    "flags",
-    "materials",
-    "background_materials",
     "material_matches"
   ]
 }

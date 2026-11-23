@@ -1,4 +1,5 @@
 """Customer wording must preserve the original materials and computed facts."""
+from tests.pdf_test_support import isolated_stage_summary
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -10,6 +11,7 @@ from audit_core.error_reason import attach_error_reasons
 from audit_core.extraction_chain import render_prompt
 from audit_core.pdf_evidence import audit_decision, calculate, document_map
 from audit_core.pdf_materials import ORCHESTRATOR_SKILL, PdfEvidenceProvider
+from tests.pdf_test_support import SingleAgentEvidenceProvider as PdfEvidenceProvider
 from audit_core.pdf_policy import MATERIALS
 from audit_core.pdf_workflow import build_view
 from audit_core.oss_intake import build_callback_result, _bounded_callback_result, MAX_CALLBACK_RESULT_CHARS
@@ -25,7 +27,7 @@ def calculated_check(rule_id, left, right, *, operation="value", operator=None, 
     evidence = unknown_checks("personnel_incentive", flags)
     value_kind = {"claim_ceiling": "amount", "payment_claim_amount": "amount",
                   "pos_arithmetic": "amount", "reward_unit_price": "unit_price"}.get(rule_id, "quantity")
-    operator = operator or {"claim_ceiling": "le", "payment_claim_amount": "le", "pos_arithmetic": "ge", "reward_unit_price": "eq"}.get(rule_id, "eq")
+    operator = operator or {"claim_ceiling": "eq", "payment_claim_amount": "le", "pos_arithmetic": "ge", "reward_unit_price": "eq", "settlement_pos_quantity": "le"}.get(rule_id, "eq")
     if rule_id == "payment_claim_amount" and operation == "value":
         operation = "sum"
     right_files = right_files or ["核销资料/活动申请.xlsx"] * len(right)
@@ -44,7 +46,10 @@ def calculated_check(rule_id, left, right, *, operation="value", operator=None, 
                        comparisons=[{"label": label, "value_kind": value_kind,
                                      "left": {"unit_id": units[0]["unit_id"], "quote": left_quote, "number": left},
                                      "right": terms, "operation": operation, "operator": operator}])
-    result = audit_decision("personnel_incentive", flags, evidence, documents)
+    right_role={"claim_ceiling":"approved_claim","reward_unit_price":"activity_application", "settlement_pos_quantity":"pos_excel", "payment_claim_amount":"payment"}.get(rule_id,"pos_excel")
+    materials=[{"id":"pos_excel" if rule_id=="pos_arithmetic" else "settlement","state":"present","source_ids":[units[0]["unit_id"]]},
+               {"id":right_role,"state":"present","source_ids":[u["unit_id"] for u in units[1:]]}]
+    result = audit_decision("personnel_incentive", flags, evidence, documents, materials)
     check = next(c for c in result["checks"] if c["rule_id"] == rule_id)
     return check, units, documents
 
@@ -72,7 +77,7 @@ class CustomerLanguageTests(unittest.TestCase):
                 original = deepcopy(view)
                 projected = attach_error_reasons(view)
                 self.assertEqual(projected["sheets"][0]["rows"][0]["error_reason"], "缺少促销合同。")
-                self.assertEqual(render_analysis_summary_markdown(view, {}), f"## {label}\n\n- 缺少促销合同。")
+                self.assertEqual(render_analysis_summary_markdown(view, {}), f"## {label}\n\n1. 缺少促销合同。")
                 self.assertEqual(view, original)
                 self.assertEqual(attach_error_reasons(projected), projected)
 
@@ -100,8 +105,8 @@ class CustomerLanguageTests(unittest.TestCase):
         result = audit_decision("personnel_incentive", flags, unknown_checks("personnel_incentive", flags), [])
         check = next(c for c in result["checks"] if c["rule_id"] == "payment_company")
         reason = customer_reason(check, [])
-        self.assertIn("超过1000元", reason)
-        self.assertIn("经销商公司名称", reason)
+        self.assertIn("参半", reason)
+        self.assertIn("品牌字样", reason)
         self.assertNotIn("品牌公司名称", reason)
         self.assertNotIn("缺少", reason)
 
@@ -199,6 +204,75 @@ class CustomerLanguageTests(unittest.TestCase):
                     self.assertIn("商品不清", result)
                     self.assertNotIn("原始目录/", result)
 
+    def test_known_render_filename_maps_to_original_without_duplicating_extension(self):
+        for image in ("a001-f0003.jpg", Path("temporary/a001-f0003.jpg")):
+            with self.subTest(image=image):
+                units = [{"unit_id": "a001-f0003", "source_file": "原始资料/3.jpg",
+                          "locator": "3.jpg", "image": image}]
+                original = deepcopy(units)
+                reason = "《a001-f0003.jpg》的价签被水印遮住，活动价格看不清；《a001-f0003》右下角也看不清。"
+                result = plain_text(reason, units)
+                self.assertEqual(result, "《3.jpg》的价签被水印遮住，活动价格看不清；《3.jpg》右下角也看不清。")
+                self.assertEqual(plain_text(result, units), result)
+                self.assertEqual(units, original)
+
+    def test_real_repeated_extension_and_original_name_collision_are_preserved(self):
+        units = [{"unit_id": "a001-f0003", "source_file": "3.jpg.jpg", "image": "a001-f0003.jpg"}]
+        self.assertEqual(plain_text("《a001-f0003.jpg》和《3.jpg.jpg》价格看不清。", units),
+                         "《3.jpg.jpg》和《3.jpg.jpg》价格看不清。")
+        units.append({"unit_id": "a001-f0004", "source_file": "a001-f0003.jpg", "image": "a001-f0004.jpg"})
+        self.assertEqual(plain_text("《a001-f0003.jpg》价格看不清；《a001-f0003》日期看不清。", units),
+                         "《a001-f0003.jpg》价格看不清；《3.jpg.jpg》日期看不清。")
+
+    def test_alias_boundaries_do_not_replace_prefixes_or_guess_other_extensions(self):
+        units = [{"unit_id": "a001-f0003", "source_file": "3.jpg", "image": "a001-f0003.jpg"},
+                 {"unit_id": "a001-f0003-p0001", "source_file": "协议.pdf", "image": "a001-f0003-p0001.png"}]
+        for reference in ("a001-f00030.jpg", "prefix-a001-f0003.jpg", "a001-f0003.jpg.backup",
+                          "a001-f0003.png", "a001-f0003-unknown", "a001-f0003_p0001"):
+            with self.subTest(reference=reference):
+                self.assertEqual(plain_text(f"《{reference}》价格看不清。", units), f"《{reference}》价格看不清。")
+        self.assertEqual(plain_text("《a001-f0003-p0001.png》第1页不清；a001-f0003.", units),
+                         "《协议.pdf》第1页不清；3.jpg.")
+
+    def test_source_id_list_does_not_consume_part_of_a_render_filename(self):
+        units = [{"unit_id": "a001-f0001", "source_file": "1.jpg", "image": "a001-f0001.jpg"},
+                 {"unit_id": "a001-f0003", "source_file": "3.jpg", "image": "a001-f0003.jpg"}]
+        self.assertEqual(plain_text("《a001-f0001、a001-f0003.jpg》门店地址看不清。", units),
+                         "《1.jpg、3.jpg》门店地址看不清。")
+
+    def test_view_uses_render_alias_fix_without_changing_failure_or_original_evidence(self):
+        units = [{"unit_id": "a001-f0003", "source_file": "3.jpg", "locator": "3.jpg", "image": "a001-f0003.jpg"}]
+        docs = [{"unit_id": "a001-f0003", "facts": ["价签被水印遮住"]}]
+        check = {"rule_id": "price_evidence", "status": "fail", "source_ids": ["a001-f0003"],
+                 "reason": "《a001-f0003.jpg》的价签被水印遮住，活动价格看不清。",
+                 "requirement": "活动价格清楚", "effect": "missing_material", "calculations": []}
+        original = deepcopy((check, units, docs))
+        item = packet([check], units, docs)
+        item["result"]["scenario"] = "price_difference_support"
+        row = build_view([item], None)["sheets"][0]["rows"][0]
+        self.assertIn("《3.jpg》的价签被水印遮住", row["error_reason"])
+        self.assertNotIn("3.jpg.jpg", row["error_reason"])
+        self.assertEqual(row["status"], "issue")
+        self.assertEqual(check["status"], "fail")
+        self.assertEqual((check, units, docs), original)
+
+    def test_source_identifier_list_deduplicates_chunks_of_the_same_original_file(self):
+        units = [{"unit_id": f"a001-f0001-table-{i:04d}", "source_file": "本次资料/销售明细.xlsx"}
+                 for i in range(1, 71)]
+        units.append({"unit_id": "a001-f0002", "source_file": "本次资料/另一份销售表.xlsx"})
+        original = deepcopy(units)
+        result = plain_text("多出的资料：（" + "、".join(u["unit_id"] for u in units) + "；另一活动资料）", units)
+        self.assertEqual(result.count("销售明细.xlsx"), 1)
+        self.assertEqual(result.count("另一份销售表.xlsx"), 1)
+        self.assertNotIn("a001-", result)
+        self.assertEqual(units, original)
+
+    def test_same_basename_from_different_original_files_is_not_merged(self):
+        units = [{"unit_id": "a001-f0001", "source_file": "甲目录/销售明细.xlsx"},
+                 {"unit_id": "a001-f0002", "source_file": "乙目录/销售明细.xlsx"}]
+        result = plain_text("来源：a001-f0001、a001-f0002", units)
+        self.assertEqual(result.count("销售明细.xlsx"), 2)
+
     def test_build_view_also_preserves_names_before_condition_translation(self):
         filename = "SKU-POS-核验-null-None明细.xlsx"
         units = [{"unit_id": "a001-f0001", "source_file": "原始目录/" + filename, "locator": "第1页"}]
@@ -214,7 +288,7 @@ class CustomerLanguageTests(unittest.TestCase):
 
     def test_amount_inequalities_keep_both_values_and_difference(self):
         for rule_id, left, right, expected, reference in (
-            ("claim_ceiling", "1200", "1000", "超出200", "促销合同.xlsx"),
+            ("claim_ceiling", "1200", "1000", "相差200", "系统批复.xlsx"),
             ("payment_claim_amount", "1200", "1000", "少了200", "红包截图.jpg"),
         ):
             with self.subTest(rule_id=rule_id):
@@ -293,7 +367,7 @@ class CustomerLanguageTests(unittest.TestCase):
                 view = build_view([packet([check], [], [])], None)
                 row = view["sheets"][0]["rows"][0]
                 summary = render_analysis_summary_markdown(view, {"error_count": 1})
-                self.assertTrue(row["error_reason"].startswith("目前资料还不能确认"))
+                self.assertNotIn("未取得", row["error_reason"])
                 self.assertIn("暂时不能确认", row["heading"])
                 self.assertEqual(row["confidence"], "low")
                 self.assertEqual(row["values"][4], "")
@@ -339,7 +413,7 @@ class CustomerLanguageTests(unittest.TestCase):
 
     def test_view_and_summary_keep_each_computed_mismatch_and_discard_wrong_model_reason(self):
         check, units, docs = calculated_check("pos_arithmetic", "110", ["10", "12"], operation="product", label="薄荷牙膏金额")
-        second, second_units, second_docs = calculated_check("claim_ceiling", "1100", ["1000"], operator="le", label="本次核销金额")
+        second, second_units, second_docs = calculated_check("claim_ceiling", "1100", ["1000"], operator="eq", label="本次核销金额")
         # Use independent sources for the second comparison within one packet.
         for index, unit in enumerate(second_units, start=len(units) + 1):
             old = unit["unit_id"]
@@ -360,7 +434,7 @@ class CustomerLanguageTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         for row in rows:
             self.assertIn(row["error_reason"], summary)
-        for text in ("薄荷牙膏金额", "110", "120", "少了10", "本次核销金额", "1100", "1000", "超出100"):
+        for text in ("薄荷牙膏金额", "110", "120", "少了10", "本次核销金额", "1100", "1000", "相差100"):
             self.assertIn(text, summary)
         for wrong in ("错误模型解释", "发票缺失", "客户造假", "数量完全相等"):
             self.assertNotIn(wrong, summary)
@@ -386,7 +460,7 @@ class BusinessGuidePromptTests(unittest.TestCase):
     def test_each_of_eight_audit_prompts_loads_its_business_guide_and_customer_instructions(self):
         customer = (ORCHESTRATOR_SKILL / "references/customer-language.md").read_text(encoding="utf-8")
         background = (ORCHESTRATOR_SKILL / "references/business-background.md").read_text(encoding="utf-8")
-        provider = PdfEvidenceProvider("gpt-6-astra", "medium")
+        provider = PdfEvidenceProvider("gpt-6-astra", "medium", stage_summary_reviewer=isolated_stage_summary)
         with tempfile.TemporaryDirectory() as temporary:
             for scenario in MATERIALS:
                 with self.subTest(scenario=scenario):

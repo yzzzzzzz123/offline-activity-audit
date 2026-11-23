@@ -1,0 +1,69 @@
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "tool",
+      "rule_ids",
+      "fields"
+    ],
+    "properties": {
+      "tool": {
+        "type": "string",
+        "enum": [
+          "reference_fields",
+          "linked_application_amounts",
+          "pos_calculation",
+          "source_inventory",
+          "activity_periods",
+          "pos_field_inventory",
+          "pos_matrix_identity",
+          "pos_product_lookup",
+          "case_python",
+          "project_source"
+        ]
+      },
+      "code": {
+        "type": "string"
+      },
+      "source_ids": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string"
+        }
+      },
+      "products": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "rule_ids": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {
+          "type": "string"
+        }
+      },
+      "fields": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "enum": [
+            "advance_dealer",
+            "activity_period",
+            "application_quantity",
+            "application_unit_price",
+            "application_products",
+            "application_total",
+            "approved_total"
+          ]
+        }
+      }
+    }
+  }
+}

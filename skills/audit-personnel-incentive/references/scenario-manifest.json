@@ -3,40 +3,55 @@
   "scenario_id": "personnel_incentive",
   "skill_name": "audit-personnel-incentive",
   "display_name": "人员激励",
-  "scope": "人员报酬、销售提成、培训费、临促工资",
-  "policy_version": "2026-09-23.pdf.33",
+  "scope": "人员报酬、销售提成、培训费、临促工资、门店及区域达成奖励",
+  "policy_version": "2026-11-17.xlsx.53",
   "classification_policy": "biz_type",
   "label": "人员激励",
   "materials": [
     {
       "id": "pos",
-      "text": "经销商盖章 POS 数据（客户公章或财务章的盖章版，与Excel版完整内容一致）；培训费可不提供",
-      "when": "not_training"
+      "text": "经销商盖章 POS 数据（须公章，与Excel版完整内容一致）；仅销售提成/达成奖励需要，纯临促工资、培训可免；本资料要求的印章须为公章，验章原件提交PDF，POS原生Excel另保留",
+      "when": "personnel_pos"
     },
     {
       "id": "pos_excel",
-      "text": "POS 明细 Excel 版（与盖章版成套提供，完整内容一致）；培训费可不提供",
-      "when": "not_training"
+      "text": "POS 明细 Excel 版（与盖章版成套提供，完整内容一致）；仅销售提成/达成奖励需要，纯临促工资、培训可免",
+      "when": "personnel_pos"
     },
     {
       "id": "payment",
-      "text": "红包截图或临促工资打款截图（有无临促读取本次促销合同中的活动申请说明确认）",
+      "text": "临促工资打款截图、激励红包截图或培训付款凭证；批量微信账单按实际内容归本项",
       "when": "always"
     },
     {
       "id": "staff_photos",
-      "text": "各临促门店在本次安排临促的每一天的水印照片，含临促人员和产品（有无临促及门店日期安排读取本次促销合同中的活动申请说明确认）",
-      "when": "temporary_staff"
+      "text": "明确涉及临促工资时，活动期每天的现场水印照片，含人员和公司产品",
+      "when": "confirmed_temporary_staff"
+    },
+    {
+      "id": "training_photos",
+      "text": "培训现场水印照片；同一周期多场培训每场至少一张",
+      "when": "training"
     },
     {
       "id": "settlement",
-      "text": "结算单（公司统一模板，客户盖章）",
+      "text": "结算单（公司统一模板，客户盖章）；本资料要求的印章须为公章，验章原件提交PDF，POS原生Excel另保留",
       "when": "always"
     },
     {
       "id": "promotion_contract",
-      "text": "签章后的促销合同",
+      "text": "签章后的促销合同；本资料要求的印章须为公章，验章原件提交PDF，POS原生Excel另保留",
       "when": "always"
+    },
+    {
+      "id": "activity_application",
+      "text": "本单精确关联的系统活动申请原件或勤策申请明细，仅实际取得时引用；不要求另造申请表",
+      "when": "optional"
+    },
+    {
+      "id": "approved_claim",
+      "text": "本单系统核销批复金额合计，实际取得时独立引用；不能用申请预算或结算单自证",
+      "when": "optional"
     }
   ],
   "audit_points": [
@@ -46,7 +61,7 @@
       "effect": "missing_material",
       "when": "uses_pos",
       "numeric": false,
-      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
+      "source": "用户确认的所有涉及POS类型通用5+2及原值复算标准"
     },
     {
       "id": "pos_arithmetic",
@@ -54,71 +69,247 @@
       "effect": "missing_material",
       "when": "uses_pos",
       "numeric": true,
-      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
+      "source": "用户确认的所有涉及POS类型通用5+2及原值复算标准"
     },
     {
       "id": "pos_product_identity",
-      "text": "以POS Excel中的商品名称加69码查询商品库，名称允许模糊匹配且须唯一对应，69码须准确一致。额外产品编码即使与我方库不一致也不审核、不报错、不参与定位。缺失字段不从库内或盖章版补写；库内没有对应商品时说明‘库内无参考商品’并保留商品名称或69码。",
+      "text": "用户2026-11-04确认：以POS Excel原始69码准确查询商品库，经销商商品名称、颜色、包装描述差异不报商品不符；名称字段仍必含且保留原文。同码内部记录全部保留，不随意选择编码。额外产品编码不审核、不报错、不参与定位。缺失字段不从库内或盖章版补写；准确69码未查到时说明‘库内无参考商品’并保留原商品名称及69码。",
       "effect": "missing_material",
       "when": "uses_pos",
       "numeric": false,
-      "source": "用户2026-09-22确认·所有核销方式POS通用标准"
+      "source": "用户确认的所有涉及POS类型通用5+2及原值复算标准"
     },
     {
-      "id": "reward_unit_price",
-      "text": "用户2026-09-22最终确认：结算单申报的奖励/补差单价须等于品牌方本次合同对应69码的约定单价；少于或高于均不符，不将POS零售价当作奖励单价，最终金额抹零不能放宽单价一致要求。 用户2026-09-22确认：批准的数量、单价或金额参照值从品牌方本次促销合同读取，不能取结算单自行填写的申请值或POS销售单价代替约定；合同未写、看不清或对应不明时记无法核验，不以合同总额自动代替本次申请金额。",
-      "effect": "zero",
-      "when": "not_training",
-      "numeric": true,
-      "source": "PDF第1页·人员激励·审核要点1①"
+      "id": "settlement_seal",
+      "text": "本次结算单须有经销商公章，名称与本单对应。按2026.11.17新表：收据必须有收款方公司财务专用章；其他本类实际要求验章的资料须使用公章，包括结算单、促销合同、产品推广协议、盖章POS、库存明细及批量工资单/微信账单。其他资料的财务专用章、合同章、业务章、人事章等不能代替公章。收据核对收款方的财务专用章，不把费用代垫经销商印章当作收款方印章。其他印章主体对应本单实际要求的经销商或签约方；原文明写双方盖章时仍须双方。章印须清晰完整、不重叠遮挡；章种或主体不能确认时定位原件交人工复核，不猜为合格或未盖章。整份文件没有任何实际印章或签字图形时明确记录未盖章/未签章，不能把印刷名称当实际印章。签字、印刷名称、标题或另一文件的印章不能代替本文件的必需印章。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
     },
     {
-      "id": "settlement_pos_quantity",
-      "text": "结算单每个SKU销售数量与POS Excel版对应销售数量一致；不能用盖章版数值覆盖Excel。",
-      "effect": "zero",
-      "when": "not_training",
+      "id": "settlement_dealer",
+      "text": "结算单落章经销商名称及填写名称分别与系统活动申请【费用代垫经销商】一致，逐字核对错别字和漏字。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "settlement_activity_dates",
+      "text": "结算单执行周期须与本次促销合同一致，分别引用双方原文。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "settlement_application_dates",
+      "text": "结算单执行周期与本次系统活动申请一致；合同及结算单相同不能掩盖与申请不一致。",
+      "effect": "missing_material",
+      "when": "available_reference:settlement_application_dates:always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "contract_signed",
+      "text": "本次促销合同须有相应经销商公章，原双方签章条件保留。按2026.11.17新表：收据必须有收款方公司财务专用章；其他本类实际要求验章的资料须使用公章，包括结算单、促销合同、产品推广协议、盖章POS、库存明细及批量工资单/微信账单。其他资料的财务专用章、合同章、业务章、人事章等不能代替公章。收据核对收款方的财务专用章，不把费用代垫经销商印章当作收款方印章。其他印章主体对应本单实际要求的经销商或签约方；原文明写双方盖章时仍须双方。章印须清晰完整、不重叠遮挡；章种或主体不能确认时定位原件交人工复核，不猜为合格或未盖章。整份文件没有任何实际印章或签字图形时明确记录未盖章/未签章，不能把印刷名称当实际印章。签字、印刷名称、标题或另一文件的印章不能代替本文件的必需印章。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "contract_dealer",
+      "text": "促销合同落章名称及填写的经销商名称分别与系统活动申请【费用代垫经销商】一致，核对错别字、漏字。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "contract_budget_amount",
+      "text": "促销合同活动预算金额与本次申请金额核对。优先用实际总额；没有独立总额字段时，允许程序对本单精确关联且完整覆盖的申请行去重求和，保留全部原行引用，不再额外要求单头总额。完整关联范围只有1行仍按完整合计；不得用任意单行、部分行或核销金额代替申请合计。",
+      "effect": "missing_material",
+      "when": "available_reference:contract_budget_amount:always",
       "numeric": true,
-      "source": "PDF第1页·人员激励·审核要点1②"
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "contract_activity_dates",
+      "text": "促销合同执行周期与系统活动申请执行周期一致，逐字引用双方日期。",
+      "effect": "missing_material",
+      "when": "available_reference:contract_activity_dates:always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
     },
     {
       "id": "claim_ceiling",
-      "text": "结算单本次核销金额小于等于申请金额。 用户2026-09-22确认：批准的数量、单价或金额参照值从品牌方本次促销合同读取，不能取结算单自行填写的申请值或POS销售单价代替约定；合同未写、看不清或对应不明时记无法核验，不以合同总额自动代替本次申请金额。",
+      "text": "结算单【实际核销金额】等于本单系统核销【批复金额合计】，不能用申请额度或合同总额代替。",
       "effect": "missing_material",
-      "when": "always",
+      "when": "available_reference:claim_ceiling:recorded_approval_applicable",
       "numeric": true,
-      "source": "PDF第1页·人员激励·审核要点1③"
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
     },
     {
-      "id": "payment_company",
-      "text": "逐笔核对红包：单笔金额超过1000元须注明本次经销商公司名称，缺名称按缺资料处理；单笔等于或低于1000元不强制名称，不因多笔合计超过1000元追加名称要求。先结合全部相关截图判断每笔的完整信息，金额看不清不能按小额免除。用户2026-09-22明确：人员激励大额红包所需公司名称指本次经销商公司名称，执行口径据此更正。结合本次合同中的经销商主体、结算单客户名称等原文确认对应关系，不能用产品品牌名或无法对应主体的群名、个人昵称替代经销商公司名称。截图确实没写公司名称时指出缺少经销商公司名称；已见名称但与本次经销商的对应关系不清楚时说明具体无法确认的内容。不自定必须完整工商全称或额外证明文件的要求；原PDF的文字仅保留作出处，最新执行以本次用户确认的经销商主体为准。",
+      "id": "reward_unit_price",
+      "text": "销售提成结算中69码和奖励单价分别对应系统活动申请【条形码、单价】，单价原精度相等。门店奖励按人/家原义核对，临促工资另核。 勤策本单该字段有有效值时以其为准精确比对；该字段为空时跳过勤策对齐，继续按本次实际合同约定核对结算，不要求补勤策字段。 计划销量、预计名额不能当作实际销量或实际达成人数，只有相同含义、对象和单位的数值才比较。",
       "effect": "missing_material",
-      "when": "red_packet",
-      "numeric": false,
-      "source": "PDF第1页·人员激励·审核要点2"
-    },
-    {
-      "id": "payment_claim_amount",
-      "text": "根据资料内容判断属于本次核销的红包，将各笔金额去重后合计。用户2026-09-22确认：本次红包合计须大于等于结算单本次核销金额，少于时报告金额不足；多于或相等均通过本项。不把每笔红包分别与核销总额比较，不以合同申请金额代替本次核销金额；归属或金额无法确认时说明具体原因，不猜测通过。",
-      "effect": "missing_material",
-      "when": "red_packet",
+      "when": "personnel_sku",
       "numeric": true,
-      "source": "PDF第1页·人员激励·审核要点2"
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
     },
     {
-      "id": "staff_daily_photos",
-      "text": "临促照片按每家门店、每一天全量核对；缺少任一门店任一临促日的照片，或照片缺水印、临促人员或产品画面，逐项记录具体问题。用户2026-09-22明确临促照片按每店每天全量核对：本次有临促的每家门店，在合同安排临促的每一天均须有对应照片，照片带水印，画面含临促人员和产品。只确认整场活动每天有照片不能证明各门店每天均已覆盖。有无临促、临促门店及各店临促日期以品牌方本次合同中的活动申请说明和明确安排为准，先按门店列出应覆盖的日期，再对应本次实际照片。某店某日的缺口不能用其他门店或其他日期的照片补足，照片张数相等也不能代替门店与日期的对应。缺照片时列明具体门店和日期；已交照片缺水印、缺人员或产品画面时分别指出，不说整份照片资料未提交。合同安排、照片日期或门店归属看不清时说明具体无法确认的内容，不猜测缺交或通过；不能仅因没照片就认定没有临促。不另增每位临促个人逐日照片或固定张数要求，不把本规则扩展为其他核销类型都要逐日拍照。",
+      "id": "settlement_pos_quantity",
+      "text": "销售提成逐69码结算申报销量≤POS Excel全量对应销量；高于才不足，低于或等于均可。临促人数、天数及门店达成人数不与SKU销量比较。",
       "effect": "missing_material",
-      "when": "temporary_staff",
-      "numeric": false,
-      "source": "PDF第1页·人员激励·审核要点3"
+      "when": "personnel_sku",
+      "numeric": true,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
     },
     {
       "id": "application_quantity_price",
-      "text": "数量、单价明确填错时记录具体错误点，交由人工复核；按本类审核栏已明确的数量、单价及对应资料核对。用户2026-09-22最终确认：申报单价必须等于对应合同约定，少于也不符；数量仍按原有一致要求核对。仅最终结算金额允许在品牌方占优方向抹零或四舍五入。不得把实际销量低于计划自动认定填错，不增加其他数量或价格比较。 用户2026-09-22确认：批准的数量、单价或金额参照值从品牌方本次促销合同读取，不能取结算单自行填写的申请值或POS销售单价代替约定；合同未写、看不清或对应不明时记无法核验，不以合同总额自动代替本次申请金额。",
-      "effect": "zero",
-      "when": "uses_pos",
+      "text": "销售/门店激励按本次实际奖励对象核对系统申请对应数量及单价，SKU按69码对应，不将预计名额当实际达成人数。 勤策本单该字段有有效值时以其为准精确比对；该字段为空时跳过勤策对齐，继续按本次实际合同约定核对结算，不要求补勤策字段。 计划销量、预计名额不能当作实际销量或实际达成人数，只有相同含义、对象和单位的数值才比较。",
+      "effect": "missing_material",
+      "when": "personnel_sales",
       "numeric": true,
-      "source": "PDF第1页·人员激励·审核要点4"
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "staff_headcount",
+      "text": "临促结算的单店临促人数等于系统活动申请数量；人数不是商品销量。 勤策本单该字段有有效值时以其为准精确比对；该字段为空时跳过勤策对齐，继续按本次实际合同约定核对结算，不要求补勤策字段。 计划销量、预计名额不能当作实际销量或实际达成人数，只有相同含义、对象和单位的数值才比较。",
+      "effect": "missing_material",
+      "when": "confirmed_temporary_staff",
+      "numeric": true,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "staff_total_unit_price",
+      "text": "系统申请单价等于结算单日工资×执行日期天数；左侧申请单价，右侧实际日工资及天数。 勤策本单该字段有有效值时以其为准精确比对；该字段为空时跳过勤策对齐，继续按本次实际合同约定核对结算，不要求补勤策字段。 计划销量、预计名额不能当作实际销量或实际达成人数，只有相同含义、对象和单位的数值才比较。",
+      "effect": "missing_material",
+      "when": "confirmed_temporary_staff",
+      "numeric": true,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "application_claim_ceiling",
+      "text": "临促工资结算实际核销金额不得超过本次系统活动申请金额；申请预算与销售提成/培训核销批复分别对应。",
+      "effect": "missing_material",
+      "when": "available_reference:application_claim_ceiling:confirmed_temporary_staff",
+      "numeric": true,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "settlement_calculation",
+      "text": "销售提成为逐行销售数量×奖励单价，临促为人数×天数×日工资；按实际项目及单位复算后，合计不得小于结算实际核销金额。培训不套用SKU公式。",
+      "effect": "missing_material",
+      "when": "personnel_not_training",
+      "numeric": true,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "payment_company",
+      "text": "临促及销售提成等实际红包/微信激励截图须有参半、小箭头或重点品牌字样，不按金额门槛检查经销商公司名称。",
+      "effect": "missing_material",
+      "when": "non_store_red_packet",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "payment_claim_amount",
+      "text": "临促工资、销售提成、培训的本次实际付款逐笔去重合计≥结算实际核销金额；工资转账与红包均核对。",
+      "effect": "missing_material",
+      "when": "incentive_or_training_payment",
+      "numeric": true,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "payment_activity_dates",
+      "text": "临促工资、销售提成、培训的实际付款日期在结算单活动期间或结束后不超过3个自然月，逐笔核对。",
+      "effect": "missing_material",
+      "when": "incentive_or_training_payment",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "payment_statement_seal",
+      "text": "批量导出的工资单/微信账单须有本次经销商公章，不能用其他章种替代。",
+      "effect": "missing_material",
+      "when": "batch_payment",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "payment_statement_dealer",
+      "text": "批量微信账单落章经销商名称与申请费用代垫经销商一致，核对错字漏字。",
+      "effect": "missing_material",
+      "when": "batch_payment",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "staff_photo_content",
+      "text": "临促照片含日期、地址、拍摄时间水印；活动执行期每一天至少一张，地址匹配系统申请门店，画面同时含临促人员和公司产品，不能跨店跨日借图。",
+      "effect": "missing_material",
+      "when": "confirmed_temporary_staff",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "training_photo_content",
+      "text": "用户2026-11-18确认新表H13末尾“地址不要”：培训现场照片只核对活动日期、拍摄时间及培训现场内容，不要求地址水印，不进行门店地址匹配；即使地址为空也不报缺件、无法确认或不符。同一周期多场培训每场至少一张。该例外仅限培训，不放宽临促或其他类型照片。",
+      "effect": "missing_material",
+      "when": "training",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "pos_seal",
+      "text": "POS盖章版须有本次经销商公章，实际数据仍以原生Excel为准。按2026.11.17新表：收据必须有收款方公司财务专用章；其他本类实际要求验章的资料须使用公章，包括结算单、促销合同、产品推广协议、盖章POS、库存明细及批量工资单/微信账单。其他资料的财务专用章、合同章、业务章、人事章等不能代替公章。收据核对收款方的财务专用章，不把费用代垫经销商印章当作收款方印章。其他印章主体对应本单实际要求的经销商或签约方；原文明写双方盖章时仍须双方。章印须清晰完整、不重叠遮挡；章种或主体不能确认时定位原件交人工复核，不猜为合格或未盖章。整份文件没有任何实际印章或签字图形时明确记录未盖章/未签章，不能把印刷名称当实际印章。签字、印刷名称、标题或另一文件的印章不能代替本文件的必需印章。",
+      "effect": "missing_material",
+      "when": "personnel_sales",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "pos_dealer",
+      "text": "销售提成POS落章经销商名称与系统申请费用代垫经销商一致，核对错字漏字。",
+      "effect": "missing_material",
+      "when": "personnel_sales",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "application_products",
+      "text": "销售提成POS和促销合同涉及产品的69码分别与本次系统申请条形码对应，不能把合同列有商品当作已销售。",
+      "effect": "missing_material",
+      "when": "available_reference:application_products:personnel_sku",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "stamped_document_pdf",
+      "text": "促销合同及本类型实际要求验章的结算单、协议、盖章POS、盖章库存明细、批量微信账单须提交PDF原文件，逐页查看实际印章；仅改扩展名、截图或把其他文件的印章借来均不能证明符合。以解析得到的真实文件格式及本单资料角色判断，不以渲染后的页面PNG认定原文件不是PDF。这不要求活动照片、原生POS Excel、其他无需验章的明细转PDF，POS Excel仍按本类要求保留。格式问题与文件是否已交、能否读取、印章是否合规分别说明；已交非PDF不得写成文件未交，仍完成可判断的内容。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "pos_activity_dates",
+      "text": "逐笔或逐完整日期范围核对POS Excel活动时间落在结算单活动周期闭区间内；覆盖全部明细，字段存在不等于周期对齐，不猜年份。",
+      "effect": "missing_material",
+      "when": "required_pos",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
+    },
+    {
+      "id": "contract_reward_unit_price",
+      "text": "销售提成促销合同活动内容中每个69码的奖励单价与本次系统申请对应单价相等；分别引用合同与申请，不用结算单单价代替合同单价。",
+      "effect": "missing_material",
+      "when": "available_reference:contract_reward_unit_price:personnel_sku",
+      "numeric": true,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H11:13"
     }
   ]
 }
