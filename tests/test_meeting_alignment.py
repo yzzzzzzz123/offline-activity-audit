@@ -27,11 +27,21 @@ def connection(model='deepseek-v4-1-flash', key='fake-doc-key', visual=None):
 class MeetingPolicyTests(unittest.TestCase):
     def test_eight_types_have_specific_seal_and_pdf_rules(self):
         catalogue = policy.catalogue()
-        self.assertEqual(catalogue['version'], '2026-11-17.xlsx.53')
+        self.assertEqual(catalogue['version'], '2026-11-24.xlsx.54')
         self.assertEqual(len(catalogue['types']), 8)
         for scenario in catalogue['types']:
             rules = {r.id: r for r in policy.rules(scenario)}
             self.assertIn('stamped_document_pdf', rules)
+            formats = rules['stamped_document_pdf'].text
+            self.assertIn('合同和结算单接受PDF、JPG/JPEG、PNG', formats)
+            for material in policy.requirements(scenario):
+                if material.id in {'settlement', 'promotion_contract'}:
+                    self.assertIn('JPG/JPEG或PNG', material.text)
+                    self.assertNotIn('验章原件提交PDF', material.text)
+                if material.id == 'pos':
+                    self.assertIn('公章', material.text)
+                    self.assertIn('PDF', material.text)
+                    self.assertNotIn('JPG', material.text)
             if 'contract_signed' in rules:
                 self.assertIn('经销商公章', rules['contract_signed'].text)
                 self.assertNotIn('公章或财务专用章', rules['contract_signed'].text)
@@ -106,7 +116,7 @@ class MeetingPosTests(unittest.TestCase):
         self.assertEqual(submitted_source_checks('pos_target_incentive', {'uses_pos': True}, docs, materials, units), [])
         check, proof = native_pos_field_check({'scenario': 'pos_target_incentive'})
         self.assertIsNone(check)
-        self.assertIn('5+2', proof['scope'])
+        self.assertIn('销售金额合计', proof['scope'])
         self.assertNotEqual(proof.get('fallback_reason'), 'amount_only_policy_uses_original_sources')
 
 

@@ -26,7 +26,7 @@ class VisibleWatermarkTimeTests(TestCase):
         spec = importlib.util.spec_from_file_location('watermark_policy_sync', source)
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
         generated = module.generated_files()
-        self.assertEqual(POLICY_VERSION, '2026-11-17.xlsx.53')
+        self.assertEqual(POLICY_VERSION, '2026-11-24.xlsx.54')
         self.assertIn(PHOTO_TIME_PRESENCE_CLARIFICATION, catalogue()['clarifications'])
         from audit_core.scenario_registry import SCENARIO_SPECS
         for scenario in SCENARIO_SPECS:

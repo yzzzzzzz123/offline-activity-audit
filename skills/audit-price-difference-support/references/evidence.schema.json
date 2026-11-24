@@ -35,6 +35,7 @@
               "application_quantity_price",
               "price_matches_contract",
               "activity_photo_content",
+              "submitted_material_scope",
               "stamped_document_pdf",
               "pos_activity_dates"
             ]
@@ -317,8 +318,8 @@
           }
         ]
       },
-      "minItems": 26,
-      "maxItems": 26
+      "minItems": 27,
+      "maxItems": 27
     },
     "tool_requests": {
       "type": "array",
@@ -337,6 +338,7 @@
               "reference_fields",
               "linked_application_amounts",
               "pos_calculation",
+              "amount_calculation",
               "source_inventory",
               "activity_periods",
               "pos_field_inventory",
@@ -357,6 +359,12 @@
             }
           },
           "products": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "comparisons": {
             "type": "array",
             "items": {
               "type": "object"

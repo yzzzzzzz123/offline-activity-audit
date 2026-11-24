@@ -358,6 +358,8 @@ def prepare_units(archive: dict, root: Path) -> list[dict]:
                 "locator": item["source_file"], "image": None,
                 "native_facts": [], "limitations": [],
                 "adapter": item.get("adapter") or item["kind"]}
+        if isinstance(item.get('upload_field'), str) and item['upload_field'].strip():
+            base['upload_field'] = item['upload_field']
         try:
             if item["kind"] == "spreadsheet":
                 reading_item = {
@@ -366,6 +368,8 @@ def prepare_units(archive: dict, root: Path) -> list[dict]:
                 }
                 file_units = _spreadsheet_units(reading_item, root)
                 for unit in file_units:
+                    if 'upload_field' in base:
+                        unit['upload_field'] = base['upload_field']
                     unit['detected_format'] = item.get('sniffed_format', 'unknown')
                     unit['declared_format'] = item.get('declared_format', 'unknown')
                     if unit.get("read_status"):
@@ -664,6 +668,7 @@ class PdfEvidenceProvider:
         """Revisit material roles using already read facts, without another OCR pass."""
         from .prompts import bound_prompt
         from .pdf_evidence import classification_decision
+        from .material_sources import inventory_notes
         scenario = packet['route'].get('scenario')
         candidates = packet['classification']['candidate_scenarios']
         if not scenario and len(candidates) == 1:
@@ -672,7 +677,7 @@ class PdfEvidenceProvider:
             raise AuditError('资料复核须保留本单已指定的核销类型，不能猜选其他类型。')
         prompt = self._gate_prompt(scenario, packet['documents'], large_venue_fee=packet.get('large_venue_fee'),
                                    cvs_otc_channel=packet.get('cvs_otc_channel', False))
-        prompt += bound_prompt('\n最终逻辑自检打回本单资料盘点：{feedback}\n'
+        prompt += self._material_locations(packet) + bound_prompt('\n最终逻辑自检打回本单资料盘点：{feedback}\n'
             '基于已读取的本单原始事实重新核对资料角色及适用条件，不改原始事实，不改选其他业务类型。',
             feedback=json.dumps(feedback, ensure_ascii=False))
         def validate_gate(value):
@@ -694,10 +699,12 @@ class PdfEvidenceProvider:
             # judgments. The same model reviews any actual dependency changes.
             saved = self._audit_cases.get(packet['archive_id'])
             if saved:
-                saved.update(flags=revised['flags'], materials=revised['materials'])
+                saved.update(flags=revised['flags'], materials=revised['materials'],
+                             inventory_notes=inventory_notes(revised, scenario))
             if route['matched'] and 'audit_evidence' not in packet:
                 packet['audit_evidence'] = self.audit({'archive_id':packet['archive_id'],
                     'scenario':scenario,'flags':revised['flags'],'materials':revised['materials'],
+                    'inventory_notes':inventory_notes(revised, scenario),
                     'documents':packet['documents'],'units':packet['units']},root/'business-audit')
             return
         if route['matched'] and ('audit_evidence' not in packet or old['flags'] != revised['flags']
@@ -723,6 +730,15 @@ class PdfEvidenceProvider:
                                compact_inventory=self.agent_mode=='main_three')
 
     @staticmethod
+    def _material_locations(case):
+        # File names and archive paths do not establish either a form field or a fee type.
+        locations = [{'unit_id': unit['unit_id'], 'upload_field': unit['upload_field']}
+                     for unit in case.get('units', [])
+                     if isinstance(unit.get('upload_field'), str) and unit['upload_field'].strip()]
+        return bound_prompt('\n上游明确提供的附件上传字段：{locations}',
+                            locations=json.dumps(locations, ensure_ascii=False))
+
+    @staticmethod
     def _reading_prompt(manifest: list[dict], reading_policy: dict, *, study=None):
         from .reading_contract import reading_policy_context
         from .material_skills import runtime_instructions
@@ -746,11 +762,11 @@ class PdfEvidenceProvider:
 本次资料涉及的品牌及产品字样（按本单合同或申请实际品牌，例如参半、oral shark、SP-1）只要在任一区域出现都要逐字记入facts，
 不得因画面主体是其他品类、其他货架、远景或角落就略过同一张图内的本次品牌字样与赠品实物。
 各区域都确实没有该字样时才写未见；只有该处文字本身太小、反光或被遮挡时才写该处无法辨认，并写明具体位置。
-活动周期须保留合同和结算单分别写明的起止日期完整原文；预计销量、补差计费数量分别保留字段和单位，不能合并或改写为同一数量。
+活动周期分别记录本页申请期、合同执行期、明确备注的实际执行期和计算规则中的月份原文；不能将多个区间合并。预计销量、补差计费数量分别保留字段和单位。
 现场图逐张准确转录可见拍摄年月日和价签数字，整数价格也按可见原值记录；水印靠近价签不等于已遮挡，看不清时只写具体受影响位置，不凭其他图补价或补日期。
 每个表格逐行转录，并保留行号；每个事实尽量引用原文和值。不要把多个物理行汇总或自行复算。
 红包截图按图中可见记录分别转录，保留上下位置、被截断的位置、可见金额及日期时间、收发对象、备注或记录编号等原有信息，便于后续判断跨图重叠。只记录可见字段，不要求每笔都具备这些字段；不要把半条记录丢掉、算成完整新红包或从另一图抄写补值。单张截断只记该图局部限制，不在此阶段认定整组资料缺失。
-支付截图保留每条记录所在聊天、左右方向及“已被接收”“已收款”等实际状态文字；不要把发出记录和对应收款确认直接算成两次付款，不仅凭金额相同去重。记录这些原有信息用于后续对应，不新增必填字段。
+支付截图保留每条记录所在聊天、左右方向及“已被接收”“已收款”等实际状态文字。备注栏空白、被裁切和明确说明品牌或活动用途分别转录；不将相邻交易的说明转给本笔。不要把发出和对应收款确认直接算成两次付款。
 POS盖章版与Excel版是同一份明细的两个载体，逐页独立读取盖章版的期间、门店、SKU/69码、商品名称、逐行数量/单价/金额及两项合计，不能照抄另一版来补值。
 印章保留实际可见的客户名称、章面样式及清晰程度；不区分公章、财务章、合同章、结算单章、业务章、部门章或其他章种，只要本页有实际印章即视为已盖章，不能把印刷公司名称、标题、已填写内容或另一份文件的印章当作本页盖章。仍需记录章面主体是否更接近本单经销商。
 印章内文字按实际可见逐字记录（含只看到的部分字及所在位置），并写明可见主体更接近本单经销商还是终端门店。
@@ -989,6 +1005,9 @@ documents每项仍为unit_id/roles/facts/limitations，不输出通过、金额�
                 policy=json.dumps(policy,ensure_ascii=False),documents=_prompt_documents(documents),
                 guidance=GIFT_RULE_GATE_CLARIFICATION+STAFF_PHOTO_CLARIFICATION+
                     ENTRY_CHANNEL_CLARIFICATION+INVOICE_DETAILS_CLARIFICATION)
+            from .model_authority import MATERIAL_ROUTING
+            prompt += bound_prompt('{routing}', routing=MATERIAL_ROUTING)
+        prompt += self._material_locations(case)
         from contextlib import nullcontext
         from .run_conversation import isolated
         # Inventory is an independent documents-agent task. Its full input is

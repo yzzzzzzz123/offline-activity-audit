@@ -170,6 +170,23 @@ class NativePosFieldTests(unittest.TestCase):
                 result = execute_tool(case, 'pos_field_inventory')
                 self.assertEqual(result['check']['status'], 'pass')
 
+    def test_target_accepts_numbered_merged_title_and_only_an_amount_total(self):
+        case = native_case()
+        case['scenario'] = 'pos_target_incentive'
+        alter(case, lambda _: [
+            '销售明细!R1: C1=合作门店7月份销售数据',
+            '销售明细!R2: C1=日期 | C2=商品名称 | C3=69码 | C4=数量 | C5=单价 | C6=金额',
+            '销售明细!R3: C1=2026-07-01 | C2=牙膏 | C3=6900000000001 | C4=2 | C5=3.2 | C6=6.4',
+            '销售明细!R4: C1=合计 | C6=6.4'])
+        pos_unit = next(unit for unit in case['units'] if unit['unit_id'] == 'file-u0')
+        pos_unit['sheet_layout'] = {'sheet': '销售明细', 'merged_ranges': ['A1:F1']}
+        check, proof = native_pos_field_check(case)
+        self.assertIsNotNone(check, proof)
+        self.assertEqual(check['status'], 'pass')
+        self.assertEqual(proof['fields'][-1], '销售金额合计')
+        case['scenario'] = 'giveaway_promotion'
+        self.assertIsNone(native_pos_field_check(case)[0])
+
     def test_pos_export_headers_share_native_arithmetic_and_identity_tools(self):
         case = native_case()
         alter(case, lambda f: [r.replace('C2=69码', 'C2=SKU条码').replace('C5=销售金额',

@@ -33,6 +33,49 @@ def legacy_proof(root,case):
 
 
 class ToolObservationTests(TestCase):
+    def test_invalid_optional_receipts_do_not_hide_valid_evidence_or_block_originals(self):
+        from audit_core.tool_observations import _folder, remember
+        case = case_with_pos()
+        with TemporaryDirectory() as directory, collect_model_artifacts(Path(directory)/'analysis'):
+            remember(case, 'source_inventory', fields=[], code=None, source_ids=[], result={'read': True})
+            folder = _folder(case)
+            original = observations(case)
+            self.assertEqual(len(original), 1)
+            for index, record in enumerate([None, [], {**original[0], 'request': None},
+                                            {**original[0], 'result': None}, {**original[0], 'authoritative': True}]):
+                (folder/f'invalid-{index}.json').write_text(json.dumps(record), encoding='utf-8')
+            self.assertEqual(observations(case), original)
+            for target in ('audit_core.tool_observations._implementation', 'pathlib.Path.glob'):
+                with self.subTest(target=target), patch(target, side_effect=PermissionError()):
+                    self.assertEqual(observations(case), [])
+
+    def test_unwritable_receipt_directory_preserves_original_amount_agent_and_self_check(self):
+        from audit_core.agent_orchestration import scoped_case
+        from audit_core.model_authority import execution
+        from audit_core.model_owned_audit import run_single
+        from audit_core.pdf_materials import PdfEvidenceProvider
+        from tests.test_agent_orchestration import fixture_case
+        case = scoped_case(fixture_case('pos_target_incentive'), 'numbers')
+        case['_agent_rule_specs'] = [s for s in case['_agent_rule_specs'] if s['id'] == 'pos_sales_amount']
+        seen = []
+        def respond(root, skill, schema, prompt, **kwargs):
+            request = json.loads(prompt.partial_variables['request'])
+            seen.append(request)
+            check = {'rule_id': 'pos_sales_amount', 'status': 'unknown', 'reason': '原件未给出销售金额。',
+                     'source_ids': ['pos_excel']}
+            return {'checks': [check], **({'ready': True, 'notes': []} if 'model_result' in request else {})}
+        with TemporaryDirectory() as directory, execution(), collect_model_artifacts(Path(directory)/'analysis'):
+            (Path(directory)/'analysis'/'tool-observations').write_text('busy', encoding='utf-8')
+            provider = PdfEvidenceProvider('fixture', 'medium')
+            with patch('audit_core.pdf_materials.prepare_pos_identities', return_value={'rows': []}), \
+                 patch.object(provider, '_call', side_effect=respond):
+                result = run_single(provider, case, Path(directory))
+        self.assertEqual(len(seen), 2)
+        for request in seen:
+            self.assertEqual(request['amount_assistance']['status'], 'model_takeover')
+            self.assertIn('RAW_ONLY_settlement', json.dumps(request['documents']))
+        self.assertEqual(result['checks'][0]['reason'], '原件未给出销售金额。')
+
     def test_normal_tool_result_survives_a_new_case_object_without_changing_inputs(self):
         case=case_with_pos();original=deepcopy(case)
         with TemporaryDirectory() as folder,collect_model_artifacts(Path(folder)/'analysis'):

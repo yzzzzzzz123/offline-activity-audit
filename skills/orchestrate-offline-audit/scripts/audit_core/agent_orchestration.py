@@ -19,7 +19,7 @@ LABELS = {'main': '主Agent·结果汇总', 'visual': '照片Agent',
 PHOTO_ROLES = {'display_photos', 'finished_photos', 'giveaway_evidence', 'price_evidence',
     'full_reduction_evidence', 'gift_finished_photos', 'gift_store_photos', 'staff_photos',
     'training_photos', 'shelf_photos'}
-PHOTO_RULES = {'photo_activity_dates', 'entry_duplicate', 'entry_photo_coverage',
+PHOTO_RULES = {'photo_activity_dates', 'entry_duplicate', 'entry_photo_coverage', 'display_store_coverage',
                'entry_watermark', 'entry_sku', 'entry_application_products', 'photo_authenticity'}
 DOCUMENT_RULES = {'entry_agreement', 'entry_inventory', 'atrium_agreement',
                   'application_activity_dates', 'receipt_finance_seal'}
@@ -51,6 +51,8 @@ def rule_specs(scenario):
     if scenario == 'personnel_incentive' and 'application_activity_dates' not in ids:
         values.append({'id': 'application_activity_dates',
                        'text': SUBMITTED_SOURCE_CHECKS['application_activity_dates']['requirement']})
+    if scenario == 'promotional_display':
+        values.append({'id': 'display_store_coverage', 'text': SUBMITTED_SOURCE_CHECKS['display_store_coverage']['requirement']})
     values.append({'id': 'photo_authenticity', 'text': photo_policy()})
     return values
 
@@ -59,10 +61,17 @@ def source_catalog(case):
     from .material_sources import resolve_source_ids
     units = {u['unit_id']: u for u in case.get('units', [])}
     roles = {}
+    inventory_tags = {}
+    for group, notes in (case.get('inventory_notes') or {}).items():
+        for note in notes:
+            for uid in resolve_source_ids(case, note.get('source_ids', [])):
+                inventory_tags.setdefault(uid, set()).add(group)
     for material in case.get('materials', []):
         for uid in resolve_source_ids(case, material.get('source_ids', [])):
             roles.setdefault(uid, set()).add(material['id'])
     return [{'unit_id': d['unit_id'], 'roles': sorted(set(d.get('roles', [])) | roles.get(d['unit_id'], set())),
+             **({'inventory_groups': sorted(inventory_tags[d['unit_id']])} if d['unit_id'] in inventory_tags else {}),
+             **({'upload_field': units[d['unit_id']]['upload_field']} if units.get(d['unit_id'], {}).get('upload_field') else {}),
              'source_file': units.get(d['unit_id'], {}).get('source_file', ''),
              'locator': units.get(d['unit_id'], {}).get('locator', ''),
              'detected_format': units.get(d['unit_id'], {}).get('detected_format', 'unknown'),
@@ -100,6 +109,10 @@ def scoped_case(case, agent_id, *, extra_ids=()):
     if agent_id == 'documents':
         known_roles = set().union(*(entry[0] for entry in ROLE_GROUPS.values())) | {'approved_claim', 'purchase_transaction_record'}
         ids.update(item['unit_id'] for item in catalog if not set(item['roles']) & known_roles)
+        from .material_sources import resolve_source_ids
+        notes = case.get('inventory_notes') or {}
+        ids.update(resolve_source_ids(case, [uid for item in notes.get('additional_files', [])
+                                             for uid in item.get('source_ids', [])]))
     for unit in case.get('units', []):
         if unit.get('source_kind') != 'qince':
             continue
@@ -170,6 +183,10 @@ def expand_tool_sources(provider, case, requests):
         references = list(sources) if isinstance(sources, list) else []
         if isinstance(products, list):
             references.extend(product.get('unit_id') for product in products if isinstance(product, dict))
+        if request.get('tool') == 'amount_calculation' and isinstance(request.get('comparisons'), list):
+            for c in request['comparisons']:
+                if isinstance(c, dict) and isinstance(c.get('right'), list):
+                    references.extend(v.get('unit_id') for v in [c.get('left'), *c['right']] if isinstance(v, dict))
         for reference in references:
             if isinstance(reference, str) and reference in known and reference not in wanted:
                 wanted.append(reference)

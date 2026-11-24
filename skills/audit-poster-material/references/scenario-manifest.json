@@ -4,7 +4,7 @@
   "skill_name": "audit-poster-material",
   "display_name": "KT板等物料制作",
   "scope": "海报制作、张贴、宣传单页、展示道具",
-  "policy_version": "2026-11-17.xlsx.53",
+  "policy_version": "2026-11-24.xlsx.54",
   "classification_policy": "biz_type",
   "label": "KT板等物料制作",
   "materials": [
@@ -35,12 +35,12 @@
     },
     {
       "id": "settlement",
-      "text": "结算单（公司统一模板，客户盖章）；本资料要求的印章须为公章，验章原件提交PDF，POS原生Excel另保留",
+      "text": "结算单（公司统一模板，客户盖章）；须公章，接受PDF、JPG/JPEG或PNG，按原件内容核对印章",
       "when": "always"
     },
     {
       "id": "promotion_contract",
-      "text": "签章后的促销合同；本资料要求的印章须为公章，验章原件提交PDF，POS原生Excel另保留",
+      "text": "签章后的促销合同；须公章，接受PDF、JPG/JPEG或PNG，按原件内容核对印章",
       "when": "always"
     },
     {
@@ -97,7 +97,7 @@
     },
     {
       "id": "settlement_activity_dates",
-      "text": "结算单执行周期须与本次促销合同一致，分别引用双方原文。",
+      "text": "结算单执行周期须与本次促销合同一致，分别引用双方原文。申请期与资料中另行注明的实际执行期并存时，分别引用两个区间及备注来源，核对合同、结算与POS的相互印证。已明确解释且材料相互印证的特殊执行安排可交人工复核，不因两个区间不同直接判资料不合格。资料本身的年份错误、未解释的期间矛盾及计算条款所用月份与合同不符仍需说明。",
       "effect": "missing_material",
       "when": "always",
       "numeric": false,
@@ -105,7 +105,7 @@
     },
     {
       "id": "settlement_application_dates",
-      "text": "结算单执行周期与本次系统活动申请一致；合同及结算单相同不能掩盖与申请不一致。",
+      "text": "结算单执行周期与本次系统活动申请一致；合同及结算单相同不能掩盖与申请不一致。申请期与资料中另行注明的实际执行期并存时，分别引用两个区间及备注来源，核对合同、结算与POS的相互印证。已明确解释且材料相互印证的特殊执行安排可交人工复核，不因两个区间不同直接判资料不合格。资料本身的年份错误、未解释的期间矛盾及计算条款所用月份与合同不符仍需说明。",
       "effect": "missing_material",
       "when": "available_reference:settlement_application_dates:always",
       "numeric": false,
@@ -137,7 +137,7 @@
     },
     {
       "id": "contract_activity_dates",
-      "text": "促销合同执行周期与系统活动申请执行周期一致，逐字引用双方日期。",
+      "text": "促销合同执行周期与系统活动申请执行周期一致，逐字引用双方日期。申请期与资料中另行注明的实际执行期并存时，分别引用两个区间及备注来源，核对合同、结算与POS的相互印证。已明确解释且材料相互印证的特殊执行安排可交人工复核，不因两个区间不同直接判资料不合格。资料本身的年份错误、未解释的期间矛盾及计算条款所用月份与合同不符仍需说明。",
       "effect": "missing_material",
       "when": "available_reference:contract_activity_dates:always",
       "numeric": false,
@@ -192,8 +192,16 @@
       "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!H14:17"
     },
     {
+      "id": "submitted_material_scope",
+      "text": "核对上传的合同、结算、POS等凭证是否属于本单。引用本单申请和附件中的签约主体、活动内容、门店、执行期等相互印证的事实，列出疑似其他活动的具体原件和理由。资料盘点中的额外文件是复核线索。已明确指定的样张、模板、参考件只作为参考。相似错字、同案多页或多份同类材料本身不足以认定混单。按正文认定实际材料角色；仅取得明确提交字段或目录时提示传错位置，未取得字段时不推断操作。合同不能代替应提交的POS，继续核对实际收到的POS。",
+      "effect": "missing_material",
+      "when": "always",
+      "numeric": false,
+      "source": "附件：费用分类及申请核销资料表-2026.11.17.xlsx·Sheet1!A1及销售支持资料归属反馈"
+    },
+    {
       "id": "stamped_document_pdf",
-      "text": "促销合同及本类型实际要求验章的结算单、协议、盖章POS、盖章库存明细、批量微信账单须提交PDF原文件，逐页查看实际印章；仅改扩展名、截图或把其他文件的印章借来均不能证明符合。以解析得到的真实文件格式及本单资料角色判断，不以渲染后的页面PNG认定原文件不是PDF。这不要求活动照片、原生POS Excel、其他无需验章的明细转PDF，POS Excel仍按本类要求保留。格式问题与文件是否已交、能否读取、印章是否合规分别说明；已交非PDF不得写成文件未交，仍完成可判断的内容。",
+      "text": "促销合同和结算单接受PDF、JPG/JPEG、PNG。逐页或逐图核对实际签章、主体、清晰度和内容；图片只要能核对就无须补PDF。其他实际要求验章的协议、盖章POS、盖章库存明细及批量微信账单仍须PDF原件。依据已解析的原始格式和资料用途核对，不能用扩展名或渲染出的预览格式代替。活动照片和原生POS Excel按各自格式提交，已交但不清晰时标明对应文件与具体位置。",
       "effect": "missing_material",
       "when": "always",
       "numeric": false,

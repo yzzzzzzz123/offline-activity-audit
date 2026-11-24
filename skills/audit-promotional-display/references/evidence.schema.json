@@ -30,6 +30,7 @@
               "display_quantity_price",
               "settlement_calculation",
               "application_claim_ceiling",
+              "submitted_material_scope",
               "claim_ceiling",
               "stamped_document_pdf"
             ]
@@ -376,8 +377,8 @@
           }
         ]
       },
-      "minItems": 21,
-      "maxItems": 21
+      "minItems": 22,
+      "maxItems": 22
     },
     "tool_requests": {
       "type": "array",
@@ -396,6 +397,7 @@
               "reference_fields",
               "linked_application_amounts",
               "pos_calculation",
+              "amount_calculation",
               "source_inventory",
               "activity_periods",
               "pos_field_inventory",
@@ -416,6 +418,12 @@
             }
           },
           "products": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "comparisons": {
             "type": "array",
             "items": {
               "type": "object"

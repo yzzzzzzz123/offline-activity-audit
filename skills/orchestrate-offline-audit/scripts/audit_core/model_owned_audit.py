@@ -47,7 +47,8 @@ def run(provider, case, root):
 
 def run_single(provider, case, root):
     from contextlib import nullcontext
-    from .audit_tools import assist, dispatch_requests, tool_protocol
+    from .audit_tools import (AMOUNT_GUIDANCE, AMOUNT_RULES, amount_batch_key, initial_amount_advice,
+                              assist, dispatch_requests, tool_protocol)
     from .cross_claim_photos import model_advice
     from .execution_trace import record_step
     from .model_metrics import save_model_observations
@@ -82,11 +83,13 @@ def run_single(provider, case, root):
     identities = assist('pos_product_identity',
         lambda: helper(lambda: prepare_pos_identities(case, root, provider._call)), fallback=failed) if agent_id in {None, 'numbers'} else {}
     if identities:
-        remember(case, 'pos_product_identity', fields=[], code=None,
-                 source_ids=material_source_ids(case, 'pos_excel'), result=identities)
+        assist('pos_product_identity_receipt', lambda: remember(
+            case, 'pos_product_identity', fields=[], code=None,
+            source_ids=material_source_ids(case, 'pos_excel'), result=identities))
     case['_product_identity_support'] = product_identity_support(references)
     if case['_product_identity_support']:
-        remember(case, 'product_identity', fields=[], code=None, source_ids=[], result=case['_product_identity_support'])
+        assist('product_identity_receipt', lambda: remember(
+            case, 'product_identity', fields=[], code=None, source_ids=[], result=case['_product_identity_support']))
     provider._audit_cases[case['archive_id']] = case
     templates, template_images = assist('template_reference',
         lambda: template_comparison(skill, scenario), fallback=lambda e:(failed(e), [])) if agent_id in {None, 'documents'} else ({}, [])
@@ -95,6 +98,9 @@ def run_single(provider, case, root):
     check = {'type': 'object', 'required': ['rule_id','status','reason','source_ids'], 'properties': {
         'rule_id': {'type':'string'}, 'status': {'type':'string'}, 'reason': {'type':'string'},
         'source_ids': {'type':'array','items':{'type':'string'}}, 'comparisons': {'type':'array'}}}
+    if agent_id in {None, 'documents'}:
+        check['properties']['unreadable_seal_unit_id'] = {'type':'string', 'description':
+            '仅在同页唯一印章主体辨认不清是本项唯一疑点时填写该页来源ID。纸面名称或其他独立差异另列。'}
     schema = {'type':'object','required':['checks'], 'properties': {
         'checks': {'type':'array','items':check},
         'photo_reviews': {'type':'array','items':{'type':'object','required':['unit_id','checks'],'properties': {
@@ -103,6 +109,7 @@ def run_single(provider, case, root):
         'source_requests': {'type':'array','items':{'type':'string'}}}}
     if agent_id in {'documents', 'numbers'}:
         schema['properties'].pop('photo_reviews')
+    amount_role = agent_id in {None, 'numbers'} and bool(AMOUNT_RULES.intersection(selected))
     request = {'scenario': scenario, 'rules': specs,
         'material_requirements': [asdict(r) for r in requirements(scenario)],
         'materials': case['materials'], 'flags': case['flags'],
@@ -128,15 +135,32 @@ def run_single(provider, case, root):
     for path in template_images or []:
         if path.is_file() and path.name not in available:
             available[path.name] = path
+    if agent_id in {None, 'documents'}:
+        request['inventory_notes'] = case.get('inventory_notes', {})
     request['original_images'] = [{'unit_id':u['unit_id'],'image':u['image'].name}
                                   for u in case.get('units',[]) if u.get('image')]
     policy = audit_policy()
+    if scenario == 'promotional_display' and not agent_id:
+        policy += SUBMITTED_SOURCE_CHECKS['display_store_coverage']['requirement'] + '在整单display_watermark中保留逐图无法呈现的缺店结论。'
+    if scenario == 'personnel_incentive' and agent_id in {None, 'visual'}:
+        policy += ('临促同框的人员与商品都须在目标照片中可见。同单同店清楚近景可帮助辨认目标图中'
+                   '实际可见的包装、标志及货架位置；写明两张照片及能相互印证的特征。'
+                   '不能把另一天或另一门店的人、产品移入本图。包装只见通用颜色或无法对应时仍保留不确定性。')
+    if amount_role:
+        # Keep the raw evidence in this same request for the agent's independent fallback.
+        policy += AMOUNT_GUIDANCE
+        case['_amount_request_cache'] = {}
+        amount_advice = initial_amount_advice(case)
+        if amount_advice is not None:
+            request['amount_assistance'] = amount_advice
+            case['_amount_assistance'] = amount_advice
     if agent_id:
         from .agent_orchestration import LABELS, photo_policy
         request['agent_id'] = agent_id
         request['source_catalog'] = case['_agent_source_catalog']
         policy += ('本次角色为'+LABELS[agent_id]+'。只返回本次rules分配的审核项，不能改写其他角色结论。'
             '当前documents是本职完整来源，不是整单全部资料；source_catalog是整单来源目录。'
+            '目录的inventory_groups仅记录本单盘点标出的额外附件或背景样张；按原文核实本笔归属，他单或样张的金额和印章不能证明本单。'
             '需要其他已有来源时以source_requests列unit_id，程序交付该来源完整原文；'
             '未在当前分工上下文中出现不表示客户缺件，不按片段推断全单缺失。'
             '每项结果保留状态、具体理由与来源，包含通过、不适用和真实无法确认项。'
@@ -187,7 +211,9 @@ def run_single(provider, case, root):
         wanted = [name for name in value.get('image_requests',[]) if name in available]
         if not tools and not wanted and not added:
             break
-        signature = digest({'requests':tools,'images':wanted,'sources':added,'checks':value.get('checks',[])})
+        amount_key = amount_batch_key(case, tools)
+        signature = (digest({'amount_requests': amount_key, 'images': wanted}) if amount_key else
+                     digest({'requests':tools,'images':wanted,'sources':added,'checks':value.get('checks',[])}))
         if signature in seen:
             record_step('audit.tool_requests_reused','已有工具与图片结果留给同一模型自查',
                 {'archive_id':case['archive_id'],'requests':tools,'images':wanted,'business_conclusion':None})

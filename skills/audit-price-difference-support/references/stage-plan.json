@@ -44,7 +44,8 @@
       "name": "documents",
       "rule_ids": [
         "pos_seal",
-        "pos_dealer"
+        "pos_dealer",
+        "submitted_material_scope"
       ],
       "material_roles": [
         "activity_application",

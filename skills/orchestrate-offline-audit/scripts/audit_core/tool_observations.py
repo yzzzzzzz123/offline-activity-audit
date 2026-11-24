@@ -31,7 +31,12 @@ def _implementation():
     core=Path(__file__).resolve().parent
     names=EDITABLE|{'audit_tools.py','case_python.py','pdf_evidence.py',
                     'photo_product_references.py','product_reference_batches.py'}
-    return _digest({name:hashlib.sha256((core/name).read_bytes()).hexdigest() for name in sorted(names)})
+    hashes = {name:hashlib.sha256((core/name).read_bytes()).hexdigest() for name in sorted(names)}
+    try:
+        hashes['amount_calculation.py'] = hashlib.sha256((core/'amount_calculation.py').read_bytes()).hexdigest()
+    except OSError:
+        hashes['amount_calculation.py'] = None
+    return _digest(hashes)
 
 
 def _folder(case):
@@ -71,7 +76,7 @@ def _legacy_pos(case):
     from .pdf_evidence import calculate,document_map
     saved=json.loads(path.read_text('utf-8'))
     plan=prepare_pos_arithmetic(case['documents'],case['materials'],case.get('units'),
-                                amount_only=case.get('scenario') == 'pos_target_incentive')
+                                scenario=case.get('scenario'))
     if plan is None or saved.get('plan')!=plan:return None
     sources=document_map(case['documents'])
     calculations=[calculate(comparison,sources) for comparison in plan['comparisons']]
@@ -88,18 +93,33 @@ def _legacy_pos(case):
 
 def observations(case):
     """Reuse this run's tool evidence after source checks; never change a check."""
-    identity=_identity(case);implementation=_implementation();records={}
+    identity = _identity(case)
+    try:
+        implementation = _implementation()
+    except OSError:
+        return []  # No verified implementation fingerprint, so use the current sources.
+    records = {}
     def accept(record):
-        if (record.get('version')==1 and record.get('archive_id')==case.get('archive_id')
+        if (isinstance(record, dict) and record.get('version') == 1
+                and record.get('authoritative') is False
+                and isinstance(record.get('request'), dict)
+                and isinstance(record['request'].get('tool'), str)
+                and isinstance(record.get('result'), dict)
+                and record.get('archive_id')==case.get('archive_id')
                 and record.get('source_fingerprint')==identity
                 and record.get('implementation_fingerprint')==implementation):
             records[_digest(record['request'])]=deepcopy(record)
-    folder=_folder(case)
-    if folder and folder.is_dir():
-        for path in sorted(folder.glob('*.json')):
-            if path.is_symlink() or not path.resolve().is_relative_to(folder.resolve()):continue
-            try:accept(json.loads(path.read_text('utf-8')))
-            except (OSError,ValueError,KeyError,TypeError):continue
+    try:
+        folder = _folder(case)
+        paths = sorted(folder.glob('*.json')) if folder and folder.is_dir() else []
+    except OSError:
+        paths = []
+    for path in paths:
+        try:
+            if not path.is_symlink() and path.resolve().is_relative_to(folder.resolve()):
+                accept(json.loads(path.read_text('utf-8')))
+        except (OSError, ValueError, RecursionError):
+            continue
     for name,restore in [('pos_calculation',_legacy_pos),('product_identity',_legacy_identity)]:
         if case.get('_agent_id') == 'documents' or (case.get('_agent_id') == 'visual' and name == 'pos_calculation'):
             continue
@@ -107,7 +127,7 @@ def observations(case):
         try:
             legacy=restore(case)
             if legacy:accept(legacy)
-        except (AuditError,OSError,ValueError,KeyError,TypeError,ArithmeticError):
+        except (AuditError,OSError,ValueError,KeyError,TypeError,ArithmeticError,AttributeError,RecursionError):
             pass  # An unverifiable old proof cannot establish a completed check.
     return list(records.values())
 

@@ -54,9 +54,13 @@ class BizTypeWorkflowTests(unittest.TestCase):
                     self.assertEqual(manifest["bizType"], "条码费")
                     snapshot = json.loads(Path(result["snapshot"]).read_text(encoding="utf-8"))
                     self.assertEqual(snapshot["view"]["sheets"][0]["audit_type_label"], "条码费")
-                    self.assertTrue(all(rule.source.startswith("用户确认的所有涉及POS类型通用5+2及原值复算标准")
-                                        if rule.id in {"pos_fields","pos_arithmetic","pos_product_identity"}
-                                        else "Sheet1!H" in rule.source or "会议纪要" in rule.source for rule in rules(scenario)))
+                    for rule in rules(scenario):
+                        if rule.id == "submitted_material_scope":
+                            self.assertIn("Sheet1!A1及销售支持资料归属反馈", rule.source)
+                        elif rule.id in {"pos_fields","pos_arithmetic","pos_product_identity"}:
+                            self.assertTrue(rule.source.startswith("用户确认的所有涉及POS类型通用5+2及原值复算标准"))
+                        else:
+                            self.assertTrue("Sheet1!H" in rule.source or "会议纪要" in rule.source, rule.id)
                 self.assertTrue((workspace / "offline-activity-audit.html").is_file())
 
     def test_missing_and_extra_materials_keep_selected_type_and_complete(self):

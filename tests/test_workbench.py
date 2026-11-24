@@ -5,6 +5,7 @@ import hashlib
 import http.client
 import json
 import os
+import re
 import tempfile
 import threading
 import time
@@ -1900,7 +1901,8 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn(
             'role="tablist" aria-label="核销管理中心视图"', primary
         )
-        self.assertEqual(primary.count('role="tab" aria-controls="as-view-'), 4)
+        tabs = re.findall(r'role="tab" aria-controls="as-view-([^"]+)"', primary)
+        self.assertCountEqual(tabs, ['overview', 'upload', 'archive', 'models', 'schedule'])
         self.assertNotIn('id="as-tab-repairs"', primary)
         self.assertNotIn('id="as-tab-model"', primary)
         self.assertNotIn('id="as-view-model"', primary)
@@ -1908,7 +1910,8 @@ class WorkbenchServerTests(unittest.TestCase):
         self.assertIn('id="as-view-schedule" role="tabpanel"', primary)
         self.assertNotIn('id="as-current-models"', primary)
         self.assertIn("const renderSchedule = () => {", primary)
-        self.assertEqual(primary.count('role="tabpanel" aria-labelledby="as-tab-'), 4)
+        panels = re.findall(r'role="tabpanel" aria-labelledby="as-tab-([^"]+)"', primary)
+        self.assertCountEqual(panels, tabs)
         self.assertIn('aria-label="按时间排列的完整执行链路"', primary)
         self.assertIn("const contextTechnicalSnapshot = () => ({", primary)
         self.assertIn(

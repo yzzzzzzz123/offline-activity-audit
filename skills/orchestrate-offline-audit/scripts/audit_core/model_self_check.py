@@ -62,8 +62,14 @@ def merge_self_check_result(value, answer, *, agent_id=None):
     if agent_id in {'documents', 'numbers'} and 'photo_reviews' not in answer:
         candidate.pop('photo_reviews', None)
     original_checks = {check['rule_id']: check for check in value['checks']}
-    candidate['checks'] = [deepcopy({**original_checks.get(check['rule_id'], {}), **check})
-                           for check in answer['checks']]
+    candidate['checks'] = []
+    for check in answer['checks']:
+        previous = original_checks.get(check['rule_id'], {})
+        merged = deepcopy({**previous, **check})
+        if ('unreadable_seal_unit_id' not in check and
+                any(key in check and check[key] != previous.get(key) for key in ('reason', 'status', 'source_ids'))):
+            merged.pop('unreadable_seal_unit_id', None)
+        candidate['checks'].append(merged)
     for key, item in answer.items():
         if key not in {'ready', 'notes', 'checks', 'tool_requests', 'image_requests', 'source_requests'}:
             candidate[key] = deepcopy(item)
@@ -84,6 +90,9 @@ def review_stage(provider, case, value, decision, root, selected, validator, *, 
     if case.get('_agent_id') in {'documents', 'numbers'}:
         schema['properties'].pop('photo_reviews', None)
     schema['properties']['checks']['items']['properties'].update(deepcopy(PHOTO_CHECK['properties']))
+    if case.get('_agent_id') in {None, 'documents'}:
+        schema['properties']['checks']['items']['properties']['unreadable_seal_unit_id'] = {
+            'type':'string','description':'仅当同页唯一章面主体不可辨是唯一疑点时，填该页的原始来源ID。'}
     schema['properties']['checks']['items']['properties']['rule_id'] = {'enum': list(selected)}
     schema['properties']['checks']['items']['properties']['status'] = {
         'enum': ['pass', 'fail', 'unknown', 'not_applicable']}
@@ -108,6 +117,10 @@ def review_stage(provider, case, value, decision, root, selected, validator, *, 
         'reference_fields': reference_view({key: fields[key] for key in needed_fields(selected)}),
         'tools': tool_results or [], 'tool_observations':observations(case),
         'documents': documents, 'available_original_images': list(available)}
+    if case.get('_amount_assistance') is not None:
+        from .audit_tools import AMOUNT_GUIDANCE
+        request['amount_assistance'] = case['_amount_assistance']
+        request['amount_review_guidance'] = AMOUNT_GUIDANCE
     if case.get('_agent_id'):
         from .agent_orchestration import photo_policy
         request['agent_id'] = case['_agent_id']
@@ -210,7 +223,7 @@ def review_stage(provider, case, value, decision, root, selected, validator, *, 
             continue
         if answer.get('tool_requests'):
             from contextlib import nullcontext
-            from .audit_tools import dispatch_requests
+            from .audit_tools import amount_batch_key, dispatch_requests
             from .model_judgment import digest
             from .agent_orchestration import expand_tool_sources
             added = expand_tool_sources(provider, case, answer['tool_requests'])
@@ -221,12 +234,13 @@ def review_stage(provider, case, value, decision, root, selected, validator, *, 
             if added:
                 available.update({u['image'].name:u['image'] for u in case.get('units', []) if u.get('image')})
                 request['available_original_images'] = list(available)
-            with getattr(provider, '_agent_tool_lock', nullcontext()):
-                results = dispatch_requests(case, answer['tool_requests'], selected)
-            signature = digest(answer['tool_requests'])
+            signature = amount_batch_key(case, answer['tool_requests']) or digest(
+                {'tools': answer['tool_requests'], 'sources': [d['unit_id'] for d in case['documents']]})
             if signature in tool_seen:
                 return defer('同一辅助工具已返回，保留本阶段判断及待核对事项。', answer['notes'])
             tool_seen.add(signature)
+            with getattr(provider, '_agent_tool_lock', nullcontext()):
+                results = dispatch_requests(case, answer['tool_requests'], selected)
             request['tools'].extend(results)
             request['tool_observations']=observations(case)
             prompt = prompt.partial(request=json.dumps({**request, 'documents': json.loads(_prompt_documents(documents))},

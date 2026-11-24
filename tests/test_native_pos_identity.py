@@ -33,6 +33,53 @@ def native_case(scenario='pos_target_incentive', count=300, chunk=150):
 
 
 class NativePosIdentityTests(unittest.TestCase):
+    def test_merged_title_above_exact_headers_preserves_all_native_quotes_and_barcodes(self):
+        from audit_core.spreadsheet_rows import encode_row
+        case = native_case(count=0)
+        uid = case['documents'][0]['unit_id']
+        rows = [encode_row('销售', 2, [(1, '商超8月销售数据')]), HEADER.replace('!R1:', '!R3:')]
+        rows += [encode_row('销售', i + 4, [(1, '商品' + str(i)), (2, str(6970000000000 + i) + '\t'),
+                                           (3, '2'), (4, '3.1'), (5, '6.2')]) for i in range(24)]
+        rows.append(encode_row('销售', 28, [(1, '总计'), (3, '48'), (5, '148.8')]))
+        case['documents'][0]['facts'] = rows
+        case['units'][0]['sheet_layout'] = {'sheet': '销售', 'merged_ranges': ['A2:E2']}
+        self.sync(case)
+        parsed = self.extract(case)[uid]['extracted']
+        validate_extraction(parsed, case['documents'][0])
+        self.assertEqual([r['barcode_69']['value'] for r in parsed['rows']],
+                         [str(6970000000000 + i) for i in range(24)])
+        self.assertEqual([r['fact_index'] for r in parsed['other_facts']], [0, 1, 26])
+        from audit_core.native_pos_fields import native_pos_field_check
+        for wrong_layout in ({}, None, '旧版布局', {'sheet': '销售'}, {'sheet': '销售', 'merged_ranges': None},
+                             {'sheet': '销售', 'merged_ranges': 'A2:E2'},
+                             {'sheet': '销售', 'merged_ranges': ['A2:E2', None]},
+                             {'sheet': '销售', 'merged_ranges': ['A2:E2', '错误地址']},
+                             {'sheet': '销售', 'merged_ranges': ['A2:E2', 'A:E']},
+                             {'sheet': '销售', 'merged_ranges': ['A2:E2', 'A0:E0']},
+                             {'sheet': '另一表', 'merged_ranges': ['A2:E2']},
+                             {'sheet': '销售', 'merged_ranges': ['A1:E1']},
+                             {'sheet': '销售', 'merged_ranges': ['A2:A3']}):
+            with self.subTest(wrong_layout=wrong_layout):
+                case['units'][0]['sheet_layout'] = wrong_layout
+                self.assertNotIn(uid, self.extract(case))
+                self.assertIsNone(native_pos_field_check(case)[0])
+        case['units'][0]['sheet_layout'] = '旧版布局'
+        with tempfile.TemporaryDirectory() as directory, \
+             patch('audit_core.pos_product_identity.load_product_catalog', return_value=catalog()):
+            call = Mock(return_value=parsed)
+            result = prepare_pos_identities(case, Path(directory), call)
+        call.assert_called_once()
+        self.assertEqual(len(result['rows']), 24)
+
+    def test_clear_matrix_headers_do_not_need_merged_layout_metadata(self):
+        from tests.test_native_pos_matrix import matrix_case, pos_docs
+        case = matrix_case()
+        for unit in case['units']:
+            unit['sheet_layout'] = {'merged_ranges': None}
+        matrix = native_identity_extractions(pos_docs(case), case['units'])
+        self.assertEqual(matrix['matrix-0']['method'], 'native_matrix_cells')
+        self.assertEqual(len(matrix['matrix-0']['extracted']['rows']), 3)
+
     def extract(self, case):
         return native_identity_extractions(case['documents'], case['units'])
 

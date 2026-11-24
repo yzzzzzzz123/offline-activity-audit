@@ -33,3 +33,13 @@ def material_source_ids(case, material_id, *, states=('present', 'unclear')):
                   if material.get('id') == material_id and material.get('state') in states
                   for source in material.get('source_ids', [])]
     return resolve_source_ids(case, references)
+
+
+def inventory_notes(classification, scenario):
+    """Handoff the inventory model's original source references for document review."""
+    return {
+        'additional_files': [item for match in classification.get('material_matches', [])
+                             if match.get('scenario') == scenario
+                             for item in match.get('extra_materials', [])],
+        'background_files': classification.get('background_materials', []),
+    }

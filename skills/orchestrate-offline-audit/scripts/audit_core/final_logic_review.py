@@ -13,10 +13,12 @@ SKILL = Path(__file__).resolve().parents[3] / 'audit-final-logic'
 
 def packet_case(packet, provider):
     from .qince_amount_basis import approval_scope_flags
+    from .material_sources import inventory_notes
     saved = getattr(provider, '_audit_cases', {}).get(packet['archive_id'])
     case = {'archive_id': packet['archive_id'], 'scenario': packet['route'].get('scenario'),
         'flags': packet['classification']['flags'], 'materials': packet['classification']['materials'],
-        'documents': packet['documents'], 'units': packet['units']}
+        'documents': packet['documents'], 'units': packet['units'],
+        'inventory_notes': inventory_notes(packet['classification'], packet['route'].get('scenario'))}
     if saved and (saved['documents'], saved['materials']) == (case['documents'], case['materials']):
         case.update({k: v for k, v in saved.items() if k.startswith('_')})
     from .model_authority import enabled

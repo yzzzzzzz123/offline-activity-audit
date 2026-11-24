@@ -60,6 +60,7 @@
       "rule_ids": [
         "pos_seal",
         "pos_dealer",
+        "submitted_material_scope",
         "receipt_finance_seal"
       ],
       "material_roles": [

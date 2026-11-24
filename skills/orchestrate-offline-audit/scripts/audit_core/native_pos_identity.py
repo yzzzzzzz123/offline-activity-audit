@@ -4,8 +4,7 @@ Only unchanged program-read spreadsheet facts qualify. Ambiguous documents use
 the existing model extractor; header bindings never cross files or worksheets.
 """
 from collections import defaultdict
-
-from .pos_arithmetic import ROW, TOTAL
+from .pos_arithmetic import ROW, TOTAL, merged_cell_bounds
 from .spreadsheet_rows import parse_cells
 
 
@@ -16,6 +15,21 @@ BARCODE_HEADERS = frozenset({"69码", "条码", "商品条码", "国际条码", 
 def _cells(content):
     parsed = parse_cells(content)
     return {col: c['raw'] for col, c in parsed.items()} if parsed else None
+
+
+def _merged_report_title(sheet, number, cells, next_cells, layout):
+    """A single source cell spans both identity columns directly above their header."""
+    if len(cells) != 1 or not isinstance(layout, dict) or layout.get('sheet') != sheet:
+        return False
+    names = [c for c, v in next_cells.items() if v.strip() in NAME_HEADERS]
+    codes = [c for c, v in next_cells.items() if v.strip() in BARCODE_HEADERS]
+    if len(names) != 1 or len(codes) != 1:
+        return False
+    first, last = sorted((names[0], codes[0]))
+    for left, top, right, bottom in merged_cell_bounds(layout):
+        if top == bottom == number and left == min(cells) and left <= first <= last <= right:
+            return True
+    return False
 
 
 def native_identity_extractions(documents, units):
@@ -69,6 +83,7 @@ def native_identity_extractions(documents, units):
             continue
         for sheet, rows in sheets.items():
             columns = header = None
+            first_number = min(rows)
             for row_number, (uid, index, cells) in sorted(rows.items()):
                 output = outputs[uid]
                 names = [col for col, raw in cells.items() if raw.strip() in NAME_HEADERS]
@@ -85,6 +100,14 @@ def native_identity_extractions(documents, units):
                         rejected.add(uid)
                     continue
                 if columns is None:
+                    # A merged title immediately above a full, unambiguous
+                    # native header has no product cells. Keep its fact and
+                    # location; an arbitrary prefix still needs the model.
+                    if row_number == first_number and row_number + 1 in rows and _merged_report_title(
+                            sheet, row_number, cells, rows[row_number + 1][2], metadata[uid].get("sheet_layout") or {}):
+                        output["extracted"]["other_facts"].append({"fact_index": index,
+                            "kind": "header", "reason": "本表两项身份列的表头上方为单行合并标题。"})
+                        continue
                     rejected.add(uid)
                     continue
                 name = cells.get(columns["product_name"], "").strip()

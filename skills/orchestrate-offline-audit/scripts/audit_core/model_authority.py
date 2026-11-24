@@ -197,6 +197,15 @@ def business_guidance(scenario):
         POLICY, APPLICATION_CLARIFICATION, WORKBOOK_EVIDENCE_PROMPT, CUSTOMER_PROBLEM_STYLE])
 
 
+MATERIAL_ROUTING = (
+    '按每份附件的正文、签约方、门店和活动内容识别其资料角色。仅在上游明确提供上传字段时核对提交位置。'
+    '例如POS栏里的合同按合同盘点；继续独立寻找真实POS，缺少时按实际材料状态记录。'
+    '在本场景material_matches.extra_materials记录疑似混入其他经销商或活动的原件、明确的错放位置，'
+    '逐个给文件、来源和可核对的理由。明确标注的样张、模板、参考件记入background_materials。'
+    '同文件多页或同活动多份凭证可同时成立；文件名、近形错字或另一家企业名称单独出现不足以认定混单。'
+)
+
+
 def material_prompt(scenario, documents, *, large_venue_fee=None, cvs_otc_channel=False, compact_inventory=False):
     from dataclasses import asdict
     import json
@@ -221,10 +230,10 @@ def material_prompt(scenario, documents, *, large_venue_fee=None, cvs_otc_channe
         '接口事实largeVenueFee={large}、cvsOtcChannel={channel}；它们是本单已知业务输入，不是程序审核结论。'
         '按需使用资料和同单关联明细，不把系统明细冒充独立上传原件。'
         '条件性资料可用condition_evidence记录原文依据，不为填齐字段臆断适用。'
-        '参考样张只说明资料角色和样式，不计本包来源，不补齐本次上传资料。'
+        '参考样张只说明资料角色和样式，不计本包来源，不补齐本次上传资料。{routing}'
         '\n资料要求：{requirements}\n本类业务说明：{guide}\n本类条件及资料角色：{guidance}'
         '\n指定样张说明：{template_guide}\n业务背景：{background}\n全部已读事实：{documents}',
-        scenario=scenario, large=json.dumps(large_venue_fee), channel=json.dumps(cvs_otc_channel),
+        scenario=scenario, routing=MATERIAL_ROUTING, large=json.dumps(large_venue_fee), channel=json.dumps(cvs_otc_channel),
         requirements=json.dumps([asdict(r) for r in requirements(scenario)], ensure_ascii=False),
         guide=(skill/'references/business-guide.md').read_text('utf-8'),guidance=guidance,
         template_guide=template_guide(skill),background=_business_background(),

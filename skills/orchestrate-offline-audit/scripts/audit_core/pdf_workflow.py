@@ -5,21 +5,23 @@ from dataclasses import dataclass, field
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+import re
 
 from .common import AuditError, BizTypeRecognitionError, now_utc, validate_json
 from .customer_language import customer_reason, numeric_problem, plain_text
 from .error_reason import attach_error_reasons
 from .material_intake import prepare_material_diagnosis
 from .material_issue_files import attach_material_issue_files
-from .pdf_evidence import BIZ_TYPE_SCHEMA, audit_decision, classification_decision, validate, validate_documents
+from .material_sources import inventory_notes
+from .pdf_evidence import BIZ_TYPE_SCHEMA, DISPLAY_PHOTO_RULES, audit_decision, classification_decision, validate, validate_documents
 from .pdf_materials import prepare_units
-from .pdf_policy import POLICY_VERSION
+from .pdf_policy import POLICY_VERSION, SUBMITTED_SOURCE_CHECKS
 from .scenario_registry import SCENARIO_LABELS, SCENARIO_ORDER, scenario_for_biz_type
 from .workflow import build_audit_chain, invoke_audit_chain
 from .qince_context import context_sources, entry_context_sources
 from .qince_references import photo_reference_sources
 from .cross_claim_photos import inspect_and_record
-from .submitted_source_checks import submitted_source_checks
+from .submitted_source_checks import _json_fields, submitted_source_checks
 
 
 CHECK_CATEGORIES = {
@@ -31,7 +33,10 @@ CHECK_CATEGORIES = {
     "display_watermark": "陈列水印", "display_brand": "陈列产品品牌",
     "display_material_brand": "陈列物料上的品牌", "atrium_agreement": "商场入场协议",
     "display_quantity_price": "陈列数量与单价", "display_size": "申请陈列大小",
+    "display_store_coverage": "申请门店陈列照片覆盖",
     "payment_company": "红包公司名称",
+    "submitted_material_scope": "附件所属活动与提交位置",
+    "payment_attribution": "逐笔付款用途与收付关系",
     "payment_claim_amount": "红包与核销金额", "staff_daily_photos": "临促每日照片",
     "settlement_seal": "结算单盖章",
     "invoice_details": "发票收据信息", "finished_photo": "物料成品照片",
@@ -46,7 +51,7 @@ CHECK_CATEGORIES = {
     "entry_duplicate": "不同申报门店的照片地址重复",
     "entry_photo_coverage": "上架照片门店覆盖",
     "entry_inventory": "全量进场库存或POS证明",
-    "stamped_document_pdf": "验章资料PDF格式",
+    "stamped_document_pdf": "签章资料提交格式",
     "gift_activity_evidence": "外采赠品执行证明",
 }
 CHECK_CATEGORIES.update({
@@ -69,6 +74,13 @@ CHECK_CATEGORIES.update({
     'receipt_finance_seal':'收据收款方财务专用章',
     'poster_payment_dates':'海报张贴费用支付日期',
 })
+
+SEAL_SUBJECT_RULES = {
+    'pos_seal': 'pos', 'pos_dealer': 'pos',
+    'settlement_seal': 'settlement', 'settlement_template_seal': 'settlement', 'settlement_dealer': 'settlement',
+    'contract_signed': 'contract', 'contract_dealer': 'contract',
+    'payment_statement_seal': 'payment', 'payment_statement_dealer': 'payment',
+}
 
 
 def _basename(value: str) -> str:
@@ -225,6 +237,51 @@ def _submitted_check_rows(packet: dict, start: int) -> list[dict]:
     return rows
 
 
+def _display_report_checks(result, documents):
+    checks = result["checks"]
+    if not result.get("photo_reviews"):
+        return checks, []
+    individual_rules = {item['rule_id'] for review in result['photo_reviews'] for item in review['checks']}
+    rollups = [c for c in checks if c['rule_id'] in DISPLAY_PHOTO_RULES and c['rule_id'] in individual_rules]
+    remaining = [c for c in checks if c not in rollups]
+    if any(c['rule_id'] == 'display_store_coverage' for c in remaining):
+        return remaining, rollups
+
+    # Older archives stored multi-store findings inside photo roll-ups. Surface
+    # only explicit missing-photo clauses and retain the original decisions and
+    # sources in the sheet evidence. Do not infer absences from a store name.
+    names = {}
+    for doc in documents:
+        name = _json_fields(doc).get('cusName')
+        if isinstance(name, str) and name.strip():
+            names[doc['unit_id']] = name.strip()
+    missing_photo = re.compile(r'(?:缺少|缺失|缺交|未(?:提交|提供|上传|附上)|没有|无)(?:对应的?|该店的?|本店的?|任何|有效的?|现场的?|陈列的?|相关的?|实际的?|可核对的?|的|一张|[“”「」【】])*(?:现场|陈列)?(?:照片|图片)')
+    reported = set()
+    for check in rollups:
+        if check['status'] not in {'fail', 'unknown'}:
+            continue
+        source_names = {names[uid] for uid in check['source_ids'] if uid in names}
+        for clause in re.split(r'[。；;，,！？\n]', check['reason']):
+            clause = clause.strip()
+            match = missing_photo.search(clause)
+            if not match:
+                continue
+            stores = tuple(sorted(name for name in source_names if name in clause))
+            if not stores:
+                # Some submitted applications only contain prose. Use an
+                # explicitly named store in the original clause in that case.
+                named = re.search(r'([^：:（）()“”【】]*?(?:门店|店|超市|购物中心|商场))'
+                                  r'[”】]?(?:也|均|均已|仍|尚|还)?$', clause[:match.start()])
+                if named:
+                    stores = (re.sub(r'^(?:本单申请的?|申请的|本次申请的?)', '', named[1]),)
+            if not stores or stores in reported:
+                continue
+            reported.add(stores)
+            remaining.append({**check, 'rule_id': 'display_store_coverage', 'reason': clause + '。',
+                              'requirement': SUBMITTED_SOURCE_CHECKS['display_store_coverage']['requirement']})
+    return remaining, rollups
+
+
 def build_view(packets: list[dict], rejection: dict | None) -> dict:
     sheets = []
     for packet in packets:
@@ -234,6 +291,7 @@ def build_view(packets: list[dict], rejection: dict | None) -> dict:
         scenario = result["scenario"]
         label = SCENARIO_LABELS[scenario]
         rows = []
+        seal_subjects = {}
         for review in result.get("photo_reviews", []):
             unit = next((unit for unit in packet["units"] if unit["unit_id"] == review["unit_id"]),
                         {'source_file':review['unit_id'], 'locator':'模型照片引用（尚未定位到本单原图）'})
@@ -259,11 +317,9 @@ def build_view(packets: list[dict], rejection: dict | None) -> dict:
                          "business_source_files": [unit["source_file"]] if issue_checks else [],
                          "values": [location, findings, "逐张按现有陈列照片要求核对水印、实物品牌、宣传物料及大小",
                                     "已核对，符合要求" if passed else "暂时不能确认" if status == "unknown" else "需要处理", "", ""]})
-        for check in result["checks"]:
+        checks, photo_rollups = _display_report_checks(result, packet["documents"])
+        for check in checks:
             if check["status"] == "not_applicable":
-                continue
-            if result.get("photo_reviews") and check["rule_id"] in {
-                    "display_watermark", "display_brand", "display_material_brand", "display_size"}:
                 continue
             evidence = card_evidence(check["source_ids"], packet["units"], packet["documents"])
             evidence["comparisons"] = check.get("calculations") or []
@@ -277,6 +333,17 @@ def build_view(packets: list[dict], rejection: dict | None) -> dict:
             passed = check["status"] == "pass"
             category = CHECK_CATEGORIES.get(check["rule_id"],check["rule_id"])
             heading = category + ("：暂时不能确认" if check["status"] == "unknown" else "：需要处理" if not passed else "：已核对")
+            items = [_summary_item(check, packet["units"], reason=reason)] if not passed else []
+            seal_id = check.get('unreadable_seal_unit_id')
+            if (check['status'] == 'unknown' and check['rule_id'] in SEAL_SUBJECT_RULES
+                    and isinstance(seal_id, str) and seal_id in check['source_ids']
+                    and any(unit['unit_id'] == seal_id for unit in packet['units'])):
+                group = (SEAL_SUBJECT_RULES[check['rule_id']], seal_id)
+                first_rule = seal_subjects.setdefault(group, check['rule_id'])
+                if first_rule != check['rule_id']:
+                    # Keep both detailed decisions; the model explicitly tied
+                    # their sole uncertainty to the same stamp on this page.
+                    items = []
             rows.append({"excel_row": len(rows) + 4, "kind": "record", "section": "detail",
                          "status": "pass" if passed else "issue",
                          "confidence": "low" if check["status"] == "unknown" else "high",
@@ -284,7 +351,7 @@ def build_view(packets: list[dict], rejection: dict | None) -> dict:
                          "check_category": category,
                          "numeric": bool(check.get("calculations")),
                          "rule_id": check["rule_id"], "card_evidence": evidence,
-                         "summary_items": [_summary_item(check, packet["units"], reason=reason)] if not passed else [],
+                         "summary_items": items,
                          "error_reason": "" if passed else reason,
                          "error_reasons": [] if passed else [reason],
                          "values": [files or "目前没有对应资料可供核对", reason, plain_text(check["requirement"], packet["units"]),
@@ -298,6 +365,7 @@ def build_view(packets: list[dict], rejection: dict | None) -> dict:
                        "source_archive": packet["source_archive"], "archive_id": packet["archive_id"],
                        "business_decision": "issues_found" if failures else result["summary"]["conclusion"], "note": "",
                        "headers": ["资料名称", "查到的情况", "要求", "结果", "按规则处理", "处理方式"],
+                       **({"photo_rollup_evidence": photo_rollups} if photo_rollups else {}),
                        "rows": rows, "audit_counts": {"source_row_count": len(rows), "error_count": failures,
                                                       "detail_error_count": failures, "context_error_count": 0}})
     if rejection:
@@ -490,6 +558,7 @@ class PdfWorkflow:
                 "worktrees_root": self.worktrees_root,
                 "run_id": self.run_id, "workspace_id": self.workspace_id,
                 "materials": reading["classification"]["materials"],
+                "inventory_notes": inventory_notes(reading["classification"], scenario),
                 "documents": reading["documents"], "units": units,
                 "_submitted_source_advice":packet.get('submitted_source_checks',[]),
                 "_photo_reuse_advice":packet.get('photo_reuse',{})}, self.temporary_root)

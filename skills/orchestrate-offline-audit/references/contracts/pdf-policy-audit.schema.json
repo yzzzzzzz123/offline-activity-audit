@@ -271,6 +271,7 @@
               "reference_fields",
               "linked_application_amounts",
               "pos_calculation",
+              "amount_calculation",
               "source_inventory",
               "activity_periods",
               "pos_field_inventory",
@@ -291,6 +292,12 @@
             }
           },
           "products": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "comparisons": {
             "type": "array",
             "items": {
               "type": "object"

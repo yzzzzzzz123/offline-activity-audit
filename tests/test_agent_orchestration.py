@@ -91,6 +91,76 @@ def offline_helpers(stack):
 
 
 class AgentOrchestrationTests(TestCase):
+    def test_inventory_extras_reach_document_review_and_customer_summary(self):
+        from audit_core.pdf_workflow import PdfWorkflow
+        from audit_core.scenario_registry import SCENARIO_LABELS
+        from tests.pdf_test_support import bundle, image_bytes
+
+        class MaterialReviewFixture(FixtureProvider):
+            def _call_stage(self, root, skill, schema, prompt, **options):
+                answer = super()._call_stage(root, skill, schema, prompt, **options)
+                variables = prompt.partial_variables
+                if 'candidate_scenarios' in schema['properties']:
+                    docs = json.loads(variables['documents'])
+                    by_heading = {doc['facts'][0]: doc['unit_id'] for doc in docs}
+                    match = next(m for m in answer['material_matches'] if m['scenario'] == variables['scenario'])
+                    match['extra_materials'] = [{
+                        'description': '其他活动合同', 'reason': '原件为另一地区经销商的达标奖励合同',
+                        'source_ids': [by_heading['乙地经销商达标奖励合同']]}]
+                    answer['background_materials'] = [{
+                        'description': '注明样张', 'reason': '页首注明参考样张',
+                        'source_ids': [by_heading['参考样张']]}]
+                request = json.loads(variables.get('request', '{}'))
+                if request.get('agent_id') == 'documents' and 'rules' in request:
+                    notes = request['inventory_notes']
+                    check = next(row for row in answer['checks'] if row['rule_id'] == 'submitted_material_scope')
+                    check.update(status='fail', reason=notes['additional_files'][0]['reason'],
+                                 source_ids=notes['additional_files'][0]['source_ids'])
+                return answer
+
+        with TemporaryDirectory() as directory, ExitStack() as stack:
+            offline_helpers(stack)
+            root = Path(directory)
+            bundle(root/'input', files={'POS销售明细/合同.png': image_bytes('blue'),
+                                       '样张.png': image_bytes('yellow'), '本次合同.png': image_bytes('red')})
+            provider = MaterialReviewFixture()
+            locations = {}
+            headings = {'POS销售明细/合同.png': '乙地经销商达标奖励合同', '样张.png': '参考样张',
+                        '本次合同.png': '甲地经销商买赠合同'}
+            def read(case, *args):
+                locations.update({u['source_file']: u['unit_id'] for u in case['units']})
+                return [{'unit_id': u['unit_id'], 'roles': ['合同'], 'facts': [headings[u['source_file']]],
+                         'limitations': []} for u in case['units']]
+            stack.enter_context(patch.object(provider, '_read_documents', side_effect=read))
+            flow = PdfWorkflow('materials-feedback-fixture', 'fixture', root/'input', root/'model',
+                               provider, None, None, biz_type=SCENARIO_LABELS['giveaway_promotion'])
+            result = flow.run()
+            reviewed = next(c for c in flow.packets[0]['audit_evidence']['checks']
+                            if c['rule_id'] == 'submitted_material_scope')
+            self.assertEqual(reviewed['source_ids'], [locations['POS销售明细/合同.png']])
+            child_request = next(record['request'] for record in provider.captured
+                                 if record['request'].get('agent_id') == 'documents' and 'rules' in record['request'])
+            self.assertEqual(child_request['inventory_notes']['background_files'][0]['source_ids'],
+                             [locations['样张.png']])
+            self.assertNotIn(locations['样张.png'], reviewed['source_ids'])
+            self.assertIn('原件为另一地区经销商的达标奖励合同', json.dumps(result,ensure_ascii=False))
+
+    def test_payment_purpose_an_independent_amount_agent_check_with_original_receipts(self):
+        from audit_core.pdf_policy import applicability
+        case = fixture_case('personnel_incentive')
+        case['materials'].append({'id': 'payment', 'state': 'present', 'source_ids': ['pay1','pay2']})
+        for uid, fact in [('pay1','1800元；备注：参半临促工资'), ('pay2','1700元；无用途备注')]:
+            case['documents'].append({'unit_id': uid, 'facts': [fact], 'roles': ['支付凭证']})
+            case['units'].append({'unit_id': uid, 'source_file': uid+'.png', 'locator': '图片'})
+        numeric = scoped_case(case, 'numbers')
+        spec = next(row for row in numeric['_agent_rule_specs'] if row['id']=='payment_attribution')
+        self.assertIn('payment_claim_amount', {r['id'] for r in numeric['_agent_rule_specs']})
+        self.assertEqual(owner(spec['id']), 'numbers')
+        self.assertIn('其他交易的备注不能代用', spec['text'])
+        self.assertTrue({'pay1','pay2'} <= {d['unit_id'] for d in numeric['documents']})
+        self.assertTrue(applicability(spec['when'], case['scenario'], {'temporary_staff': True}))
+        self.assertFalse(applicability(spec['when'], case['scenario'], {'store_incentive': True}))
+
     def test_all_eight_types_keep_every_rule_in_one_owner_and_all_original_rows(self):
         from audit_core.pdf_policy import rules
         for scenario in SCENARIO_ORDER:

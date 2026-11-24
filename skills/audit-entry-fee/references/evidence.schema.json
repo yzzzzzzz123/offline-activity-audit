@@ -21,6 +21,7 @@
               "entry_watermark",
               "entry_sku",
               "entry_application_products",
+              "submitted_material_scope",
               "stamped_document_pdf"
             ]
           },
@@ -266,8 +267,8 @@
           "comparisons"
         ]
       },
-      "minItems": 11,
-      "maxItems": 11
+      "minItems": 12,
+      "maxItems": 12
     },
     "tool_requests": {
       "type": "array",
@@ -286,6 +287,7 @@
               "reference_fields",
               "linked_application_amounts",
               "pos_calculation",
+              "amount_calculation",
               "source_inventory",
               "activity_periods",
               "pos_field_inventory",
@@ -306,6 +308,12 @@
             }
           },
           "products": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "comparisons": {
             "type": "array",
             "items": {
               "type": "object"

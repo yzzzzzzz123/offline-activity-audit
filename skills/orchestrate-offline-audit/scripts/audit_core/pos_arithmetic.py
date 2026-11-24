@@ -69,15 +69,35 @@ def _formula_column_candidate(cells: dict) -> dict | None:
     return {"quantity": quantity[0], "price": factors[0], "amount": totals[0]}
 
 
+def merged_cell_bounds(layout):
+    """Return verified Excel rectangle bounds or no layout evidence for old snapshots."""
+    from openpyxl.utils.cell import range_boundaries
+    addresses = layout.get('merged_ranges') if isinstance(layout, dict) else None
+    if not isinstance(addresses, (list, tuple)):
+        return []
+    bounds = []
+    for address in addresses:
+        if not isinstance(address, str):
+            return []
+        try:
+            left, top, right, bottom = range_boundaries(address)
+        except ValueError:
+            return []
+        if (None in (left, top, right, bottom) or not 1 <= left <= right <= 16_384
+                or not 1 <= top <= bottom <= 1_048_576):
+            return []
+        bounds.append((left, top, right, bottom))
+    return bounds
+
+
 def _merged_header_columns(row, rows, layout):
     """Resolve explicit two-row headers from native merge boundaries only.
 
     This supplies column meaning, never data values. A numeric cell is never
     filled down or duplicated, and column bindings cannot cross sheets/files.
     """
-    if not layout or not layout.get('merged_ranges'):
+    if not isinstance(layout, dict) or not layout.get('merged_ranges'):
         return None
-    from openpyxl.utils.cell import range_boundaries
     index = row['index']
     previous = rows.get(index - 1)
     if previous is None:
@@ -85,8 +105,7 @@ def _merged_header_columns(row, rows, layout):
     if any(NUMBER.fullmatch(c['raw'].strip()) or c['raw'].startswith('公式') for c in row['cells'].values()):
         return None
     labels = {col: cell['raw'] for col, cell in row['cells'].items()}
-    for address in layout['merged_ranges']:
-        first_col, first_row, last_col, last_row = range_boundaries(address)
+    for first_col, first_row, last_col, last_row in merged_cell_bounds(layout):
         parent = rows.get(first_row, {}).get('cells', {}).get(first_col, {}).get('raw', '')
         if not parent or NUMBER.fullmatch(parent.strip()) or parent.startswith('公式'):
             continue
@@ -243,10 +262,12 @@ def _inline_amount_total(row: dict) -> dict | None:
 
 
 def prepare_pos_arithmetic(documents: list[dict], materials: list[dict] | None,
-                           units: list[dict] | None = None, *, amount_only: bool = False) -> dict | None:
+                           units: list[dict] | None = None, *, amount_only: bool = False,
+                           scenario: str | None = None, check_progress=None) -> dict | None:
     """Return a source-bound plan, or None for older non-native evidence."""
     if materials is None:
         return None
+    check_quantity_total = not amount_only and scenario != 'pos_target_incentive'
     ids = {uid for material in materials if material["id"] == "pos_excel"
            and material["state"] == "present" for uid in material["source_ids"]}
     metadata = {u["unit_id"]: u for u in units or []}
@@ -259,6 +280,8 @@ def prepare_pos_arithmetic(documents: list[dict], materials: list[dict] | None,
         meta = metadata.get(uid, {})
         unread = 0
         for fact in document["facts"]:
+            if check_progress is not None:
+                check_progress()
             matched = ROW.fullmatch(fact)
             if not matched:
                 unread += 1
@@ -288,6 +311,8 @@ def prepare_pos_arithmetic(documents: list[dict], materials: list[dict] | None,
         columns, details, totals, blocks = None, [], [], []
         formula_mapping = False
         for row in sorted(rows.values(), key=lambda r: r["index"]):
+            if check_progress is not None:
+                check_progress()
             header = _columns(row["cells"], amount_only=amount_only)
             if header is None and not amount_only:
                 header = _merged_header_columns(row, rows, row.get('sheet_layout'))
@@ -347,8 +372,10 @@ def prepare_pos_arithmetic(documents: list[dict], materials: list[dict] | None,
                                     "left": values["amount"], "right": [values["quantity"], values["price"]],
                                     "operation": "product", "operator": "ge"})
             if not totals:
-                limitations.append(f"{sheet}未找到销售金额合计。" if amount_only else f"{sheet}未找到销售数量及金额合计，无法完成两项合计复算。")
+                limitations.append(f"{sheet}未找到销售数量及金额合计，无法完成两项合计复算。" if check_quantity_total else f"{sheet}未找到销售金额合计。")
             for total in totals:
+                if check_progress is not None:
+                    check_progress()
                 inline_amount = _inline_amount_total(total)
                 if inline_amount is not None:
                     # This alternate layout is accepted only as the sole final
@@ -367,10 +394,10 @@ def prepare_pos_arithmetic(documents: list[dict], materials: list[dict] | None,
                         comparisons.append({"label": f"{sheet}第{total['index']}行销售金额合计（全部{len(details)}行）",
                                             "value_kind": "amount", "left": inline_amount, "right": terms,
                                             "operation": "sum", "operator": "ge"})
-                    if not amount_only:
+                    if check_quantity_total:
                         limitations.append(f"{sheet}未找到销售数量合计，无法完成数量合计复算。")
                     continue
-                for kind in (("amount",) if amount_only else ("quantity", "amount")):
+                for kind in (("quantity", "amount") if check_quantity_total else ("amount",)):
                     col = columns[kind]
                     left = _cell_operand(total, col)
                     raw = total["cells"].get(col, {}).get("raw", "")

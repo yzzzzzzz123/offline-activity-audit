@@ -40,8 +40,10 @@
               "pos_seal",
               "pos_dealer",
               "application_products",
+              "submitted_material_scope",
               "stamped_document_pdf",
               "pos_activity_dates",
+              "payment_attribution",
               "contract_reward_unit_price"
             ]
           },
@@ -323,8 +325,8 @@
           }
         ]
       },
-      "minItems": 32,
-      "maxItems": 32
+      "minItems": 34,
+      "maxItems": 34
     },
     "tool_requests": {
       "type": "array",
@@ -343,6 +345,7 @@
               "reference_fields",
               "linked_application_amounts",
               "pos_calculation",
+              "amount_calculation",
               "source_inventory",
               "activity_periods",
               "pos_field_inventory",
@@ -363,6 +366,12 @@
             }
           },
           "products": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "comparisons": {
             "type": "array",
             "items": {
               "type": "object"

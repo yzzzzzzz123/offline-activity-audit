@@ -27,7 +27,7 @@ class WorkbookPolicyTests(unittest.TestCase):
         self.assertEqual(snapshot['user_corrections'][0]['cell'],'Sheet1!H12')
         self.assertEqual(snapshot['user_corrections'][0]['execution'],'结算销量≤POS全量对应销量')
         self.assertEqual(snapshot['user_corrections'][1]['cell'],'Sheet1!H13')
-        self.assertEqual(POLICY_VERSION,'2026-11-17.xlsx.53')
+        self.assertEqual(POLICY_VERSION,'2026-11-24.xlsx.54')
 
     def test_all_eight_types_have_current_sources_closed_schemas_and_unique_checks(self):
         policy=catalogue();self.assertEqual(len(policy['types']),8)

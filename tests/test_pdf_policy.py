@@ -574,6 +574,18 @@ class PdfReadingTests(unittest.TestCase):
         self.assertNotIn("人员激励.xlsx", prompts[0])
         self.assertNotIn('"audit_points"', prompts[0])
 
+    def test_only_an_explicit_upload_field_reaches_material_classification(self):
+        bundle(self.root/'input', files={'POS销售明细/合同.png': image_bytes(), '样张.png': image_bytes()})
+        intake = prepare_material_diagnosis(self.root/'input', self.root/'sources', original_error='', classify_by_content=True)
+        archive = intake['archives'][0]
+        original = next(f for f in archive['inventory'] if f['source_file'] == 'POS销售明细/合同.png')
+        original['upload_field'] = 'POS销售明细'
+        units = prepare_units(archive, self.root/'units')
+        prompt = PdfEvidenceProvider._material_locations({'units': units})
+        fields = json.loads(prompt.partial_variables['locations'])
+        self.assertEqual(fields, [{'unit_id': original['file_id'], 'upload_field': 'POS销售明细'}])
+        self.assertNotIn('合同.png', render_prompt(prompt))
+
     def test_vector_pdf_has_all_complete_pages_and_nested_photos_keep_original_names(self):
         doc = pymupdf.open()
         for text in ("Contract first page", "Contract second page"):

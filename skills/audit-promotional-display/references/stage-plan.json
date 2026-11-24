@@ -43,6 +43,21 @@
       ]
     },
     {
+      "name": "documents",
+      "rule_ids": [
+        "submitted_material_scope"
+      ],
+      "material_roles": [
+        "activity_application",
+        "invoice",
+        "payment",
+        "pos",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": []
+    },
+    {
       "name": "dates",
       "rule_ids": [
         "settlement_activity_dates",

@@ -63,6 +63,21 @@ def inline_total_source():
 
 
 class PosArithmeticCoverageTests(unittest.TestCase):
+    def test_target_exempts_only_quantity_total_including_inline_amount_totals(self):
+        documents, materials, units = inline_total_source()
+        target = prepare_pos_arithmetic(documents, materials, units, scenario='pos_target_incentive')
+        self.assertTrue(target['complete'], target['limitations'])
+        self.assertEqual([c['operation'] for c in target['comparisons']], ['product'] * 10 + ['sum'])
+        for scenario in ('giveaway_promotion', 'personnel_incentive'):
+            with self.subTest(scenario=scenario):
+                other = prepare_pos_arithmetic(documents, materials, units, scenario=scenario)
+                self.assertFalse(other['complete'])
+                self.assertTrue(any('数量合计' in note for note in other['limitations']))
+        documents[0]['facts'].pop()
+        no_total = prepare_pos_arithmetic(documents, materials, units, scenario='pos_target_incentive')
+        self.assertFalse(no_total['complete'])
+        self.assertIn('销售未找到销售金额合计。', no_total['limitations'])
+
     def test_partial_ten_row_model_sum_cannot_create_a_false_whole_sheet_difference(self):
         documents, materials, units = source()
         flags = flags_for("personnel_incentive")

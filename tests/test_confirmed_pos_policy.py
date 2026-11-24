@@ -264,15 +264,19 @@ class AuditColumnScopeTests(unittest.TestCase):
         for scenario, expected in AUDIT_COLUMN_IDS.items():
             with self.subTest(scenario=scenario):
                 actual = rules(scenario)
-                common = {"pos_fields", "pos_arithmetic", "pos_product_identity"}
+                common = {"pos_fields", "pos_arithmetic", "pos_product_identity", "submitted_material_scope"}
                 meeting = {'stamped_document_pdf'} | ({'gift_activity_evidence'} if scenario == 'self_procured_gift_material' else set())
-                additions = {'personnel_incentive': {'pos_activity_dates','contract_reward_unit_price'},
+                additions = {'personnel_incentive': {'pos_activity_dates','contract_reward_unit_price','payment_attribution'},
                     'promotional_display': {'claim_ceiling'}, 'poster_material': {'receipt_finance_seal','poster_payment_dates'},
                     'self_procured_gift_material': {'pos_activity_dates','receipt_finance_seal'},
                     'price_difference_support': {'pos_activity_dates'}, 'giveaway_promotion': {'pos_activity_dates'},
                     'pos_target_incentive': {'claim_ceiling','pos_activity_dates'}}
                 self.assertEqual({r.id for r in actual}, expected | common | meeting | additions.get(scenario,set()))
-                self.assertTrue(all('Sheet1!H' in r.source or r.source.startswith('用户确认') for r in actual))
+                for rule in actual:
+                    if rule.id == 'submitted_material_scope':
+                        self.assertIn('Sheet1!A1及销售支持资料归属反馈', rule.source)
+                    else:
+                        self.assertTrue('Sheet1!H' in rule.source or rule.source.startswith('用户确认'), rule.id)
 
     def test_material_only_and_background_audits_are_rejected_for_every_type(self):
         forbidden = {"scene_authenticity", "fraud", "bi_quota", "submission_deadline", "review_deadline",

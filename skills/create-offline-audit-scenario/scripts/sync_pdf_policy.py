@@ -66,7 +66,7 @@ description: 按用户指定的费用分类及申请核销资料表审核{label}
 
 # {label}核销
 
-资料栏用于盘点，缺项或条件不明不阻止继续审核；由执行模型自主执行《{SOURCE_TITLE}》Sheet1本类H列“AI核销分析的要点”及已确认补充。2026.11.17新表覆盖冲突的旧表及会议口径，所有使用POS的类型均检查完整5+2字段及原值复算。规则版本 `{POLICY_VERSION}`。
+资料栏用于盘点，缺项或条件不明不阻止继续审核；由执行模型自主执行《{SOURCE_TITLE}》Sheet1本类H列“AI核销分析的要点”及已确认补充。2026.11.17新表覆盖冲突的旧表及会议口径，逐行按原值核对，POS达标激励免查销售数量合计，其余类型执行完整POS要求。规则版本 `{POLICY_VERSION}`。
 {ROUTING_CLARIFICATION}
 {RESULT_CLARIFICATION}
 {BRAND_CONTRACT_CLARIFICATION}
@@ -105,7 +105,7 @@ description: 按用户指定的费用分类及申请核销资料表审核{label}
                  "逐项执行还须阅读 [业务说明](business-guide.md)；客户页面和回调遵守 [客户结果写法](../../orchestrate-offline-audit/references/customer-language.md)。", "",
                  "## 已确认业务口径", "", ROUTING_CLARIFICATION, "", RESULT_CLARIFICATION, "", AUDIT_SCOPE_CLARIFICATION, "", BRAND_CONTRACT_CLARIFICATION, "", AMOUNT_CLARIFICATION, "", UNIT_PRICE_CLARIFICATION, "", POS_CLARIFICATION, ""]
         lines += [PRODUCT_PHOTO_CLARIFICATION, "", IMAGE_FACT_REUSE_CLARIFICATION, "", POS_COMMON_CLARIFICATION, "", LOCATION_REFERENCE_CLARIFICATION, "", PHOTO_TIME_PRESENCE_CLARIFICATION, "",
-                  "POS字段核对、复算和商品库一致性按当前新表及已确认补充执行，所有使用POS的类型均查5+2项，包括POS达标激励。数据以Excel为准；准确69码查库，保留商品名称原文，额外产品编码不审核。", ""]
+                  "POS字段核对、复算和商品库一致性按当前新表及已确认补充执行，涉及POS的类型核对通用字段；仅POS达标激励免查销售数量合计。数据以Excel为准；准确69码查库，保留商品名称原文，额外产品编码不审核。", ""]
         if scenario == "self_procured_gift_material":
             lines += [GIFT_CONTRACT_CLARIFICATION, "", GIFT_MATERIAL_CLARIFICATION, ""]
         if scenario == "price_difference_support":
@@ -164,7 +164,7 @@ description: 按用户指定的费用分类及申请核销资料表审核{label}
           "self_procured_gift_material":[GIFT_MATERIAL_CLARIFICATION],
           "price_difference_support":["新表要求结算逐69码销量与POS Excel对应全量销量相等，覆盖此前只检查上限的口径；补差单价与系统申请对应单价相等。", "逐图水印日期/地址/拍摄时间与申请活动对应，活动价签与合同促销价一致。价格可读性和日期独立核对；普通补差不额外要求满减活动证明，明确满减返还才适用已有分支。"],
           "giveaway_promotion":["系统申请条形码为赠送商品，POS按购买商品计算；不能把购买SKU与赠送SKU混成一个角色。", "搭赠数量×搭赠单价按原值复算；按真实搭赠规则从POS销量/金额计算应搭赠数量，应搭赠数量≥申报搭赠数量。各店活动照片或小票二选一，允许混合提交共同覆盖全量，具体列出无法覆盖或无法对应的门店。"],
-          "pos_target_incentive":[POS_CLARIFICATION, "核对实际POS销售金额≥结算对应POS销售金额，按真实档位计算奖励，实际核销金额=本单有效批复合计；公章验章资料提交PDF，另保留原生Excel。"],
+          "pos_target_incentive":[POS_CLARIFICATION, "核对实际POS销售金额≥结算对应POS销售金额，按真实档位计算奖励，实际核销金额=本单有效批复合计；盖章POS提交PDF并另交原生Excel；合同、结算可用PDF、JPG/JPEG或PNG。"],
           "entry_fee":[ENTRY_CHANNEL_CLARIFICATION, "逐店逐申请69码列明已识别、明确缺失和无法确认；同店多角度可互补，不能跨店借用。产品推广协议使用公章，原双方盖章要求保留。"],
         }[scenario]
         guide += ["", "## 数值、证据及结果", "", "POS以Excel原值为准，盖章版不能补缺项；准确69码查库，商品名称保留原文。销售提成结算销量≤POS销量，补差销量相等，其他数量及单价各按本类规则；十进制原精度核对，不加容差。", SEAL_CLARIFICATION, "只输出有来源支持的具体问题，不列无关附件，不自动决定付款、0核销、罚款或通知人事；历史结果不随当前规则改写。", ""]

@@ -10,7 +10,7 @@ from collections import defaultdict
 from datetime import date, datetime
 import re
 
-from .native_pos_identity import NAME_HEADERS, BARCODE_HEADERS
+from .native_pos_identity import NAME_HEADERS, BARCODE_HEADERS, _merged_report_title
 from .pos_arithmetic import _columns, _header_label, _cell_operand, TOTAL, prepare_pos_arithmetic
 from .price_support_dates import _period
 from .spreadsheet_rows import ROW, parse_cells
@@ -73,12 +73,14 @@ def native_pos_field_check(case, plan=None):
     """Return (check or None, source-indexed receipt), with zero model calls.
 
     The full arithmetic plan must already establish every numeric detail and
-    both totals. Independently scan every original fact for same-sheet column
+    the totals required for this scenario. Independently scan each fact for same-sheet column
     bindings, original names/barcodes and activity time. A single unresolved
     fact/row/source retains the normal model path; it does not fail the bill.
     """
+    total_keys = ('amount',) if case.get('scenario') == 'pos_target_incentive' else ('quantity', 'amount')
+    totals_label = '销售金额合计' if total_keys == ('amount',) else '数量及金额合计'
     proof = {'tool': 'native_pos_fields', 'model_calls': 0, 'complete': False,
-             'scope': '仅POS电子版5+2字段完整性；不代替商品查库、周期对齐或金额复算。',
+             'scope': f'仅POS电子版字段完整性，含{totals_label}；商品查库、周期对齐及金额复算分别核对。',
              'sources': [], 'tables': []}
 
     def fallback(reason):
@@ -100,7 +102,8 @@ def native_pos_field_check(case, plan=None):
     metadata = {u['unit_id']: u for u in units}
     source_facts = {d['unit_id']: d['facts'] for d in docs}
     if plan is None:
-        plan = prepare_pos_arithmetic(case['documents'], case['materials'], case.get('units'))
+        plan = prepare_pos_arithmetic(case['documents'], case['materials'], case.get('units'),
+                                      scenario=case.get('scenario'))
     if not plan or not plan['complete']:
         return fallback('native_numeric_coverage_not_complete')
     sheets = defaultdict(dict)
@@ -129,6 +132,7 @@ def native_pos_field_check(case, plan=None):
         columns = None
         time_title = None
         table = None
+        first_row = min(rows)
         for row, (uid, index) in sorted(rows.items()):
             cells = parse_cells(ROW.fullmatch(source_facts[uid][index])[3])
             if not cells:
@@ -147,6 +151,13 @@ def native_pos_field_check(case, plan=None):
                 # A narrow report heading, not arbitrary notes or extra data.
                 # It cannot supply missing field values, time or identifiers.
                 continue
+            if row == first_row and len(values) == 1 and row + 1 in rows:
+                next_uid, next_index = rows[row + 1]
+                next_cells = parse_cells(ROW.fullmatch(source_facts[next_uid][next_index])[3])
+                if next_cells and _merged_report_title(
+                        sheet, row, values, {col: cell['raw'] for col, cell in next_cells.items()},
+                        metadata[uid].get('sheet_layout') or {}):
+                    continue
             numeric = _columns(cells)
             if numeric:
                 # Generic 名称 is unambiguous only inside a POS header with
@@ -186,7 +197,7 @@ def native_pos_field_check(case, plan=None):
             # arithmetic independently proves its complete operand coverage.
             if any(TOTAL.fullmatch(v) for v in values.values()) and not values.get(columns['barcode']):
                 native = {'unit_id': uid, 'index': row, 'cells': cells}
-                if any(_cell_operand(native, columns[k]) is None for k in ('quantity', 'amount')):
+                if any(_cell_operand(native, columns[k]) is None for k in total_keys):
                     return fallback('native_totals_not_resolved')
                 table['total_sources'].append(pointer)
                 continue
@@ -206,7 +217,7 @@ def native_pos_field_check(case, plan=None):
             or detail_count != sum(t['detail_rows'] for t in plan['tables'])):
         return fallback('native_full_table_coverage_not_proven')
     proof.update(complete=True, detail_rows=detail_count,
-                 fields=['活动时间', '69码', '商品名称', '销售数量', '销售单价', '销售金额', '数量及金额合计'])
+                 fields=['活动时间', '69码', '商品名称', '销售数量', '销售单价', '销售金额', totals_label])
     return {'rule_id': 'pos_fields', 'status': 'pass',
-            'reason': 'POS电子版的活动时间、69码、商品名称、销售数量、销售单价、销售金额及数量和金额合计齐全。',
+            'reason': f'POS电子版的活动时间、69码、商品名称、销售数量、销售单价、销售金额及{totals_label}齐全。',
             'source_ids': [d['unit_id'] for d in docs], 'comparisons': []}, proof

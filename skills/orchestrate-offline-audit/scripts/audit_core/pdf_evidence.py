@@ -1584,7 +1584,7 @@ def _program_audit_decision(scenario: str, flags: dict, evidence: dict, document
                        if material_rule_ids.get(m["id"]) in allowed}
     material_labels = {r.id: r.text for r in requirements(scenario)}
     checks = []
-    pos_arithmetic = (prepare_pos_arithmetic(documents, materials, units)
+    pos_arithmetic = (prepare_pos_arithmetic(documents, materials, units, scenario=scenario)
                       if flags.get("uses_pos") is True and not defer_native_pos else None)
     for check_index, observation in enumerate(evidence["checks"]):
         rule = allowed[observation["rule_id"]]
@@ -1629,10 +1629,11 @@ def _program_audit_decision(scenario: str, flags: dict, evidence: dict, document
         if rule.id == "pos_arithmetic" and pos_arithmetic is not None:
             # Raw model observations remain intact. The published decision uses
             # every native row instead of trusting a sampled comparison array.
+            scope = '逐行金额及金额合计' if scenario == 'pos_target_incentive' else '逐行金额、数量合计及金额合计'
             check.update(comparisons=pos_arithmetic["comparisons"],
                          source_ids=pos_arithmetic["source_ids"],
                          status="pass" if pos_arithmetic["complete"] else "unknown",
-                         reason=("POS全部销售明细的逐行金额、数量合计及金额合计已按原精度复算。"
+                         reason=(f"POS全部销售明细的{scope}已按原精度复算。"
                                  if pos_arithmetic["complete"] else "；".join(pos_arithmetic["limitations"])))
         check = constrain_application_check(scenario,rule,check,documents,materials,units)
         material = material_checks.get(rule.id)

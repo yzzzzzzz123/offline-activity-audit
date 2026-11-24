@@ -21,6 +21,21 @@
       "reference_fields": []
     },
     {
+      "name": "documents",
+      "rule_ids": [
+        "submitted_material_scope"
+      ],
+      "material_roles": [
+        "activity_application",
+        "invoice",
+        "payment",
+        "pos",
+        "promotion_contract",
+        "settlement"
+      ],
+      "reference_fields": []
+    },
+    {
       "name": "pos",
       "rule_ids": [
         "pos_fields",
